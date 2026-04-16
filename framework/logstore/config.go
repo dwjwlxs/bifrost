@@ -56,6 +56,12 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("failed to unmarshal postgres config: %w", err)
 		}		
 		c.Config = &postgresConfig
+	case LogStoreTypeMySQL:
+		var mysqlConfig MySQLConfig
+		if err := json.Unmarshal(temp.Config, &mysqlConfig); err != nil {
+			return fmt.Errorf("failed to unmarshal mysql config: %w", err)
+		}
+		c.Config = &mysqlConfig
 	default:
 		return fmt.Errorf("unknown log store type: %s", temp.Type)
 	}
