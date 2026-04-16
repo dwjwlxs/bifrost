@@ -1,5 +1,6 @@
 .env
 .vscode
+.qoder
 .DS_Store
 *_creds*
 **/venv/
