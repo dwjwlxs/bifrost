@@ -16,6 +16,7 @@ type LogStoreType string
 const (
 	LogStoreTypeSQLite   LogStoreType = "sqlite"
 	LogStoreTypePostgres LogStoreType = "postgres"
+	LogStoreTypeMySQL    LogStoreType = "mysql"
 )
 
 // LogStore is the interface for the log store.
@@ -115,6 +116,12 @@ func NewLogStore(ctx context.Context, config *Config, logger schemas.Logger) (Lo
 		} else {
 			return nil, fmt.Errorf("invalid postgres config: %T", config.Config)
 		}
+		return nil, fmt.Errorf("invalid postgres config: %T", config.Config)
+	case LogStoreTypeMySQL:
+		if mysqlConfig, ok := config.Config.(*MySQLConfig); ok {
+			return newMySQLLogStore(ctx, mysqlConfig, logger)
+		}
+		return nil, fmt.Errorf("invalid mysql config: %T", config.Config)
 	default:
 		return nil, fmt.Errorf("unsupported log store type: %s", config.Type)
 	}
