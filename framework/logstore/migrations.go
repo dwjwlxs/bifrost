@@ -687,7 +687,7 @@ func migrationAddPerformanceIndexesV2(ctx context.Context, db *gorm.DB) error {
 			// Add index on timestamp for range queries and default ordering
 			// Used in: WHERE timestamp >= ? AND timestamp <= ? and ORDER BY timestamp
 			if !migrator.HasIndex(&Log{}, "idx_logs_timestamp") {
-				if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp)").Error; err != nil {
+				if err := tx.Exec("CREATE INDEX idx_logs_timestamp ON logs(timestamp)").Error; err != nil {
 					return fmt.Errorf("failed to create index on timestamp: %w", err)
 				}
 			}
@@ -695,7 +695,7 @@ func migrationAddPerformanceIndexesV2(ctx context.Context, db *gorm.DB) error {
 			// Add index on status for filtering (success, error, processing)
 			// Used in: WHERE status IN ('success', 'error'), WHERE status = 'processing'
 			if !migrator.HasIndex(&Log{}, "idx_logs_status") {
-				if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_logs_status ON logs(status)").Error; err != nil {
+				if err := tx.Exec("CREATE INDEX idx_logs_status ON logs(status)").Error; err != nil {
 					return fmt.Errorf("failed to create index on status: %w", err)
 				}
 			}
@@ -703,7 +703,7 @@ func migrationAddPerformanceIndexesV2(ctx context.Context, db *gorm.DB) error {
 			// Add index on created_at for Flush operations
 			// Used in: WHERE created_at < ?
 			if !migrator.HasIndex(&Log{}, "idx_logs_created_at") {
-				if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at)").Error; err != nil {
+				if err := tx.Exec("CREATE INDEX idx_logs_created_at ON logs(created_at)").Error; err != nil {
 					return fmt.Errorf("failed to create index on created_at: %w", err)
 				}
 			}
@@ -711,7 +711,7 @@ func migrationAddPerformanceIndexesV2(ctx context.Context, db *gorm.DB) error {
 			// Add index on provider for filtering
 			// Used in: WHERE provider IN (?)
 			if !migrator.HasIndex(&Log{}, "idx_logs_provider") {
-				if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_logs_provider ON logs(provider)").Error; err != nil {
+				if err := tx.Exec("CREATE INDEX idx_logs_provider ON logs(provider)").Error; err != nil {
 					return fmt.Errorf("failed to create index on provider: %w", err)
 				}
 			}
@@ -719,7 +719,7 @@ func migrationAddPerformanceIndexesV2(ctx context.Context, db *gorm.DB) error {
 			// Add index on model for filtering
 			// Used in: WHERE model IN (?)
 			if !migrator.HasIndex(&Log{}, "idx_logs_model") {
-				if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_logs_model ON logs(model)").Error; err != nil {
+				if err := tx.Exec("CREATE INDEX idx_logs_model ON logs(model)").Error; err != nil {
 					return fmt.Errorf("failed to create index on model: %w", err)
 				}
 			}
@@ -727,7 +727,7 @@ func migrationAddPerformanceIndexesV2(ctx context.Context, db *gorm.DB) error {
 			// Add index on object_type for filtering
 			// Used in: WHERE object_type IN (?)
 			if !migrator.HasIndex(&Log{}, "idx_logs_object_type") {
-				if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_logs_object_type ON logs(object_type)").Error; err != nil {
+				if err := tx.Exec("CREATE INDEX idx_logs_object_type ON logs(object_type)").Error; err != nil {
 					return fmt.Errorf("failed to create index on object_type: %w", err)
 				}
 			}
@@ -735,7 +735,7 @@ func migrationAddPerformanceIndexesV2(ctx context.Context, db *gorm.DB) error {
 			// Add index on cost for range queries and ordering
 			// Used in: WHERE cost >= ? AND cost <= ?, ORDER BY cost
 			if !migrator.HasIndex(&Log{}, "idx_logs_cost") {
-				if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_logs_cost ON logs(cost)").Error; err != nil {
+				if err := tx.Exec("CREATE INDEX idx_logs_cost ON logs(cost)").Error; err != nil {
 					return fmt.Errorf("failed to create index on cost: %w", err)
 				}
 			}
@@ -746,7 +746,7 @@ func migrationAddPerformanceIndexesV2(ctx context.Context, db *gorm.DB) error {
 			// Used when filtering completed requests (status IN ('success', 'error')) with timestamp ranges
 			// This composite index is more efficient than individual indices for these combined queries
 			if !migrator.HasIndex(&Log{}, "idx_logs_status_timestamp") {
-				if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_logs_status_timestamp ON logs(status, timestamp)").Error; err != nil {
+				if err := tx.Exec("CREATE INDEX idx_logs_status_timestamp ON logs(status, timestamp)").Error; err != nil {
 					return fmt.Errorf("failed to create composite index on (status, timestamp): %w", err)
 				}
 			}
@@ -755,7 +755,7 @@ func migrationAddPerformanceIndexesV2(ctx context.Context, db *gorm.DB) error {
 			// Used in Flush: WHERE status = 'processing' AND created_at < ?
 			// This composite index significantly improves cleanup query performance
 			if !migrator.HasIndex(&Log{}, "idx_logs_status_created_at") {
-				if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_logs_status_created_at ON logs(status, created_at)").Error; err != nil {
+				if err := tx.Exec("CREATE INDEX idx_logs_status_created_at ON logs(status, created_at)").Error; err != nil {
 					return fmt.Errorf("failed to create composite index on (status, created_at): %w", err)
 				}
 			}
@@ -781,7 +781,13 @@ func migrationAddPerformanceIndexesV2(ctx context.Context, db *gorm.DB) error {
 
 			for _, indexName := range indices {
 				if migrator.HasIndex(&Log{}, indexName) {
-					if err := tx.Exec(fmt.Sprintf("DROP INDEX IF EXISTS %s", indexName)).Error; err != nil {
+					var dropSQL string
+					if tx.Dialector.Name() == "mysql" {
+						dropSQL = fmt.Sprintf("DROP INDEX %s ON logs", indexName)
+					} else {
+						dropSQL = fmt.Sprintf("DROP INDEX IF EXISTS %s", indexName)
+					}
+					if err := tx.Exec(dropSQL).Error; err != nil {
 						return fmt.Errorf("failed to drop index %s: %w", indexName, err)
 					}
 				}
@@ -1613,7 +1619,7 @@ func migrationAddHistogramCompositeIndexes(ctx context.Context, db *gorm.DB) err
 					)`
 				default:
 					// SQLite / PostgreSQL: no prefix-index limit concerns.
-					createSQL = `CREATE INDEX IF NOT EXISTS idx_logs_histogram_cover ON logs(
+					createSQL = `CREATE INDEX idx_logs_histogram_cover ON logs(
 						status, timestamp,
 						selected_key_id, virtual_key_id, routing_rule_id, provider, object_type,
 						model, cost, prompt_tokens, completion_tokens, total_tokens
@@ -1632,7 +1638,13 @@ func migrationAddHistogramCompositeIndexes(ctx context.Context, db *gorm.DB) err
 			migrator := tx.Migrator()
 
 			if migrator.HasIndex(&Log{}, "idx_logs_histogram_cover") {
-				if err := tx.Exec("DROP INDEX IF EXISTS idx_logs_histogram_cover").Error; err != nil {
+				var dropSQL string
+				if tx.Dialector.Name() == "mysql" {
+					dropSQL = "DROP INDEX idx_logs_histogram_cover ON logs"
+				} else {
+					dropSQL = "DROP INDEX IF EXISTS idx_logs_histogram_cover"
+				}
+				if err := tx.Exec(dropSQL).Error; err != nil {
 					return fmt.Errorf("failed to drop index idx_logs_histogram_cover: %w", err)
 				}
 			}
@@ -1724,7 +1736,13 @@ func migrationAddProviderHistogramIndex(ctx context.Context, db *gorm.DB) error 
 		},
 		Rollback: func(tx *gorm.DB) error {
 			tx = tx.WithContext(ctx)
-			if err := tx.Exec("DROP INDEX IF EXISTS idx_logs_ts_provider_status").Error; err != nil {
+			var dropSQL string
+			if tx.Dialector.Name() == "mysql" {
+				dropSQL = "DROP INDEX idx_logs_ts_provider_status ON logs"
+			} else {
+				dropSQL = "DROP INDEX IF EXISTS idx_logs_ts_provider_status"
+			}
+			if err := tx.Exec(dropSQL).Error; err != nil {
 				return fmt.Errorf("failed to drop index idx_logs_ts_provider_status: %w", err)
 			}
 			return nil

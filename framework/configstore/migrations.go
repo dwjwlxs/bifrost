@@ -669,10 +669,16 @@ func migrationMany2ManyJoinTable(ctx context.Context, db *gorm.DB) error {
 
 			// create the many-to-many join table for virtual keys and keys
 			if !migrator.HasTable("governance_virtual_key_keys") {
+				// Use BIGINT UNSIGNED for MySQL to match the uint primary key of config_keys(id).
+				// SQLite and PostgreSQL do not require signedness to match for FK references.
+				keyIDType := "INTEGER"
+				if tx.Dialector.Name() == "mysql" {
+					keyIDType = "BIGINT UNSIGNED"
+				}
 				createJoinTableSQL := `
 					CREATE TABLE IF NOT EXISTS governance_virtual_key_keys (
 						table_virtual_key_id VARCHAR(255) NOT NULL,
-						table_key_id INTEGER NOT NULL,
+						table_key_id ` + keyIDType + ` NOT NULL,
 						PRIMARY KEY (table_virtual_key_id, table_key_id),
 						FOREIGN KEY (table_virtual_key_id) REFERENCES governance_virtual_keys(id) ON DELETE CASCADE,
 						FOREIGN KEY (table_key_id) REFERENCES config_keys(id) ON DELETE CASCADE
@@ -919,9 +925,11 @@ func migrationAddKeyNameColumn(ctx context.Context, db *gorm.DB) error {
 					}
 				}
 
-				// Step 3: Add unique index (SQLite compatible)
-				if err := tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_key_name ON config_keys (name)").Error; err != nil {
-					return fmt.Errorf("failed to create unique index on name: %w", err)
+				// Step 3: Add unique index (MySQL does not support IF NOT EXISTS for CREATE INDEX)
+				if !migrator.HasIndex(&tables.TableKey{}, "idx_key_name") {
+					if err := tx.Exec("CREATE UNIQUE INDEX idx_key_name ON config_keys (name)").Error; err != nil {
+						return fmt.Errorf("failed to create unique index on name: %w", err)
+					}
 				}
 			}
 
@@ -931,8 +939,14 @@ func migrationAddKeyNameColumn(ctx context.Context, db *gorm.DB) error {
 			tx = tx.WithContext(ctx)
 			migrator := tx.Migrator()
 			// Drop the unique index first to avoid orphaned index artifacts
-			if err := tx.Exec("DROP INDEX IF EXISTS idx_key_name").Error; err != nil {
-				return err
+			if tx.Dialector.Name() == "mysql" {
+				if err := tx.Exec("DROP INDEX idx_key_name ON config_keys").Error; err != nil {
+					return err
+				}
+			} else {
+				if err := tx.Exec("DROP INDEX IF EXISTS idx_key_name").Error; err != nil {
+					return err
+				}
 			}
 			if err := migrator.DropColumn(&tables.TableKey{}, "name"); err != nil {
 				return err
@@ -1061,12 +1075,14 @@ func migrationAddProviderConfigBudgetRateLimit(ctx context.Context, db *gorm.DB)
 				}
 
 				// Create foreign key indexes for better performance
-				if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_provider_config_budget ON governance_virtual_key_provider_configs (budget_id)").Error; err != nil {
-					// Ignore - index may already exist or column may not exist yet
+				if !migrator.HasIndex(&tables.TableVirtualKeyProviderConfig{}, "idx_provider_config_budget") {
+					if err := tx.Exec("CREATE INDEX idx_provider_config_budget ON governance_virtual_key_provider_configs (budget_id)").Error; err != nil {
+						return fmt.Errorf("failed to create budget_id index: %w", err)
+					}
 				}
 
 				if !migrator.HasIndex(&tables.TableVirtualKeyProviderConfig{}, "idx_provider_config_rate_limit") {
-					if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_provider_config_rate_limit ON governance_virtual_key_provider_configs (rate_limit_id)").Error; err != nil {
+					if err := tx.Exec("CREATE INDEX idx_provider_config_rate_limit ON governance_virtual_key_provider_configs (rate_limit_id)").Error; err != nil {
 						return fmt.Errorf("failed to create rate_limit_id index: %w", err)
 					}
 				}
@@ -1085,9 +1101,22 @@ func migrationAddProviderConfigBudgetRateLimit(ctx context.Context, db *gorm.DB)
 			tx = tx.WithContext(ctx)
 			migrator := tx.Migrator()
 
-			// Drop indexes
-			_ = tx.Exec("DROP INDEX IF EXISTS idx_provider_config_budget")
-			_ = tx.Exec("DROP INDEX IF EXISTS idx_provider_config_rate_limit")
+			// Drop indexes first
+			if tx.Dialector.Name() == "mysql" {
+				if err := tx.Exec("DROP INDEX idx_provider_config_budget ON governance_virtual_key_provider_configs").Error; err != nil {
+					return fmt.Errorf("failed to drop budget_id index: %w", err)
+				}
+				if err := tx.Exec("DROP INDEX idx_provider_config_rate_limit ON governance_virtual_key_provider_configs").Error; err != nil {
+					return fmt.Errorf("failed to drop rate_limit_id index: %w", err)
+				}
+			} else {
+				if err := tx.Exec("DROP INDEX IF EXISTS idx_provider_config_budget").Error; err != nil {
+					return fmt.Errorf("failed to drop budget_id index: %w", err)
+				}
+				if err := tx.Exec("DROP INDEX IF EXISTS idx_provider_config_rate_limit").Error; err != nil {
+					return fmt.Errorf("failed to drop rate_limit_id index: %w", err)
+				}
+			}
 
 			// Drop FK constraints
 			if migrator.HasConstraint(&tables.TableVirtualKeyProviderConfig{}, "RateLimit") {
@@ -1272,9 +1301,11 @@ func migrationAddMCPClientIDColumn(ctx context.Context, db *gorm.DB) error {
 					}
 				}
 
-				// Create unique index on client_id
-				if err := tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_client_id ON config_mcp_clients (client_id)").Error; err != nil {
-					return fmt.Errorf("failed to create unique index on client_id: %w", err)
+				// Create unique index on client_id (MySQL does not support IF NOT EXISTS for CREATE INDEX)
+				if !migrator.HasIndex(&tables.TableMCPClient{}, "idx_mcp_client_id") {
+					if err := tx.Exec("CREATE UNIQUE INDEX idx_mcp_client_id ON config_mcp_clients (client_id)").Error; err != nil {
+						return fmt.Errorf("failed to create unique index on client_id: %w", err)
+					}
 				}
 				// Enforce NOT NULL in Postgres to guarantee ID presence on new rows
 				if tx.Dialector.Name() == "postgres" {
@@ -1291,7 +1322,7 @@ func migrationAddMCPClientIDColumn(ctx context.Context, db *gorm.DB) error {
 			migrator := tx.Migrator()
 
 			// Drop the unique index first to avoid orphaned index artifacts
-			if err := tx.Exec("DROP INDEX IF EXISTS idx_mcp_client_id").Error; err != nil {
+			if err := tx.Exec("DROP INDEX idx_mcp_client_id ON config_mcp_clients").Error; err != nil {
 				return fmt.Errorf("failed to drop client_id index: %w", err)
 			}
 
@@ -3070,7 +3101,7 @@ func migrationAddDistributedLocksTable(ctx context.Context, db *gorm.DB) error {
 				return fmt.Errorf("failed to create distributed_locks table: %w", err)
 			}
 			// Create index on expires_at for efficient cleanup queries
-			createIndexSQL := `CREATE INDEX IF NOT EXISTS idx_distributed_locks_expires_at ON distributed_locks (expires_at)`
+			createIndexSQL := `CREATE INDEX idx_distributed_locks_expires_at ON distributed_locks (expires_at)`
 			if err := tx.Exec(createIndexSQL).Error; err != nil {
 				return fmt.Errorf("failed to create expires_at index: %w", err)
 			}
@@ -3138,7 +3169,7 @@ func migrationAddProviderGovernanceColumns(ctx context.Context, db *gorm.DB) err
 			}
 			// Create index for budget_id (outside HasColumn to handle reruns where column exists but index doesn't)
 			if !migrator.HasIndex(provider, "idx_provider_budget") {
-				if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_provider_budget ON config_providers (budget_id)").Error; err != nil {
+				if err := tx.Exec("CREATE INDEX idx_provider_budget ON config_providers (budget_id)").Error; err != nil {
 					return fmt.Errorf("failed to create budget_id index: %w", err)
 				}
 			}
@@ -3151,7 +3182,7 @@ func migrationAddProviderGovernanceColumns(ctx context.Context, db *gorm.DB) err
 			}
 			// Create index for rate_limit_id (outside HasColumn to handle reruns where column exists but index doesn't)
 			if !migrator.HasIndex(provider, "idx_provider_rate_limit") {
-				if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_provider_rate_limit ON config_providers (rate_limit_id)").Error; err != nil {
+				if err := tx.Exec("CREATE INDEX idx_provider_rate_limit ON config_providers (rate_limit_id)").Error; err != nil {
 					return fmt.Errorf("failed to create rate_limit_id index: %w", err)
 				}
 			}
@@ -3165,14 +3196,26 @@ func migrationAddProviderGovernanceColumns(ctx context.Context, db *gorm.DB) err
 
 			// Drop indexes first
 			if migrator.HasIndex(provider, "idx_provider_rate_limit") {
-				if err := tx.Exec("DROP INDEX IF EXISTS idx_provider_rate_limit").Error; err != nil {
-					return fmt.Errorf("failed to drop rate_limit_id index: %w", err)
+				if tx.Dialector.Name() == "mysql" {
+					if err := tx.Exec("DROP INDEX idx_provider_rate_limit ON config_providers").Error; err != nil {
+						return fmt.Errorf("failed to drop rate_limit_id index: %w", err)
+					}
+				} else {
+					if err := tx.Exec("DROP INDEX IF EXISTS idx_provider_rate_limit").Error; err != nil {
+						return fmt.Errorf("failed to drop rate_limit_id index: %w", err)
+					}
 				}
 			}
 
 			if migrator.HasIndex(provider, "idx_provider_budget") {
-				if err := tx.Exec("DROP INDEX IF EXISTS idx_provider_budget").Error; err != nil {
-					return fmt.Errorf("failed to drop budget_id index: %w", err)
+				if tx.Dialector.Name() == "mysql" {
+					if err := tx.Exec("DROP INDEX idx_provider_budget ON config_providers").Error; err != nil {
+						return fmt.Errorf("failed to drop budget_id index: %w", err)
+					}
+				} else {
+					if err := tx.Exec("DROP INDEX IF EXISTS idx_provider_budget").Error; err != nil {
+						return fmt.Errorf("failed to drop budget_id index: %w", err)
+					}
 				}
 			}
 

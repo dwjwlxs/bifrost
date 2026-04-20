@@ -89,10 +89,10 @@ func (r *TableRoutingRule) AfterFind(tx *gorm.DB) error {
 // The composite (RuleID, Provider, Model, KeyID) is unique to prevent duplicate target configs.
 type TableRoutingTarget struct {
 	RuleID   string  `gorm:"type:varchar(255);not null;index;uniqueIndex:idx_routing_target_config" json:"-"`
-	Provider *string `gorm:"type:varchar(255);uniqueIndex:idx_routing_target_config" json:"provider,omitempty"` // nil = use incoming provider
-	Model    *string `gorm:"type:varchar(255);uniqueIndex:idx_routing_target_config" json:"model,omitempty"`    // nil = use incoming model
-	KeyID    *string `gorm:"type:varchar(255);uniqueIndex:idx_routing_target_config" json:"key_id,omitempty"`   // nil = no key pin
-	Weight   float64 `gorm:"not null;default:1" json:"weight"`                                                  // must sum to 1 across all targets in a rule
+	Provider *string `gorm:"type:varchar(100);uniqueIndex:idx_routing_target_config" json:"provider,omitempty"`   // nil = use incoming provider
+	Model    *string `gorm:"type:varchar(100);uniqueIndex:idx_routing_target_config" json:"model,omitempty"`     // nil = use incoming model
+	KeyID    *string `gorm:"type:varchar(100);uniqueIndex:idx_routing_target_config" json:"key_id,omitempty"`    // nil = no key pin
+	Weight   float64 `gorm:"not null;default:1" json:"weight"`                                                   // must sum to 1 across all targets in a rule
 }
 
 // TableName for TableRoutingTarget

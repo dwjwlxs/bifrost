@@ -160,7 +160,16 @@ func (s *RDBConfigStore) UpdateClientConfig(ctx context.Context, config *ClientC
 		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&tables.TableClientConfig{}).Error; err != nil {
 			return err
 		}
-		return tx.Create(&dbConfig).Error
+		// Create new client config
+		result := tx.Create(&dbConfig)
+		if result.Error != nil {
+			return result.Error
+		}
+		// Verify the record was created
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("failed to create client config record")
+		}
+		return nil
 	})
 }
 
@@ -1487,7 +1496,7 @@ func (s *RDBConfigStore) UpdateLogsStoreConfig(ctx context.Context, config *logs
 // GetConfig retrieves a specific config from the database.
 func (s *RDBConfigStore) GetConfig(ctx context.Context, key string) (*tables.TableGovernanceConfig, error) {
 	var config tables.TableGovernanceConfig
-	if err := s.db.WithContext(ctx).First(&config, "key = ?", key).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&config, `"key" = ?`, key).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
 		}
@@ -3533,22 +3542,22 @@ func (s *RDBConfigStore) GetAuthConfig(ctx context.Context) (*AuthConfig, error)
 	var password *string
 	var isEnabled bool
 	var disableAuthOnInference bool
-	if err := s.db.WithContext(ctx).First(&tables.TableGovernanceConfig{}, "key = ?", tables.ConfigAdminUsernameKey).Select("value").Scan(&username).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&tables.TableGovernanceConfig{}, `"key" = ?`, tables.ConfigAdminUsernameKey).Select("value").Scan(&username).Error; err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, err
 		}
 	}
-	if err := s.db.WithContext(ctx).First(&tables.TableGovernanceConfig{}, "key = ?", tables.ConfigAdminPasswordKey).Select("value").Scan(&password).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&tables.TableGovernanceConfig{}, `"key" = ?`, tables.ConfigAdminPasswordKey).Select("value").Scan(&password).Error; err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, err
 		}
 	}
-	if err := s.db.WithContext(ctx).First(&tables.TableGovernanceConfig{}, "key = ?", tables.ConfigIsAuthEnabledKey).Select("value").Scan(&isEnabled).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&tables.TableGovernanceConfig{}, `"key" = ?`, tables.ConfigIsAuthEnabledKey).Select("value").Scan(&isEnabled).Error; err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, err
 		}
 	}
-	if err := s.db.WithContext(ctx).First(&tables.TableGovernanceConfig{}, "key = ?", tables.ConfigDisableAuthOnInferenceKey).Select("value").Scan(&disableAuthOnInference).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&tables.TableGovernanceConfig{}, `"key" = ?`, tables.ConfigDisableAuthOnInferenceKey).Select("value").Scan(&disableAuthOnInference).Error; err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, err
 		}
@@ -3598,7 +3607,7 @@ func (s *RDBConfigStore) UpdateAuthConfig(ctx context.Context, config *AuthConfi
 // GetProxyConfig retrieves the proxy configuration from the database.
 func (s *RDBConfigStore) GetProxyConfig(ctx context.Context) (*tables.GlobalProxyConfig, error) {
 	var configEntry tables.TableGovernanceConfig
-	if err := s.db.WithContext(ctx).First(&configEntry, "key = ?", tables.ConfigProxyKey).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&configEntry, `"key" = ?`, tables.ConfigProxyKey).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -3654,7 +3663,7 @@ func (s *RDBConfigStore) UpdateProxyConfig(ctx context.Context, config *tables.G
 // GetRestartRequiredConfig retrieves the restart required configuration from the database.
 func (s *RDBConfigStore) GetRestartRequiredConfig(ctx context.Context) (*tables.RestartRequiredConfig, error) {
 	var configEntry tables.TableGovernanceConfig
-	if err := s.db.WithContext(ctx).First(&configEntry, "key = ?", tables.ConfigRestartRequiredKey).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&configEntry, `"key" = ?`, tables.ConfigRestartRequiredKey).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}

@@ -48,7 +48,7 @@ type GlobalHeaderFilterConfig struct {
 
 // TableGovernanceConfig represents generic configuration key-value pairs
 type TableGovernanceConfig struct {
-	Key   string `gorm:"primaryKey;type:varchar(255)" json:"key"`
+	Key   string `gorm:"primaryKey;type:varchar(255);column:key" json:"key"`
 	Value string `gorm:"type:text" json:"value"`
 }
 
