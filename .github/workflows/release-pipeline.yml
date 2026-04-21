@@ -1,9 +1,9 @@
 name: Release Pipeline
 
-# Triggers automatically on push to main when any version file changes
+# Triggers automatically on push to transports/v1.5.0-prerelease4-dev when any version file changes
 on:
   push:
-    branches: ["main"]
+    branches: ["transports/v1.5.0-prerelease4-dev"]
   workflow_dispatch:
     inputs:
       skip_tests:
