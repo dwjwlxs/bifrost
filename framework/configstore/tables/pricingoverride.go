@@ -10,12 +10,14 @@ import (
 
 // TablePricingOverride is the persistence model for governance pricing overrides.
 type TablePricingOverride struct {
-	ID               string    `gorm:"primaryKey;type:varchar(255)" json:"id"`
-	Name             string    `gorm:"type:varchar(255);not null" json:"name"`
-	ScopeKind        string    `gorm:"type:varchar(50);index:idx_pricing_override_scope;not null" json:"scope_kind"`
-	VirtualKeyID     *string   `gorm:"type:varchar(255);index:idx_pricing_override_scope" json:"virtual_key_id,omitempty"`
-	ProviderID       *string   `gorm:"type:varchar(255);index:idx_pricing_override_scope" json:"provider_id,omitempty"`
-	ProviderKeyID    *string   `gorm:"type:varchar(255);index:idx_pricing_override_scope" json:"provider_key_id,omitempty"`
+	ID        string `gorm:"primaryKey;type:varchar(255)" json:"id"`
+	Name      string `gorm:"type:varchar(255);not null" json:"name"`
+	ScopeKind string `gorm:"type:varchar(50);index:idx_pricing_override_scope;not null" json:"scope_kind"`
+	// varchar(191) keeps the composite index within MySQL's 3072-byte utf8mb4 limit:
+	// (50 + 191 + 191 + 191) × 4 = 2492 bytes
+	VirtualKeyID     *string   `gorm:"type:varchar(191);index:idx_pricing_override_scope" json:"virtual_key_id,omitempty"`
+	ProviderID       *string   `gorm:"type:varchar(191);index:idx_pricing_override_scope" json:"provider_id,omitempty"`
+	ProviderKeyID    *string   `gorm:"type:varchar(191);index:idx_pricing_override_scope" json:"provider_key_id,omitempty"`
 	MatchType        string    `gorm:"type:varchar(20);index:idx_pricing_override_match;not null" json:"match_type"`
 	Pattern          string    `gorm:"type:varchar(255);not null" json:"pattern"`
 	RequestTypesJSON string    `gorm:"type:text" json:"-"`

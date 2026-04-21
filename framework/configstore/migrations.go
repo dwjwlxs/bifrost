@@ -254,11 +254,22 @@ func dropLegacyBudgetColumn(tx *gorm.DB, tableName string) error {
 			return err
 		}
 	} else {
-		model, err := legacyBudgetColumnModel(tableName)
-		if err != nil {
-			return err
+		// On MySQL, a FK constraint on budget_id must be dropped before the column.
+		// GORM's DropColumn issues a bare ALTER TABLE DROP COLUMN which MySQL rejects
+		// with Error 1828 when a FK constraint references the column.
+		// FK names are GORM-generated: fk_<table>_budget (e.g. fk_governance_teams_budget).
+		if tx.Dialector.Name() == "mysql" {
+			// Derive the GORM-style FK constraint name from the table name.
+			// GORM uses fk_<table_name>_<association_name> where association_name
+			// comes from the field name lowercased (Budget → budget).
+			fkName := "fk_" + tableName + "_budget"
+			if mg.HasConstraint(tableName, fkName) {
+				if err := tx.Exec("ALTER TABLE `" + tableName + "` DROP FOREIGN KEY `" + fkName + "`").Error; err != nil {
+					return fmt.Errorf("failed to drop FK constraint %s on %s: %w", fkName, tableName, err)
+				}
+			}
 		}
-		if err := mg.DropColumn(model, "budget_id"); err != nil {
+		if err := tx.Exec("ALTER TABLE `" + tableName + "` DROP COLUMN budget_id").Error; err != nil {
 			return fmt.Errorf("failed to drop legacy %s.budget_id column: %w", tableName, err)
 		}
 	}
@@ -614,6 +625,18 @@ func triggerMigrations(ctx context.Context, db *gorm.DB) error {
 	if err := migrationAddOCRPricingColumns(ctx, db); err != nil {
 		return err
 	}
+	if err := migrationDropTextColumnUniqueIndexes(ctx, db); err != nil {
+		return err
+	}
+	if err := migrationFixConfigModelsColumnTypes(ctx, db); err != nil {
+		return err
+	}
+	if err := migrationFixRoutingTargetIndexColumns(ctx, db); err != nil {
+		return err
+	}
+	if err := migrationFixPricingOverrideScopeIndexColumns(ctx, db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -885,10 +908,16 @@ func migrationMany2ManyJoinTable(ctx context.Context, db *gorm.DB) error {
 
 			// create the many-to-many join table for virtual keys and keys
 			if !migrator.HasTable("governance_virtual_key_keys") {
+				// Use BIGINT UNSIGNED for MySQL to match the uint primary key of config_keys(id).
+				// SQLite and PostgreSQL do not require signedness to match for FK references.
+				keyIDType := "INTEGER"
+				if tx.Dialector.Name() == "mysql" {
+					keyIDType = "BIGINT UNSIGNED"
+				}
 				createJoinTableSQL := `
 					CREATE TABLE IF NOT EXISTS governance_virtual_key_keys (
 						table_virtual_key_id VARCHAR(255) NOT NULL,
-						table_key_id INTEGER NOT NULL,
+						table_key_id ` + keyIDType + ` NOT NULL,
 						PRIMARY KEY (table_virtual_key_id, table_key_id),
 						FOREIGN KEY (table_virtual_key_id) REFERENCES governance_virtual_keys(id) ON DELETE CASCADE,
 						FOREIGN KEY (table_key_id) REFERENCES config_keys(id) ON DELETE CASCADE
@@ -1034,8 +1063,11 @@ func migrationAddEnableLiteLLMFallbacksColumn(ctx context.Context, db *gorm.DB) 
 		},
 		Rollback: func(tx *gorm.DB) error {
 			tx = tx.WithContext(ctx)
-			if err := tx.Exec("ALTER TABLE config_client DROP COLUMN IF EXISTS enable_litellm_fallbacks").Error; err != nil {
-				return err
+			// ADD COLUMN IF NOT EXISTS / DROP COLUMN IF EXISTS not supported by MySQL 8.0; guard with HasColumn
+			if tx.Migrator().HasColumn(&tables.TableClientConfig{}, "enable_litellm_fallbacks") {
+				if err := tx.Exec("ALTER TABLE config_client DROP COLUMN enable_litellm_fallbacks").Error; err != nil {
+					return err
+				}
 			}
 			return nil
 		},
@@ -1135,9 +1167,17 @@ func migrationAddKeyNameColumn(ctx context.Context, db *gorm.DB) error {
 					}
 				}
 
-				// Step 3: Add unique index (SQLite compatible)
-				if err := tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_key_name ON config_keys (name)").Error; err != nil {
-					return fmt.Errorf("failed to create unique index on name: %w", err)
+				// Step 3: Add unique index (SQLite/PostgreSQL compatible; MySQL handled below)
+				if tx.Dialector.Name() == "mysql" {
+					if !tx.Migrator().HasIndex(&tables.TableKey{}, "idx_key_name") {
+						if err := tx.Exec("CREATE UNIQUE INDEX idx_key_name ON config_keys (name)").Error; err != nil {
+							return fmt.Errorf("failed to create unique index on name: %w", err)
+						}
+					}
+				} else {
+					if err := tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_key_name ON config_keys (name)").Error; err != nil {
+						return fmt.Errorf("failed to create unique index on name: %w", err)
+					}
 				}
 			}
 
@@ -1147,7 +1187,7 @@ func migrationAddKeyNameColumn(ctx context.Context, db *gorm.DB) error {
 			tx = tx.WithContext(ctx)
 			migrator := tx.Migrator()
 			// Drop the unique index first to avoid orphaned index artifacts
-			if err := tx.Exec("DROP INDEX IF EXISTS idx_key_name").Error; err != nil {
+			if err := dropIndexIfExists(tx, "idx_key_name", "config_keys"); err != nil {
 				return err
 			}
 			if err := migrator.DropColumn(&tables.TableKey{}, "name"); err != nil {
@@ -1264,9 +1304,11 @@ func migrationAddProviderConfigBudgetRateLimit(ctx context.Context, db *gorm.DB)
 			// Note: budget_id is added via raw SQL because the field was later removed from the struct
 			// (migrated to governance_budgets.provider_config_id in add_multi_budget_tables)
 			if migrator.HasTable(&tables.TableVirtualKeyProviderConfig{}) {
-				if err := tx.Exec("ALTER TABLE governance_virtual_key_provider_configs ADD COLUMN IF NOT EXISTS budget_id VARCHAR(255)").Error; err != nil {
-					// Ignore error for databases that don't support IF NOT EXISTS (e.g., SQLite)
-					// The column may already exist from a previous run
+				// ADD COLUMN IF NOT EXISTS not supported by MySQL 8.0; guard with HasColumn
+				if !migrator.HasColumn(&tables.TableVirtualKeyProviderConfig{}, "budget_id") {
+					if err := tx.Exec("ALTER TABLE governance_virtual_key_provider_configs ADD COLUMN budget_id VARCHAR(255)").Error; err != nil {
+						return fmt.Errorf("failed to add budget_id column: %w", err)
+					}
 				}
 
 				// Add RateLimitID column if it doesn't exist
@@ -1277,12 +1319,14 @@ func migrationAddProviderConfigBudgetRateLimit(ctx context.Context, db *gorm.DB)
 				}
 
 				// Create foreign key indexes for better performance
-				if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_provider_config_budget ON governance_virtual_key_provider_configs (budget_id)").Error; err != nil {
-					// Ignore - index may already exist or column may not exist yet
+				if !migrator.HasIndex(&tables.TableVirtualKeyProviderConfig{}, "idx_provider_config_budget") {
+					if err := tx.Exec("CREATE INDEX idx_provider_config_budget ON governance_virtual_key_provider_configs (budget_id)").Error; err != nil {
+						return fmt.Errorf("failed to create budget_id index: %w", err)
+					}
 				}
 
 				if !migrator.HasIndex(&tables.TableVirtualKeyProviderConfig{}, "idx_provider_config_rate_limit") {
-					if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_provider_config_rate_limit ON governance_virtual_key_provider_configs (rate_limit_id)").Error; err != nil {
+					if err := tx.Exec("CREATE INDEX idx_provider_config_rate_limit ON governance_virtual_key_provider_configs (rate_limit_id)").Error; err != nil {
 						return fmt.Errorf("failed to create rate_limit_id index: %w", err)
 					}
 				}
@@ -1301,9 +1345,9 @@ func migrationAddProviderConfigBudgetRateLimit(ctx context.Context, db *gorm.DB)
 			tx = tx.WithContext(ctx)
 			migrator := tx.Migrator()
 
-			// Drop indexes
-			_ = tx.Exec("DROP INDEX IF EXISTS idx_provider_config_budget")
-			_ = tx.Exec("DROP INDEX IF EXISTS idx_provider_config_rate_limit")
+			// Drop indexes first
+			_ = dropIndexIfExists(tx, "idx_provider_config_budget", "governance_virtual_key_provider_configs")
+			_ = dropIndexIfExists(tx, "idx_provider_config_rate_limit", "governance_virtual_key_provider_configs")
 
 			// Drop FK constraints
 			if migrator.HasConstraint(&tables.TableVirtualKeyProviderConfig{}, "RateLimit") {
@@ -1313,7 +1357,10 @@ func migrationAddProviderConfigBudgetRateLimit(ctx context.Context, db *gorm.DB)
 			}
 
 			// Drop columns via raw SQL (budget_id no longer on struct)
-			_ = tx.Exec("ALTER TABLE governance_virtual_key_provider_configs DROP COLUMN IF EXISTS budget_id")
+			// DROP COLUMN IF EXISTS not supported by MySQL 8.0; guard with HasColumn
+			if migrator.HasColumn(&tables.TableVirtualKeyProviderConfig{}, "budget_id") {
+				_ = tx.Exec("ALTER TABLE governance_virtual_key_provider_configs DROP COLUMN budget_id")
+			}
 			if migrator.HasColumn(&tables.TableVirtualKeyProviderConfig{}, "rate_limit_id") {
 				if err := migrator.DropColumn(&tables.TableVirtualKeyProviderConfig{}, "rate_limit_id"); err != nil {
 					return fmt.Errorf("failed to drop rate_limit_id column: %w", err)
@@ -1489,12 +1536,25 @@ func migrationAddMCPClientIDColumn(ctx context.Context, db *gorm.DB) error {
 				}
 
 				// Create unique index on client_id
-				if err := tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_client_id ON config_mcp_clients (client_id)").Error; err != nil {
-					return fmt.Errorf("failed to create unique index on client_id: %w", err)
+				// MySQL does not support CREATE UNIQUE INDEX IF NOT EXISTS; check first
+				if tx.Dialector.Name() == "mysql" {
+					if !tx.Migrator().HasIndex(&tables.TableMCPClient{}, "idx_mcp_client_id") {
+						if err := tx.Exec("CREATE UNIQUE INDEX idx_mcp_client_id ON config_mcp_clients (client_id)").Error; err != nil {
+							return fmt.Errorf("failed to create unique index on client_id: %w", err)
+						}
+					}
+				} else {
+					if err := tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_client_id ON config_mcp_clients (client_id)").Error; err != nil {
+						return fmt.Errorf("failed to create unique index on client_id: %w", err)
+					}
 				}
-				// Enforce NOT NULL in Postgres to guarantee ID presence on new rows
+				// Enforce NOT NULL in Postgres and MySQL to guarantee ID presence on new rows
 				if tx.Dialector.Name() == "postgres" {
 					if err := tx.Exec("ALTER TABLE config_mcp_clients ALTER COLUMN client_id SET NOT NULL").Error; err != nil {
+						return fmt.Errorf("failed to set client_id NOT NULL: %w", err)
+					}
+				} else if tx.Dialector.Name() == "mysql" {
+					if err := tx.Exec("ALTER TABLE config_mcp_clients MODIFY COLUMN client_id VARCHAR(255) NOT NULL").Error; err != nil {
 						return fmt.Errorf("failed to set client_id NOT NULL: %w", err)
 					}
 				}
@@ -1507,7 +1567,7 @@ func migrationAddMCPClientIDColumn(ctx context.Context, db *gorm.DB) error {
 			migrator := tx.Migrator()
 
 			// Drop the unique index first to avoid orphaned index artifacts
-			if err := tx.Exec("DROP INDEX IF EXISTS idx_mcp_client_id").Error; err != nil {
+			if err := dropIndexIfExists(tx, "idx_mcp_client_id", "config_mcp_clients"); err != nil {
 				return fmt.Errorf("failed to drop client_id index: %w", err)
 			}
 
@@ -3286,9 +3346,10 @@ func migrationAddDistributedLocksTable(ctx context.Context, db *gorm.DB) error {
 				return fmt.Errorf("failed to create distributed_locks table: %w", err)
 			}
 			// Create index on expires_at for efficient cleanup queries
-			createIndexSQL := `CREATE INDEX IF NOT EXISTS idx_distributed_locks_expires_at ON distributed_locks (expires_at)`
-			if err := tx.Exec(createIndexSQL).Error; err != nil {
-				return fmt.Errorf("failed to create expires_at index: %w", err)
+			if !tx.Migrator().HasIndex("distributed_locks", "idx_distributed_locks_expires_at") {
+				if err := tx.Exec("CREATE INDEX idx_distributed_locks_expires_at ON distributed_locks (expires_at)").Error; err != nil {
+					return fmt.Errorf("failed to create expires_at index: %w", err)
+				}
 			}
 			return nil
 		},
@@ -3354,7 +3415,7 @@ func migrationAddProviderGovernanceColumns(ctx context.Context, db *gorm.DB) err
 			}
 			// Create index for budget_id (outside HasColumn to handle reruns where column exists but index doesn't)
 			if !migrator.HasIndex(provider, "idx_provider_budget") {
-				if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_provider_budget ON config_providers (budget_id)").Error; err != nil {
+				if err := tx.Exec("CREATE INDEX idx_provider_budget ON config_providers (budget_id)").Error; err != nil {
 					return fmt.Errorf("failed to create budget_id index: %w", err)
 				}
 			}
@@ -3367,7 +3428,7 @@ func migrationAddProviderGovernanceColumns(ctx context.Context, db *gorm.DB) err
 			}
 			// Create index for rate_limit_id (outside HasColumn to handle reruns where column exists but index doesn't)
 			if !migrator.HasIndex(provider, "idx_provider_rate_limit") {
-				if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_provider_rate_limit ON config_providers (rate_limit_id)").Error; err != nil {
+				if err := tx.Exec("CREATE INDEX idx_provider_rate_limit ON config_providers (rate_limit_id)").Error; err != nil {
 					return fmt.Errorf("failed to create rate_limit_id index: %w", err)
 				}
 			}
@@ -3381,13 +3442,13 @@ func migrationAddProviderGovernanceColumns(ctx context.Context, db *gorm.DB) err
 
 			// Drop indexes first
 			if migrator.HasIndex(provider, "idx_provider_rate_limit") {
-				if err := tx.Exec("DROP INDEX IF EXISTS idx_provider_rate_limit").Error; err != nil {
+				if err := dropIndex(tx, "idx_provider_rate_limit", "config_providers"); err != nil {
 					return fmt.Errorf("failed to drop rate_limit_id index: %w", err)
 				}
 			}
 
 			if migrator.HasIndex(provider, "idx_provider_budget") {
-				if err := tx.Exec("DROP INDEX IF EXISTS idx_provider_budget").Error; err != nil {
+				if err := dropIndex(tx, "idx_provider_budget", "config_providers"); err != nil {
 					return fmt.Errorf("failed to drop budget_id index: %w", err)
 				}
 			}
@@ -4706,30 +4767,56 @@ func migrationWidenEncryptedVarcharColumns(ctx context.Context, db *gorm.DB) err
 		ID: "widen_encrypted_varchar_columns",
 		Migrate: func(tx *gorm.DB) error {
 			tx = tx.WithContext(ctx)
-			if tx.Dialector.Name() != "postgres" {
-				return nil
-			}
-			stmts := []string{
-				// config_keys table - all encrypted EnvVar fields
-				"ALTER TABLE config_keys ALTER COLUMN azure_api_version TYPE TEXT",
-				"ALTER TABLE config_keys ALTER COLUMN azure_client_id TYPE TEXT",
-				"ALTER TABLE config_keys ALTER COLUMN azure_tenant_id TYPE TEXT",
-				"ALTER TABLE config_keys ALTER COLUMN vertex_project_id TYPE TEXT",
-				"ALTER TABLE config_keys ALTER COLUMN vertex_project_number TYPE TEXT",
-				"ALTER TABLE config_keys ALTER COLUMN vertex_region TYPE TEXT",
-				"ALTER TABLE config_keys ALTER COLUMN bedrock_access_key TYPE TEXT",
-				"ALTER TABLE config_keys ALTER COLUMN bedrock_region TYPE TEXT",
-				// sessions table
-				"ALTER TABLE sessions ALTER COLUMN token TYPE TEXT",
-				// governance_virtual_keys table
-				"ALTER TABLE governance_virtual_keys ALTER COLUMN value TYPE TEXT",
-				// oauth_configs table
-				"ALTER TABLE oauth_configs ALTER COLUMN code_verifier TYPE TEXT",
-			}
-			for _, stmt := range stmts {
-				if err := tx.Exec(stmt).Error; err != nil {
-					return fmt.Errorf("failed to widen column (%s): %w", stmt, err)
+			switch tx.Dialector.Name() {
+			case "postgres":
+				stmts := []string{
+					// config_keys table - all encrypted EnvVar fields
+					"ALTER TABLE config_keys ALTER COLUMN azure_api_version TYPE TEXT",
+					"ALTER TABLE config_keys ALTER COLUMN azure_client_id TYPE TEXT",
+					"ALTER TABLE config_keys ALTER COLUMN azure_tenant_id TYPE TEXT",
+					"ALTER TABLE config_keys ALTER COLUMN vertex_project_id TYPE TEXT",
+					"ALTER TABLE config_keys ALTER COLUMN vertex_project_number TYPE TEXT",
+					"ALTER TABLE config_keys ALTER COLUMN vertex_region TYPE TEXT",
+					"ALTER TABLE config_keys ALTER COLUMN bedrock_access_key TYPE TEXT",
+					"ALTER TABLE config_keys ALTER COLUMN bedrock_region TYPE TEXT",
+					// sessions table
+					"ALTER TABLE sessions ALTER COLUMN token TYPE TEXT",
+					// governance_virtual_keys table
+					"ALTER TABLE governance_virtual_keys ALTER COLUMN value TYPE TEXT",
+					// oauth_configs table
+					"ALTER TABLE oauth_configs ALTER COLUMN code_verifier TYPE TEXT",
 				}
+				for _, stmt := range stmts {
+					if err := tx.Exec(stmt).Error; err != nil {
+						return fmt.Errorf("failed to widen column (%s): %w", stmt, err)
+					}
+				}
+			case "mysql":
+				// MySQL uses MODIFY COLUMN syntax instead of ALTER COLUMN ... TYPE
+				stmts := []string{
+					// config_keys table - all encrypted EnvVar fields
+					"ALTER TABLE config_keys MODIFY COLUMN azure_api_version TEXT",
+					"ALTER TABLE config_keys MODIFY COLUMN azure_client_id TEXT",
+					"ALTER TABLE config_keys MODIFY COLUMN azure_tenant_id TEXT",
+					"ALTER TABLE config_keys MODIFY COLUMN vertex_project_id TEXT",
+					"ALTER TABLE config_keys MODIFY COLUMN vertex_project_number TEXT",
+					"ALTER TABLE config_keys MODIFY COLUMN vertex_region TEXT",
+					"ALTER TABLE config_keys MODIFY COLUMN bedrock_access_key TEXT",
+					"ALTER TABLE config_keys MODIFY COLUMN bedrock_region TEXT",
+					// sessions table
+					"ALTER TABLE sessions MODIFY COLUMN token TEXT",
+					// governance_virtual_keys table
+					"ALTER TABLE governance_virtual_keys MODIFY COLUMN value TEXT",
+					// oauth_configs table
+					"ALTER TABLE oauth_configs MODIFY COLUMN code_verifier TEXT",
+				}
+				for _, stmt := range stmts {
+					if err := tx.Exec(stmt).Error; err != nil {
+						return fmt.Errorf("failed to widen column (%s): %w", stmt, err)
+					}
+				}
+			default:
+				// SQLite does not enforce varchar(n), no migration needed
 			}
 			return nil
 		},
@@ -6211,24 +6298,33 @@ func migrationAddMultiBudgetTables(ctx context.Context, db *gorm.DB) error {
 				`).Error; err != nil {
 					return fmt.Errorf("failed to backfill calendar_aligned from budgets to virtual keys: %w", err)
 				}
-				// Drop the legacy calendar_aligned column from governance_budgets.
-				// Plain column with no FK references — not a correctness risk if left behind,
-				// but log a warning so it's not invisible.
-				if err := tx.Exec("ALTER TABLE governance_budgets DROP COLUMN IF EXISTS calendar_aligned").Error; err != nil {
-					log.Printf("[Migration] warning: could not drop legacy calendar_aligned column from governance_budgets: %v", err)
+				// Drop the legacy calendar_aligned column from governance_budgets
+				// DROP COLUMN IF EXISTS not supported by MySQL 8.0; guard with HasColumn
+				if tx.Migrator().HasColumn(&tables.TableBudget{}, "calendar_aligned") {
+					_ = tx.Exec("ALTER TABLE governance_budgets DROP COLUMN calendar_aligned")
 				}
 			}
 
-			// Drop legacy budget_id columns BEFORE creating FK constraints.
-			// On SQLite, ALTER TABLE RENAME propagates into FK references in other tables.
-			// If we create FK constraints on governance_budgets first, then rename the
-			// parent table during the legacy column drop (table rebuild), SQLite updates
-			// those FK references to point at the temporary backup table name.
-			if err := dropLegacyBudgetColumn(tx, "governance_virtual_keys"); err != nil {
-				return err
+			// Drop legacy budget_id columns from VK and ProviderConfig (raw SQL to avoid GORM FK lookup issues)
+			// DROP COLUMN IF EXISTS not supported by MySQL 8.0; guard with HasColumn
+			// On MySQL, FK constraints referencing the column must be dropped first (Error 1828).
+			if tx.Migrator().HasColumn(&tables.TableVirtualKey{}, "budget_id") {
+				if tx.Dialector.Name() == "mysql" {
+					fkName := "fk_governance_virtual_keys_budget"
+					if tx.Migrator().HasConstraint("governance_virtual_keys", fkName) {
+						_ = tx.Exec("ALTER TABLE `governance_virtual_keys` DROP FOREIGN KEY `" + fkName + "`")
+					}
+				}
+				_ = tx.Exec("ALTER TABLE governance_virtual_keys DROP COLUMN budget_id")
 			}
-			if err := dropLegacyBudgetColumn(tx, "governance_virtual_key_provider_configs"); err != nil {
-				return err
+			if tx.Migrator().HasColumn(&tables.TableVirtualKeyProviderConfig{}, "budget_id") {
+				if tx.Dialector.Name() == "mysql" {
+					fkName := "fk_governance_virtual_key_provider_configs_budget"
+					if tx.Migrator().HasConstraint("governance_virtual_key_provider_configs", fkName) {
+						_ = tx.Exec("ALTER TABLE `governance_virtual_key_provider_configs` DROP FOREIGN KEY `" + fkName + "`")
+					}
+				}
+				_ = tx.Exec("ALTER TABLE governance_virtual_key_provider_configs DROP COLUMN budget_id")
 			}
 
 			// Create FK constraints with CASCADE delete (defined on parent structs).
@@ -6824,12 +6920,17 @@ func migrationAddModelPricingUniqueIndex(ctx context.Context, db *gorm.DB) error
 			// multinode deployments, and CREATE UNIQUE INDEX will fail on a table
 			// that still contains them. Keep the row with the lowest ID for each
 			// (model, provider, mode) combination.
+			// The subquery is wrapped in a derived table alias to satisfy MySQL's
+			// restriction against referencing the target table directly in a subquery
+			// (Error 1093).
 			result := tx.Exec(`
 				DELETE FROM governance_model_pricing
 				WHERE id NOT IN (
-					SELECT MIN(id)
-					FROM governance_model_pricing
-					GROUP BY model, provider, mode
+					SELECT min_id FROM (
+						SELECT MIN(id) AS min_id
+						FROM governance_model_pricing
+						GROUP BY model, provider, mode
+					) AS dedup
 				)
 			`)
 			if result.Error != nil {
@@ -6859,6 +6960,43 @@ func migrationAddModelPricingUniqueIndex(ctx context.Context, db *gorm.DB) error
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error running add_model_pricing_unique_index migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationDropTextColumnUniqueIndexes drops unique indexes on TEXT columns that are incompatible
+// with MySQL (which requires a key length prefix for TEXT/BLOB indexes). These columns have hash
+// equivalents (value_hash, token_hash) that enforce uniqueness instead.
+func migrationDropTextColumnUniqueIndexes(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "drop_text_column_unique_indexes",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			// Drop unique index on governance_virtual_keys.value (TEXT column)
+			// Uniqueness is enforced via idx_virtual_key_value_hash on value_hash (varchar(64))
+			if migrator.HasIndex(&tables.TableVirtualKey{}, "idx_virtual_key_value") {
+				if err := dropIndex(tx, "idx_virtual_key_value", "governance_virtual_keys"); err != nil {
+					return fmt.Errorf("failed to drop idx_virtual_key_value: %w", err)
+				}
+			}
+			// Drop unique index on sessions.token (TEXT column)
+			// Uniqueness is enforced via idx_session_token_hash on token_hash (varchar(64))
+			// GORM auto-generates the name as idx_<table_name>_<column>, i.e. idx_sessions_token
+			for _, idxName := range []string{"idx_sessions_token", "idx_sessions_tables_token"} {
+				if migrator.HasIndex(&tables.SessionsTable{}, idxName) {
+					if err := dropIndex(tx, idxName, "sessions"); err != nil {
+						return fmt.Errorf("failed to drop sessions token unique index: %w", err)
+					}
+					break
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error { return nil },
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running drop_text_column_unique_indexes migration: %s", err.Error())
 	}
 	return nil
 }
@@ -6961,6 +7099,38 @@ func migrateCalendarAlignedToBudgetsAndRateLimitsTable(ctx context.Context, db *
 	return nil
 }
 
+// migrationFixConfigModelsColumnTypes changes the `name` column in config_models from
+// its default text type to varchar(255) so MySQL can create an index on it.
+func migrationFixConfigModelsColumnTypes(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "fix_config_models_column_types",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			// MODIFY COLUMN is MySQL-only syntax; column sizing for index limits only matters on MySQL.
+			if tx.Dialector.Name() != "mysql" {
+				return nil
+			}
+			if !tx.Migrator().HasTable(&tables.TableModel{}) {
+				return nil
+			}
+			// Modify name column to varchar(255) so MySQL allows indexing it
+			if err := tx.Exec("ALTER TABLE config_models MODIFY COLUMN name VARCHAR(255)").Error; err != nil {
+				return fmt.Errorf("failed to alter config_models.name column type: %w", err)
+			}
+			// Modify id column to varchar(255) (was untyped string = longtext on MySQL)
+			if err := tx.Exec("ALTER TABLE config_models MODIFY COLUMN id VARCHAR(255)").Error; err != nil {
+				return fmt.Errorf("failed to alter config_models.id column type: %w", err)
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error { return nil },
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running fix_config_models_column_types migration: %s", err.Error())
+	}
+	return nil
+}
+
 func migrationAddOCRPricingColumns(ctx context.Context, db *gorm.DB) error {
 	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
 		ID: "add_ocr_pricing_columns",
@@ -6999,6 +7169,91 @@ func migrationAddOCRPricingColumns(ctx context.Context, db *gorm.DB) error {
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error running add_ocr_pricing_columns migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationFixRoutingTargetIndexColumns shrinks routing_targets composite index columns from
+// varchar(255) to varchar(191) so the combined index size stays within MySQL's 3072-byte limit
+// when using utf8mb4 (4 bytes/char): 4 columns × 191 chars × 4 bytes = 3056 bytes.
+func migrationFixRoutingTargetIndexColumns(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "fix_routing_target_index_columns",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			// MODIFY COLUMN is MySQL-only; column shrinking for index size only applies to MySQL utf8mb4.
+			if tx.Dialector.Name() != "mysql" {
+				return nil
+			}
+			if !tx.Migrator().HasTable(&tables.TableRoutingTarget{}) {
+				return nil
+			}
+
+			// On MySQL, MODIFY COLUMN on a column referenced by a FK constraint fails
+			// with Error 1832. Drop the FK on routing_targets.rule_id first, resize
+			// all four columns, then recreate the constraint.
+			const fkName = "fk_routing_rules_targets"
+			fkDropped := false
+			if tx.Migrator().HasConstraint(&tables.TableRoutingTarget{}, fkName) {
+				if err := tx.Exec("ALTER TABLE `routing_targets` DROP FOREIGN KEY `" + fkName + "`").Error; err != nil {
+					return fmt.Errorf("failed to drop FK %s before column resize: %w", fkName, err)
+				}
+				fkDropped = true
+			}
+
+			for col, newType := range map[string]string{
+				"rule_id":  "VARCHAR(191)",
+				"provider": "VARCHAR(191)",
+				"model":    "VARCHAR(191)",
+				"key_id":   "VARCHAR(191)",
+			} {
+				if err := tx.Exec("ALTER TABLE routing_targets MODIFY COLUMN `" + col + "` " + newType).Error; err != nil {
+					return fmt.Errorf("failed to alter routing_targets.%s column type: %w", col, err)
+				}
+			}
+
+			// Recreate the FK constraint that was temporarily dropped.
+			if fkDropped {
+				if err := tx.Exec("ALTER TABLE `routing_targets` ADD CONSTRAINT `" + fkName + "` FOREIGN KEY (`rule_id`) REFERENCES `routing_rules`(`id`) ON DELETE CASCADE").Error; err != nil {
+					return fmt.Errorf("failed to recreate FK %s after column resize: %w", fkName, err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error { return nil },
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running fix_routing_target_index_columns migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationFixPricingOverrideScopeIndexColumns shrinks governance_pricing_overrides composite
+// index columns from varchar(255) to varchar(191) to stay within MySQL's 3072-byte utf8mb4 limit.
+// idx_pricing_override_scope: (50 + 191 + 191 + 191) × 4 = 2492 bytes.
+func migrationFixPricingOverrideScopeIndexColumns(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "fix_pricing_override_scope_index_columns",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			// MODIFY COLUMN is MySQL-only; column shrinking for index size only applies to MySQL utf8mb4.
+			if tx.Dialector.Name() != "mysql" {
+				return nil
+			}
+			if !tx.Migrator().HasTable(&tables.TablePricingOverride{}) {
+				return nil
+			}
+			for _, col := range []string{"virtual_key_id", "provider_id", "provider_key_id"} {
+				if err := tx.Exec("ALTER TABLE governance_pricing_overrides MODIFY COLUMN `" + col + "` VARCHAR(191)").Error; err != nil {
+					return fmt.Errorf("failed to alter governance_pricing_overrides.%s column type: %w", col, err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error { return nil },
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running fix_pricing_override_scope_index_columns migration: %s", err.Error())
 	}
 	return nil
 }

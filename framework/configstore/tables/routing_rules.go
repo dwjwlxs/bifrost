@@ -87,11 +87,13 @@ func (r *TableRoutingRule) AfterFind(tx *gorm.DB) error {
 // Multiple targets can be associated with a single routing rule; weights determine
 // the probability of each target being selected and must sum to 1 across all targets in a rule.
 // The composite (RuleID, Provider, Model, KeyID) is unique to prevent duplicate target configs.
+// NOTE: varchar lengths are capped at 191 to keep the composite index within MySQL's 3072-byte
+// limit when using utf8mb4 (4 bytes/char): 555 × 4 < 3056 bytes.
 type TableRoutingTarget struct {
 	RuleID   string  `gorm:"type:varchar(255);not null;index;uniqueIndex:idx_routing_target_config" json:"-"`
-	Provider *string `gorm:"type:varchar(255);uniqueIndex:idx_routing_target_config" json:"provider,omitempty"` // nil = use incoming provider
-	Model    *string `gorm:"type:varchar(255);uniqueIndex:idx_routing_target_config" json:"model,omitempty"`    // nil = use incoming model
-	KeyID    *string `gorm:"type:varchar(255);uniqueIndex:idx_routing_target_config" json:"key_id,omitempty"`   // nil = no key pin
+	Provider *string `gorm:"type:varchar(100);uniqueIndex:idx_routing_target_config" json:"provider,omitempty"` // nil = use incoming provider
+	Model    *string `gorm:"type:varchar(100);uniqueIndex:idx_routing_target_config" json:"model,omitempty"`    // nil = use incoming model
+	KeyID    *string `gorm:"type:varchar(100);uniqueIndex:idx_routing_target_config" json:"key_id,omitempty"`   // nil = no key pin
 	Weight   float64 `gorm:"not null;default:1" json:"weight"`                                                  // must sum to 1 across all targets in a rule
 }
 

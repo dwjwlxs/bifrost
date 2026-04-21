@@ -742,7 +742,11 @@
         },
         "type": {
           "type": "string",
-          "enum": ["sqlite", "postgres"],
+          "enum": [
+            "sqlite",
+            "postgres",
+            "mysql"
+          ],
           "description": "Configuration store type"
         },
         "config": {
@@ -818,6 +822,60 @@
                 "required": ["host", "port", "user", "password", "db_name", "ssl_mode"],
                 "additionalProperties": false
               }
+            },
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "const": "mysql"
+                  }
+                }
+              },
+              "then": {
+                "type": "object",
+                "properties": {
+                  "host": {
+                    "type": "string",
+                    "description": "Database host"
+                  },
+                  "port": {
+                    "type": "string",
+                    "description": "Database port"
+                  },
+                  "user": {
+                    "type": "string",
+                    "description": "Database user"
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "Database password"
+                  },
+                  "db_name": {
+                    "type": "string",
+                    "description": "Database name"
+                  },
+                  "max_idle_conns": {
+                    "type": "integer",
+                    "description": "Maximum number of idle connections in the pool (default: 5)",
+                    "minimum": 0,
+                    "default": 5
+                  },
+                  "max_open_conns": {
+                    "type": "integer",
+                    "description": "Maximum number of open connections to the database (default: 50)",
+                    "minimum": 2,
+                    "default": 50
+                  }
+                },
+                "required": [
+                  "host",
+                  "port",
+                  "user",
+                  "password",
+                  "db_name"
+                ],
+                "additionalProperties": false
+              }
             }
           ]
         }
@@ -834,7 +892,11 @@
         },
         "type": {
           "type": "string",
-          "enum": ["sqlite", "postgres"],
+          "enum": [
+            "sqlite",
+            "postgres",
+            "mysql"
+          ],
           "description": "Logs store type"
         },
         "config": {
@@ -907,6 +969,59 @@
                   }
                 },
                 "required": ["host", "port", "user", "password", "db_name", "ssl_mode"],
+                "additionalProperties": false
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "../type": {
+                    "const": "mysql"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "host": {
+                    "type": "string",
+                    "description": "Database host"
+                  },
+                  "port": {
+                    "type": "string",
+                    "description": "Database port"
+                  },
+                  "user": {
+                    "type": "string",
+                    "description": "Database user"
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "Database password"
+                  },
+                  "db_name": {
+                    "type": "string",
+                    "description": "Database name"
+                  },
+                  "max_idle_conns": {
+                    "type": "integer",
+                    "description": "Maximum number of idle connections in the pool (default: 5)",
+                    "minimum": 0,
+                    "default": 5
+                  },
+                  "max_open_conns": {
+                    "type": "integer",
+                    "description": "Maximum number of open connections to the database (default: 50)",
+                    "minimum": 2,
+                    "default": 50
+                  }
+                },
+                "required": [
+                  "host",
+                  "port",
+                  "user",
+                  "password",
+                  "db_name"
+                ],
                 "additionalProperties": false
               }
             }
