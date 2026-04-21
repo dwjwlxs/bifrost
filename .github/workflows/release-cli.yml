@@ -3,7 +3,7 @@ name: Release CLI
 on:
   push:
     branches:
-      - main
+      - transports/v1.5.0-prerelease4-dev
 
 # Prevent concurrent runs
 concurrency:
