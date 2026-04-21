@@ -1142,6 +1142,7 @@ export default function AppSidebar() {
 						type="text"
 						aria-label="Search sidebar navigation"
 						placeholder="Search..."
+						autoComplete="off"
 						value={searchQuery}
 						onChange={(e) => {
 							setSearchQuery(e.target.value);

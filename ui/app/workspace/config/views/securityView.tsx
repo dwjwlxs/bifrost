@@ -229,6 +229,7 @@ export default function SecurityView() {
 									<EnvVarInput
 										id="admin-username"
 										type="text"
+										autoComplete="username"
 										placeholder="Enter admin username or env.VAR_NAME"
 										value={authConfig.admin_username}
 										disabled={!authConfig.is_enabled}
@@ -240,6 +241,7 @@ export default function SecurityView() {
 									<EnvVarInput
 										id="admin-password"
 										type="password"
+										autoComplete="current-password"
 										placeholder="Enter admin password or env.VAR_NAME"
 										value={authConfig.admin_password}
 										disabled={!authConfig.is_enabled}
