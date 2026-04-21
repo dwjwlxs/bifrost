@@ -89,8 +89,8 @@ func (s *RDBConfigStore) DeleteFolder(ctx context.Context, id string) error {
 			return err
 		}
 
-		// PostgreSQL: ON DELETE CASCADE handles all child deletions
-		if s.DB().Dialector.Name() == "postgres" {
+		// PostgreSQL and MySQL: ON DELETE CASCADE handles all child deletions
+		if s.DB().Dialector.Name() == "postgres" || s.DB().Dialector.Name() == "mysql" {
 			return tx.Delete(&folder).Error
 		}
 
@@ -229,8 +229,8 @@ func (s *RDBConfigStore) DeletePrompt(ctx context.Context, id string) error {
 			return err
 		}
 
-		// PostgreSQL: ON DELETE CASCADE handles all child deletions
-		if s.DB().Dialector.Name() == "postgres" {
+		// PostgreSQL and MySQL: ON DELETE CASCADE handles all child deletions
+		if s.DB().Dialector.Name() == "postgres" || s.DB().Dialector.Name() == "mysql" {
 			return tx.Delete(&prompt).Error
 		}
 
@@ -374,8 +374,8 @@ func (s *RDBConfigStore) DeletePromptVersion(ctx context.Context, id uint) error
 			return err
 		}
 
-		// SQLite: manually delete version messages (PostgreSQL CASCADE handles this)
-		if s.DB().Dialector.Name() != "postgres" {
+		// SQLite: manually delete version messages (PostgreSQL and MySQL CASCADE handle this)
+		if s.DB().Dialector.Name() != "postgres" && s.DB().Dialector.Name() != "mysql" {
 			if err := tx.Where("version_id = ?", id).Delete(&tables.TablePromptVersionMessage{}).Error; err != nil {
 				return err
 			}
@@ -552,8 +552,8 @@ func (s *RDBConfigStore) DeletePromptSession(ctx context.Context, id uint) error
 			return err
 		}
 
-		// PostgreSQL: ON DELETE CASCADE handles message deletion
-		if s.DB().Dialector.Name() == "postgres" {
+		// PostgreSQL and MySQL: ON DELETE CASCADE handles message deletion
+		if s.DB().Dialector.Name() == "postgres" || s.DB().Dialector.Name() == "mysql" {
 			return tx.Delete(&session).Error
 		}
 

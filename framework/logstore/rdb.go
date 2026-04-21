@@ -47,9 +47,9 @@ const (
 
 // RDBLogStore represents a log store that uses a SQLite database.
 type RDBLogStore struct {
-	db             *gorm.DB
-	logger         schemas.Logger
-	matViewsReady  atomic.Bool
+	db            *gorm.DB
+	logger        schemas.Logger
+	matViewsReady atomic.Bool
 }
 
 // generateBucketTimestamps generates all bucket timestamps for a time range.
@@ -194,13 +194,14 @@ func (s *RDBLogStore) applyFilters(baseQuery *gorm.DB, filters SearchFilters) *g
 		if dialect == "postgres" {
 			baseQuery = baseQuery.Where("to_tsvector('simple', content_summary) @@ plainto_tsquery('simple', ?)", filters.ContentSearch)
 		} else {
+			// MySQL and SQLite: fall back to LIKE search
 			baseQuery = baseQuery.Where("content_summary LIKE ?", "%"+filters.ContentSearch+"%")
 		}
 	}
 	if len(filters.MetadataFilters) > 0 {
 		dialect := s.db.Dialector.Name()
 		// Guard must match the partial-index predicate so the planner uses the GIN index.
-		// SQLite does not support IS JSON OBJECT, so fall back to the equivalent json_type check.
+		// SQLite does not support IS JSON OBJECT, MySQL uses JSON_VALID instead.
 		if dialect == "postgres" {
 			baseQuery = baseQuery.Where("metadata IS NOT NULL AND metadata IS JSON OBJECT")
 		} else {
@@ -224,6 +225,17 @@ func (s *RDBLogStore) applyFilters(baseQuery *gorm.DB, filters SearchFilters) *g
 					jsonFragment = fmt.Sprintf(`{%q: %q}`, key, value)
 				}
 				baseQuery = baseQuery.Where("metadata::jsonb @> ?::jsonb", jsonFragment)
+			case "mysql":
+				// MySQL: use JSON_EXTRACT with $ path syntax
+				path := `$."` + key + `"`
+				if value == "true" {
+					baseQuery = baseQuery.Where("JSON_TYPE(JSON_EXTRACT(metadata, ?)) = 'BOOLEAN' AND JSON_EXTRACT(metadata, ?) = TRUE", path, path)
+				} else if value == "false" {
+					baseQuery = baseQuery.Where("JSON_TYPE(JSON_EXTRACT(metadata, ?)) = 'BOOLEAN' AND JSON_EXTRACT(metadata, ?) = FALSE", path, path)
+				} else {
+					// Numeric and string values
+					baseQuery = baseQuery.Where("JSON_EXTRACT(metadata, ?) = ? OR CAST(JSON_EXTRACT(metadata, ?) AS CHAR) = ?", path, value, path, value)
+				}
 			default:
 				// SQLite: quote the member name so dots/hyphens stay part of the key
 				path := `$."` + key + `"`
@@ -297,8 +309,11 @@ func (s *RDBLogStore) BulkUpdateCost(ctx context.Context, updates map[string]flo
 		return nil
 	}
 
-	if s.db.Dialector.Name() == "postgres" {
+	switch s.db.Dialector.Name() {
+	case "postgres":
 		return s.bulkUpdateCostPostgres(ctx, updates)
+	case "mysql":
+		return s.bulkUpdateCostMySQL(ctx, updates)
 	}
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -371,6 +386,46 @@ func (s *RDBLogStore) bulkUpdateCostPostgres(ctx context.Context, updates map[st
 			end := min(start+bulkUpdateCostChunkSize, len(ids))
 			query, args := buildBulkUpdateCostPostgresSQL(ids[start:end], updates)
 			if err := tx.Exec(query, args...).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// bulkUpdateCostMySQL applies chunked MySQL bulk cost updates using a CASE expression
+// to update all rows in a single statement.
+func (s *RDBLogStore) bulkUpdateCostMySQL(ctx context.Context, updates map[string]float64) error {
+	ids := make([]string, 0, len(updates))
+	for id := range updates {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for start := 0; start < len(ids); start += bulkUpdateCostChunkSize {
+			end := min(start+bulkUpdateCostChunkSize, len(ids))
+			chunk := ids[start:end]
+
+			var sqlBuilder strings.Builder
+			args := make([]interface{}, 0, len(chunk)*2+len(chunk))
+
+			sqlBuilder.WriteString("UPDATE logs SET cost = CASE id ")
+			for _, id := range chunk {
+				sqlBuilder.WriteString("WHEN ? THEN ? ")
+				args = append(args, id, updates[id])
+			}
+			sqlBuilder.WriteString("END WHERE id IN (")
+			for i, id := range chunk {
+				if i > 0 {
+					sqlBuilder.WriteString(",")
+				}
+				sqlBuilder.WriteString("?")
+				args = append(args, id)
+			}
+			sqlBuilder.WriteString(")")
+
+			if err := tx.Exec(sqlBuilder.String(), args...).Error; err != nil {
 				return err
 			}
 		}
@@ -652,6 +707,19 @@ func (s *RDBLogStore) listSelectColumns() string {
 			WHEN object_type = 'realtime.turn' THEN responses_input_history
 			WHEN responses_input_history IS NOT NULL AND responses_input_history != '' AND responses_input_history != '[]'
 			THEN jsonb_build_array(responses_input_history::jsonb->-1)::text
+			ELSE responses_input_history END AS responses_input_history`
+		outputMessageExpr = `CASE WHEN object_type = 'realtime.turn' THEN output_message ELSE NULL END AS output_message`
+	case "mysql":
+		// MySQL: use JSON_EXTRACT with JSON_LENGTH to get last array element
+		inputHistoryExpr = `CASE
+			WHEN object_type = 'realtime.turn' THEN input_history
+			WHEN input_history IS NOT NULL AND input_history != '' AND input_history != '[]'
+			THEN JSON_ARRAY(JSON_EXTRACT(input_history, CONCAT('$[', JSON_LENGTH(input_history) - 1, ']')))
+			ELSE input_history END AS input_history`
+		responsesInputExpr = `CASE
+			WHEN object_type = 'realtime.turn' THEN responses_input_history
+			WHEN responses_input_history IS NOT NULL AND responses_input_history != '' AND responses_input_history != '[]'
+			THEN JSON_ARRAY(JSON_EXTRACT(responses_input_history, CONCAT('$[', JSON_LENGTH(responses_input_history) - 1, ']')))
 			ELSE responses_input_history END AS responses_input_history`
 		outputMessageExpr = `CASE WHEN object_type = 'realtime.turn' THEN output_message ELSE NULL END AS output_message`
 	default: // sqlite
@@ -3518,8 +3586,11 @@ func (s *RDBLogStore) DeleteExpiredAsyncJobs(ctx context.Context) (int64, error)
 	const batchLimit = 100
 	var totalDeleted int64
 	for {
+		// MySQL does not support LIMIT inside an IN subquery (Error 1235).
+		// Wrapping the inner SELECT in a derived table alias forces materialization
+		// before the outer DELETE sees it, which works on MySQL, PostgreSQL, and SQLite.
 		result := s.db.WithContext(ctx).
-			Where("id IN (?)",
+			Where("id IN (SELECT id FROM (?) AS batch)",
 				s.db.Model(&AsyncJob{}).Select("id").
 					Where("expires_at IS NOT NULL AND expires_at < ?", now).
 					Limit(batchLimit),

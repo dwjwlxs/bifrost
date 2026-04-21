@@ -21,9 +21,9 @@ type TableClientConfig struct {
 	DisableDBPingsInHealth          bool   `gorm:"default:false" json:"disable_db_pings_in_health"`
 	LogRetentionDays                int    `gorm:"default:365" json:"log_retention_days" validate:"min=1"` // Number of days to retain logs (minimum 1 day)
 	EnforceAuthOnInference          bool   `gorm:"default:false" json:"enforce_auth_on_inference"`
-	EnforceGovernanceHeader         bool   `gorm:"" json:"enforce_governance_header"`
+	EnforceGovernanceHeader         bool   `gorm:"default:false" json:"enforce_governance_header"`
 	EnforceSCIMAuth                 bool   `gorm:"default:false" json:"enforce_scim_auth"`
-	AllowDirectKeys                 bool   `gorm:"" json:"allow_direct_keys"`
+	AllowDirectKeys                 bool   `gorm:"default:false" json:"allow_direct_keys"`
 	MaxRequestBodySizeMB            int    `gorm:"default:100" json:"max_request_body_size_mb"`
 	MCPAgentDepth                   int    `gorm:"default:10" json:"mcp_agent_depth"`
 	MCPToolExecutionTimeout         int    `gorm:"default:30" json:"mcp_tool_execution_timeout"`              // Timeout for individual tool execution in seconds (default: 30)

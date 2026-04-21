@@ -4,9 +4,9 @@ import "time"
 
 // TableModel represents a model configuration in the database
 type TableModel struct {
-	ID         string    `gorm:"primaryKey" json:"id"`
+	ID         string    `gorm:"primaryKey;type:varchar(255)" json:"id"`
 	ProviderID uint      `gorm:"index;not null;uniqueIndex:idx_provider_name" json:"provider_id"`
-	Name       string    `gorm:"uniqueIndex:idx_provider_name" json:"name"`
+	Name       string    `gorm:"type:varchar(255);uniqueIndex:idx_provider_name" json:"name"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }

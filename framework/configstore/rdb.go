@@ -166,7 +166,16 @@ func (s *RDBConfigStore) UpdateClientConfig(ctx context.Context, config *ClientC
 		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&tables.TableClientConfig{}).Error; err != nil {
 			return err
 		}
-		return tx.Create(&dbConfig).Error
+		// Create new client config
+		result := tx.Create(&dbConfig)
+		if result.Error != nil {
+			return result.Error
+		}
+		// Verify the record was created
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("failed to create client config record")
+		}
+		return nil
 	})
 }
 
@@ -1369,21 +1378,21 @@ func (s *RDBConfigStore) CreateMCPClientConfig(ctx context.Context, clientConfig
 		}
 		// Create new client
 		dbClient := tables.TableMCPClient{
-			ClientID:                  clientConfigCopy.ID,
-			Name:                      clientConfigCopy.Name,
-			IsCodeModeClient:          clientConfigCopy.IsCodeModeClient,
-			ConnectionType:            string(clientConfigCopy.ConnectionType),
-			ConnectionString:          clientConfigCopy.ConnectionString,
-			StdioConfig:               clientConfigCopy.StdioConfig,
-			AuthType:                  string(clientConfigCopy.AuthType),
-			OauthConfigID:             clientConfigCopy.OauthConfigID,
-			ToolsToExecute:            clientConfigCopy.ToolsToExecute,
-			ToolsToAutoExecute:        clientConfigCopy.ToolsToAutoExecute,
-			Headers:                   clientConfigCopy.Headers,
-			AllowedExtraHeaders:       clientConfigCopy.AllowedExtraHeaders,
-			IsPingAvailable:           clientConfigCopy.IsPingAvailable,
-			ToolSyncInterval:          int(clientConfigCopy.ToolSyncInterval.Minutes()),
-			AllowOnAllVirtualKeys:     clientConfigCopy.AllowOnAllVirtualKeys,
+			ClientID:              clientConfigCopy.ID,
+			Name:                  clientConfigCopy.Name,
+			IsCodeModeClient:      clientConfigCopy.IsCodeModeClient,
+			ConnectionType:        string(clientConfigCopy.ConnectionType),
+			ConnectionString:      clientConfigCopy.ConnectionString,
+			StdioConfig:           clientConfigCopy.StdioConfig,
+			AuthType:              string(clientConfigCopy.AuthType),
+			OauthConfigID:         clientConfigCopy.OauthConfigID,
+			ToolsToExecute:        clientConfigCopy.ToolsToExecute,
+			ToolsToAutoExecute:    clientConfigCopy.ToolsToAutoExecute,
+			Headers:               clientConfigCopy.Headers,
+			AllowedExtraHeaders:   clientConfigCopy.AllowedExtraHeaders,
+			IsPingAvailable:       clientConfigCopy.IsPingAvailable,
+			ToolSyncInterval:      int(clientConfigCopy.ToolSyncInterval.Minutes()),
+			AllowOnAllVirtualKeys: clientConfigCopy.AllowOnAllVirtualKeys,
 			// DiscoveredTools has json:"-" so deepCopy loses it; use original clientConfig
 			DiscoveredTools:           clientConfig.DiscoveredTools,
 			DiscoveredToolNameMapping: clientConfig.DiscoveredToolNameMapping,
@@ -1602,7 +1611,7 @@ func (s *RDBConfigStore) UpdateLogsStoreConfig(ctx context.Context, config *logs
 // GetConfig retrieves a specific config from the database.
 func (s *RDBConfigStore) GetConfig(ctx context.Context, key string) (*tables.TableGovernanceConfig, error) {
 	var config tables.TableGovernanceConfig
-	if err := s.DB().WithContext(ctx).First(&config, "key = ?", key).Error; err != nil {
+	if err := s.DB().WithContext(ctx).Where(&tables.TableGovernanceConfig{Key: key}).First(&config).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
 		}
@@ -2133,7 +2142,7 @@ func (s *RDBConfigStore) GetVirtualKeyByValue(ctx context.Context, value string)
 	if err := query.Where("value_hash = ?", valueHash).First(&virtualKey).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// Fallback: try plaintext lookup for rows not yet migrated
-			if err := query.Where("value = ?", value).First(&virtualKey).Error; err != nil {
+			if err := query.Where("`value` = ?", value).First(&virtualKey).Error; err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {
 					return nil, ErrNotFound
 				}
@@ -2155,7 +2164,7 @@ func (s *RDBConfigStore) GetVirtualKeyQuotaByValue(ctx context.Context, value st
 	if err := baseQuery.Session(&gorm.Session{}).Where("value_hash = ?", valueHash).First(&virtualKey).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// Fallback: try plaintext lookup for rows not yet migrated
-			if err := baseQuery.Session(&gorm.Session{}).Where("value = ?", value).First(&virtualKey).Error; err != nil {
+			if err := baseQuery.Session(&gorm.Session{}).Where("`value` = ?", value).First(&virtualKey).Error; err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {
 					return nil, ErrNotFound
 				}
@@ -3639,38 +3648,47 @@ func (s *RDBConfigStore) GetGovernanceConfig(ctx context.Context) (*GovernanceCo
 
 // GetAuthConfig retrieves the auth configuration from the database.
 func (s *RDBConfigStore) GetAuthConfig(ctx context.Context) (*AuthConfig, error) {
-	var username *string
-	var password *string
-	var isEnabled bool
-	var disableAuthOnInference bool
-	if err := s.DB().WithContext(ctx).First(&tables.TableGovernanceConfig{}, "key = ?", tables.ConfigAdminUsernameKey).Select("value").Scan(&username).Error; err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
+	// lookupVal fetches a single governance_config row by its primary key and returns the value.
+	// Returns ("", false, nil) when the row doesn't exist.
+	// Using PK lookup (db.First(&row, pkValue)) lets GORM quote the column correctly
+	// for every dialect (MySQL backtick, PostgreSQL/SQLite double-quote).
+	lookupVal := func(k string) (string, bool, error) {
+		var row tables.TableGovernanceConfig
+		if err := s.DB().WithContext(ctx).Where(&tables.TableGovernanceConfig{Key: k}).First(&row).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return "", false, nil
+			}
+			return "", false, err
 		}
+		return row.Value, true, nil
 	}
-	if err := s.DB().WithContext(ctx).First(&tables.TableGovernanceConfig{}, "key = ?", tables.ConfigAdminPasswordKey).Select("value").Scan(&password).Error; err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
-		}
+
+	usernameVal, usernameOK, err := lookupVal(tables.ConfigAdminUsernameKey)
+	if err != nil {
+		return nil, err
 	}
-	if err := s.DB().WithContext(ctx).First(&tables.TableGovernanceConfig{}, "key = ?", tables.ConfigIsAuthEnabledKey).Select("value").Scan(&isEnabled).Error; err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
-		}
+	passwordVal, passwordOK, err := lookupVal(tables.ConfigAdminPasswordKey)
+	if err != nil {
+		return nil, err
 	}
-	if err := s.DB().WithContext(ctx).First(&tables.TableGovernanceConfig{}, "key = ?", tables.ConfigDisableAuthOnInferenceKey).Select("value").Scan(&disableAuthOnInference).Error; err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
-		}
+	isEnabledVal, _, err := lookupVal(tables.ConfigIsAuthEnabledKey)
+	if err != nil {
+		return nil, err
 	}
-	if username == nil || password == nil {
+	disableAuthVal, _, err := lookupVal(tables.ConfigDisableAuthOnInferenceKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if !usernameOK || !passwordOK {
 		return nil, nil
 	}
+
 	return &AuthConfig{
-		AdminUserName:          schemas.NewEnvVar(*username),
-		AdminPassword:          schemas.NewEnvVar(*password),
-		IsEnabled:              isEnabled,
-		DisableAuthOnInference: disableAuthOnInference,
+		AdminUserName:          schemas.NewEnvVar(usernameVal),
+		AdminPassword:          schemas.NewEnvVar(passwordVal),
+		IsEnabled:              isEnabledVal == "true",
+		DisableAuthOnInference: disableAuthVal == "true",
 	}, nil
 }
 
@@ -3708,7 +3726,7 @@ func (s *RDBConfigStore) UpdateAuthConfig(ctx context.Context, config *AuthConfi
 // GetProxyConfig retrieves the proxy configuration from the database.
 func (s *RDBConfigStore) GetProxyConfig(ctx context.Context) (*tables.GlobalProxyConfig, error) {
 	var configEntry tables.TableGovernanceConfig
-	if err := s.DB().WithContext(ctx).First(&configEntry, "key = ?", tables.ConfigProxyKey).Error; err != nil {
+	if err := s.DB().WithContext(ctx).Where(&tables.TableGovernanceConfig{Key: tables.ConfigProxyKey}).First(&configEntry).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -3764,7 +3782,7 @@ func (s *RDBConfigStore) UpdateProxyConfig(ctx context.Context, config *tables.G
 // GetRestartRequiredConfig retrieves the restart required configuration from the database.
 func (s *RDBConfigStore) GetRestartRequiredConfig(ctx context.Context) (*tables.RestartRequiredConfig, error) {
 	var configEntry tables.TableGovernanceConfig
-	if err := s.DB().WithContext(ctx).First(&configEntry, "key = ?", tables.ConfigRestartRequiredKey).Error; err != nil {
+	if err := s.DB().WithContext(ctx).Where(&tables.TableGovernanceConfig{Key: tables.ConfigRestartRequiredKey}).First(&configEntry).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
