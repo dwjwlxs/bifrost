@@ -2,6 +2,11 @@ module github.com/maximhq/bifrost/plugins/prompts
 
 go 1.26.1
 
+replace (
+	github.com/maximhq/bifrost/core => github.com/dwjwlxs/bifrost/core v1.5.3
+	github.com/maximhq/bifrost/framework => github.com/dwjwlxs/bifrost/framework v1.3.3
+)
+
 require (
 	github.com/maximhq/bifrost/core v1.5.3
 	github.com/maximhq/bifrost/framework v1.3.3
