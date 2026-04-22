@@ -2,6 +2,11 @@ module github.com/maximhq/bifrost/framework
 
 go 1.26.1
 
+replace (
+	github.com/maximhq/bifrost/core => github.com/dwjwlxs/bifrost/core v1.5.3
+	github.com/maximhq/bifrost/framework => ./
+)
+
 require (
 	cloud.google.com/go/storage v1.61.3
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.97.3
