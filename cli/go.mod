@@ -2,6 +2,8 @@ module github.com/maximhq/bifrost/cli
 
 go 1.26.1
 
+replace github.com/maximhq/bifrost/cli => ./
+
 require (
 	github.com/bytedance/sonic v1.15.0
 	github.com/charmbracelet/bubbles v1.0.0
