@@ -67,3 +67,5 @@ temp/
 # Go workspaces (local only)
 go.work
 go.work.sum
+go.mod.bak
+go.sum.bak

@@ -336,9 +336,14 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 	fi
 
 docker-image: ## Build Docker image (LOCAL=1 to use Dockerfile.local)
+	@sh ./scripts/clean_mod.sh restore
 	@$(ECHO) "$(GREEN)Building Docker image...$(NC)"
 	$(eval GIT_SHA=$(shell git rev-parse --short HEAD))
 	$(eval DOCKERFILE=$(if $(LOCAL),transports/Dockerfile.local,transports/Dockerfile))
+	@if [ -n "$(LOCAL)" ]; then \
+		$(ECHO) "$(GREEN)Clean replace in go.mod for Docker build with local modules$(NC)"; \
+		sh ./scripts/clean_mod.sh clean; \
+	fi
 	@docker build -f $(DOCKERFILE) -t bifrost -t bifrost:$(GIT_SHA) -t bifrost:latest .
 	@$(ECHO) "$(GREEN)Docker image built: bifrost, bifrost:$(GIT_SHA), bifrost:latest (using $(DOCKERFILE))$(NC)"
 
@@ -1416,6 +1421,7 @@ setup-workspace: ## Set up Go workspace with all local modules for development
 	@$(ECHO) "$(YELLOW)Cleaning existing workspace...$(NC)"
 	@rm -f go.work go.work.sum || true
 	@$(ECHO) "$(YELLOW)Initializing new workspace...$(NC)"
+	@sh ./scripts/clean_mod.sh clean
 	@go work init ./cli ./core ./framework ./transports
 	@$(ECHO) "$(YELLOW)Adding plugin modules...$(NC)"
 	@for plugin_dir in ./plugins/*/; do \
@@ -1442,6 +1448,7 @@ work-init: ## Create local go.work to use local modules for development (legacy)
 
 work-clean: ## Remove local go.work
 	@rm -f go.work go.work.sum || true
+	@sh ./scripts/clean_mod.sh restore
 	@$(ECHO) "$(GREEN)Removed local go.work files$(NC)"
 
 # Module parameter for mod-tidy (all/core/plugins/framework/transport)
