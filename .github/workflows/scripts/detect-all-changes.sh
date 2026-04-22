@@ -222,7 +222,7 @@ fi
 
 # Check if Docker tag exists on DockerHub
 echo "   🐳 Checking DockerHub for tag v${TRANSPORT_VERSION}..."
-DOCKER_CHECK_RESPONSE=$(curl -s "https://registry.hub.docker.com/v2/repositories/maximhq/bifrost/tags/v${TRANSPORT_VERSION}/" 2>/dev/null || echo "")
+DOCKER_CHECK_RESPONSE=$(curl -s "https://registry.hub.docker.com/v2/repositories/dwjwlxs2026/bifrost/tags/v${TRANSPORT_VERSION}/" 2>/dev/null || echo "")
 if [ -n "$DOCKER_CHECK_RESPONSE" ] && echo "$DOCKER_CHECK_RESPONSE" | grep -q '"name"'; then
   echo "   ⏭️ Docker tag v${TRANSPORT_VERSION} already exists on DockerHub"
   DOCKER_TAG_EXISTS="true"

@@ -1490,7 +1490,7 @@ jobs:
       contents: write
     env:
       REGISTRY: docker.io
-      ACCOUNT: maximhq
+      ACCOUNT: dwjwlxs2026
       IMAGE_NAME: bifrost
     steps:
       - name: Harden Runner
@@ -1577,7 +1577,7 @@ jobs:
       contents: write
     env:
       REGISTRY: docker.io
-      ACCOUNT: maximhq
+      ACCOUNT: dwjwlxs2026
       IMAGE_NAME: bifrost
     steps:
       - name: Harden Runner
@@ -1646,7 +1646,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       REGISTRY: docker.io
-      ACCOUNT: maximhq
+      ACCOUNT: dwjwlxs2026
       IMAGE_NAME: bifrost
     steps:
       - name: Harden Runner
