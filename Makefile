@@ -221,7 +221,7 @@ build-ui: install-ui ## Build ui
 	@rm -rf ui/.next
 	@$(USE_NODE); cd ui && npm run build && npm run copy-build
 
-build: build-ui ## Build bifrost-http binary
+build: # build-ui ## Build bifrost-http binary
 	@if [ -n "$(LOCAL)" ]; then \
 		$(ECHO) "$(GREEN)╔═══════════════════════════════════════════════╗$(NC)"; \
 		$(ECHO) "$(GREEN)║  Building bifrost-http with local go.work...  ║$(NC)"; \
@@ -338,13 +338,14 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 docker-image: ## Build Docker image (LOCAL=1 to use Dockerfile.local)
 	@sh ./scripts/clean_mod.sh restore
 	@$(ECHO) "$(GREEN)Building Docker image...$(NC)"
+	@$(ECHO) "$(GREEN)platform: $(GOOS)/$(GOARCH)$(NC)"
 	$(eval GIT_SHA=$(shell git rev-parse --short HEAD))
 	$(eval DOCKERFILE=$(if $(LOCAL),transports/Dockerfile.local,transports/Dockerfile))
 	@if [ -n "$(LOCAL)" ]; then \
 		$(ECHO) "$(GREEN)Clean replace in go.mod for Docker build with local modules$(NC)"; \
 		sh ./scripts/clean_mod.sh clean; \
 	fi
-	@docker build -f $(DOCKERFILE) -t bifrost -t bifrost:$(GIT_SHA) -t bifrost:latest .
+	@docker build --platform $(GOOS)/$(GOARCH) -f $(DOCKERFILE) -t bifrost -t bifrost:$(GIT_SHA) -t bifrost:latest .
 	@$(ECHO) "$(GREEN)Docker image built: bifrost, bifrost:$(GIT_SHA), bifrost:latest (using $(DOCKERFILE))$(NC)"
 
 docker-run: ## Run Docker container (Usage: make docker-run [CONFIG=path/to/config.json or path/to/dir/])
