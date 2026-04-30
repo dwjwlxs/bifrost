@@ -77,7 +77,7 @@ func NewAuthService(config *Config, store StoreFactory, codeSender MessageSender
 	}
 
 	if codeSender == nil {
-		codeSender = NoopMessageSender{}
+		codeSender = &NoopMessageSender{}
 	}
 
 	hasher := NewPasswordHasher()

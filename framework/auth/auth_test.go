@@ -14,7 +14,7 @@ func TestRegisterAndLogin(t *testing.T) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := &NoopMessageSender{}
+	sender := &auth.NoopMessageSender{Codes: map[string]string{}}
 	svc, err := auth.NewAuthService(config, store, sender)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
@@ -35,7 +35,7 @@ func TestRegisterAndLogin(t *testing.T) {
 	}
 
 	// Check that a verification code was generated
-	code := sender.codes["test@example.com"]
+	code := sender.Codes["test@example.com"]
 	if code == "" {
 		t.Fatal("expected verification code to be sent")
 	}
@@ -235,7 +235,7 @@ func TestFullRegisterVerifyLoginFlow(t *testing.T) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := &NoopMessageSender{}
+	sender := &auth.NoopMessageSender{}
 	svc, err := auth.NewAuthService(config, store, sender)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
@@ -256,7 +256,7 @@ func TestFullRegisterVerifyLoginFlow(t *testing.T) {
 	t.Logf("Registered user: %s (status: %s)", user.ID, user.Status)
 
 	// 2. Get the verification code from the mock sender
-	code := sender.codes[email]
+	code := sender.Codes[email]
 	if code == "" {
 		t.Fatal("expected verification code to be sent")
 	}
@@ -346,7 +346,7 @@ func TestLogout(t *testing.T) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := &NoopMessageSender{}
+	sender := &auth.NoopMessageSender{}
 	svc, err := auth.NewAuthService(config, store, sender)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
@@ -361,7 +361,7 @@ func TestLogout(t *testing.T) {
 	})
 
 	// Verify
-	code := sender.codes["logout@test.com"]
+	code := sender.Codes["logout@test.com"]
 	tokens, err := svc.VerifyEmail(ctx, auth.VerifyEmailRequest{
 		Email: "logout@test.com",
 		Code:  code,
