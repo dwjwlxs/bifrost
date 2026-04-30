@@ -30,15 +30,18 @@ type InviteData struct {
 }
 
 // NoopMessageSender is a no-op sender that discards codes (for testing).
-type NoopMessageSender struct{}
+type NoopMessageSender struct {
+	Codes map[string]string
+}
 
 var _ MessageSender = (*NoopMessageSender)(nil)
 
-func (NoopMessageSender) SendVerificationCode(_ context.Context, _ string, _ VerificationCodeType, _ string) error {
+func (n *NoopMessageSender) SendVerificationCode(_ context.Context, to string, _ VerificationCodeType, code string) error {
+	n.Codes[to] = code
 	return nil
 }
 
-func (NoopMessageSender) SendInvite(_, _ string, _ InviteData) error {
+func (n *NoopMessageSender) SendInvite(_, _ string, _ InviteData) error {
 	return nil
 }
 
