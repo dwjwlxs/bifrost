@@ -10,9 +10,9 @@ import { Outlet, createRootRoute, redirect } from "@tanstack/react-router";
  */
 export const Route = createRootRoute({
 	beforeLoad: ({ location }) => {
-		// Root index "/" → /login. The old app/page.tsx redirect lived here.
+		// Redirect root path to platform home
 		if (location.pathname === "/" || location.pathname === "") {
-			throw redirect({ to: "/login" });
+			throw redirect({ to: "/platform/home", replace: true });
 		}
 	},
 	component: RootComponent,
