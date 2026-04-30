@@ -41,4 +41,19 @@ var (
 
 	// Configuration errors
 	ErrMissingJWTKey = errors.New("auth: JWT signing key not configured")
+
+	// Session management errors
+	ErrSessionNotFound = errors.New("auth: session not found")
+	ErrNotSessionOwner = errors.New("auth: user does not own this session")
+
+	// Profile errors
+	ErrEmailAlreadyInUse = errors.New("auth: email is already in use by another account")
+	ErrOldPasswordIncorrect = errors.New("auth: current password is incorrect")
+	ErrPasswordSame = errors.New("auth: new password must be different from current password")
+
+	// Email change errors
+	ErrEmailChangeInvalid = errors.New("auth: invalid or expired email change code")
+
+	// Breached password errors
+	ErrPasswordBreached = errors.New("auth: this password has been found in a data breach and cannot be used")
 )

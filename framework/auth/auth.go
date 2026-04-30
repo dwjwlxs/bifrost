@@ -62,6 +62,32 @@ type AuthService interface {
 	// GetOAuthAuthURL returns the OAuth2 authorization URL for the given provider.
 	// The state parameter is used for CSRF protection.
 	GetOAuthAuthURL(provider IdentityProvider, state string) (string, error)
+
+	// --- Sprint 4: Session & Profile Management ---
+
+	// ListSessions returns all active (non-expired) sessions for a user.
+	ListSessions(ctx context.Context, userID string) ([]*SessionInfo, error)
+
+	// RevokeSession revokes a specific session by ID.
+	// Returns ErrNotSessionOwner if the session doesn't belong to the user.
+	RevokeSession(ctx context.Context, userID string, sessionID string) error
+
+	// GetProfile returns the user's public profile (without password hash).
+	GetProfile(ctx context.Context, userID string) (*User, error)
+
+	// UpdateProfile updates the user's profile fields (display name, phone, etc.).
+	UpdateProfile(ctx context.Context, userID string, req UpdateProfileRequest) (*User, error)
+
+	// ChangeEmail initiates an email change by sending a verification code to the new email.
+	// The old email is NOT changed until VerifyEmailChange is called.
+	ChangeEmail(ctx context.Context, userID string, req ChangeEmailRequest) error
+
+	// VerifyEmailChange completes the email change using the verification code.
+	VerifyEmailChange(ctx context.Context, userID string, req VerifyEmailChangeRequest) error
+
+	// ChangePassword changes the user's password after verifying the old password.
+	// All other sessions are revoked after a successful password change.
+	ChangePassword(ctx context.Context, userID string, req ChangePasswordRequest) error
 }
 
 // service is the concrete implementation of AuthService.

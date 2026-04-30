@@ -81,8 +81,14 @@ func (r *memoryUserRepo) Update(_ context.Context, user *User) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, ok := r.users[user.ID]; !ok {
+	old, ok := r.users[user.ID]
+	if !ok {
 		return ErrUserNotFound
+	}
+
+	// Remove old email mapping if email changed
+	if old.EmailNormalized != user.EmailNormalized {
+		delete(r.byEmail, old.EmailNormalized)
 	}
 
 	cp := *user

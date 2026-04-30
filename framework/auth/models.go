@@ -19,6 +19,7 @@ type User struct {
 	ID              string      `json:"id"`
 	Email           string      `json:"email"`
 	EmailNormalized string      `json:"email_normalized"`
+	DisplayName     string      `json:"display_name,omitempty"`
 	Phone           string      `json:"phone,omitempty"`
 	PasswordHash    string      `json:"-"`
 	Status          UserStatus  `json:"status"`
@@ -46,6 +47,10 @@ type VerificationCodeType string
 const (
 	VerificationCodeTypeEmailVerify   VerificationCodeType = "email_verify"
 	VerificationCodeTypePasswordReset VerificationCodeType = "password_reset"
+)
+
+const (
+	VerificationCodeTypeEmailChange VerificationCodeType = "email_change"
 )
 
 // --- Identity (social login) ---
@@ -132,4 +137,37 @@ type VerifyEmailRequest struct {
 // RefreshTokenRequest holds the input for token refresh.
 type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token"`
+}
+
+// UpdateProfileRequest holds the input for updating a user profile.
+type UpdateProfileRequest struct {
+	DisplayName *string `json:"display_name,omitempty"`
+	Phone       *string `json:"phone,omitempty"`
+}
+
+// ChangeEmailRequest holds the input for initiating an email change.
+// A verification code is sent to the new email.
+type ChangeEmailRequest struct {
+	NewEmail string `json:"new_email"`
+}
+
+// VerifyEmailChangeRequest holds the input for completing an email change.
+type VerifyEmailChangeRequest struct {
+	NewEmail string `json:"new_email"`
+	Code     string `json:"code"`
+}
+
+// ChangePasswordRequest holds the input for changing a password (while logged in).
+type ChangePasswordRequest struct {
+	OldPassword string `json:"old_password"`
+	NewPassword string `json:"new_password"`
+}
+
+// SessionInfo is a user-facing session representation (no internal hashes exposed).
+type SessionInfo struct {
+	ID          string    `json:"id"`
+	DeviceInfo  string    `json:"device_info,omitempty"`
+	IPAddress   string    `json:"ip_address,omitempty"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	CreatedAt   time.Time `json:"created_at"`
 }
