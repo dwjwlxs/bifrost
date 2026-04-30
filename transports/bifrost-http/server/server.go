@@ -29,6 +29,7 @@ import (
 	"github.com/maximhq/bifrost/plugins/semanticcache"
 	"github.com/maximhq/bifrost/plugins/telemetry"
 	"github.com/maximhq/bifrost/transports/bifrost-http/handlers"
+	auth_handlers "github.com/maximhq/bifrost/transports/bifrost-http/handlers/auth"
 	"github.com/maximhq/bifrost/transports/bifrost-http/integrations"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	bfws "github.com/maximhq/bifrost/transports/bifrost-http/websocket"
@@ -1141,6 +1142,11 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	}
 	if s.WebSocketHandler != nil {
 		s.WebSocketHandler.RegisterRoutes(s.Router, middlewares...)
+	}
+	// Consumer auth service routes (/api/auth/*)
+	if s.Config != nil && s.Config.ConsumerAuthService != nil {
+		consumerAuthHandler := auth_handlers.NewAuthHandler(s.Config.ConsumerAuthService)
+		consumerAuthHandler.RegisterRoutes(s.Router, middlewares...)
 	}
 	// Register dev pprof handler only in dev mode
 	if handlers.IsDevMode() {

@@ -396,19 +396,19 @@ CREATE INDEX idx_verification_codes_recipient ON verification_codes(recipient, c
 
 | 方法 | 路径 | 说明 | 认证 |
 |---|---|---|---|
-| GET | `/me` | 获取当前用户资料 | Access Token |
-| PATCH | `/me` | 修改资料 | Access Token |
-| POST | `/me/change-email` | 发起邮箱变更 | Access Token |
-| POST | `/me/change-password` | 修改密码 | Access Token |
-| DELETE | `/me` | 请求注销账号 | Access Token |
-| GET | `/me/sessions` | 列出活跃会话 | Access Token |
-| DELETE | `/me/sessions/{id}` | 撤销指定会话 | Access Token |
+| GET | `/auth/me` | 获取当前用户资料 | Access Token |
+| PATCH | `/auth/me` | 修改资料 | Access Token |
+| POST | `/auth/me/change-email` | 发起邮箱变更 | Access Token |
+| POST | `/auth/me/change-password` | 修改密码 | Access Token |
+| DELETE | `/auth/me` | 请求注销账号 | Access Token |
+| GET | `/auth/me/sessions` | 列出活跃会话 | Access Token |
+| DELETE | `/auth/me/sessions/{id}` | 撤销指定会话 | Access Token |
 
 ### 5.3 JWKS 接口
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/.well-known/jwks.json` | 公钥分发（RFC 7517） |
+| GET | `/auth/.well-known/jwks.json` | 公钥分发（RFC 7517） |
 
 ### 5.4 JWT Payload 结构
 
