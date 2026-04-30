@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/maximhq/bifrost/framework/auth"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
@@ -89,6 +90,15 @@ func newMySQLConfigStore(ctx context.Context, config *MySQLConfig, logger schema
 			}
 		}
 		return nil, err
+	}
+	// Run auth table migrations
+	if err := auth.Migrate(ctx, db); err != nil {
+		if sqlDB, dbErr := db.DB(); dbErr == nil {
+			if closeErr := sqlDB.Close(); closeErr != nil {
+				logger.Error("failed to close DB connection: %v", closeErr)
+			}
+		}
+		return nil, fmt.Errorf("auth migration failed: %w", err)
 	}
 	// Encrypt any plaintext rows if encryption is enabled
 	if err := d.EncryptPlaintextRows(ctx); err != nil {

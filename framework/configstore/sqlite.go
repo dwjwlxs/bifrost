@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/maximhq/bifrost/framework/auth"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -53,6 +54,10 @@ func newSqliteConfigStore(ctx context.Context, config *SQLiteConfig, logger sche
 	// Run migrations
 	if err := triggerMigrations(ctx, db); err != nil {
 		return nil, err
+	}
+	// Run auth table migrations
+	if err := auth.Migrate(ctx, db); err != nil {
+		return nil, fmt.Errorf("auth migration failed: %w", err)
 	}
 	// Encrypt any plaintext rows if encryption is enabled
 	if err := s.EncryptPlaintextRows(ctx); err != nil {

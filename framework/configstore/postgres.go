@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/maximhq/bifrost/framework/auth"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -111,6 +112,10 @@ func newPostgresConfigStore(ctx context.Context, config *PostgresConfig, logger 
 	if err := triggerMigrations(ctx, mDb); err != nil {
 		closeDbConn(mDb, logger)
 		return nil, err
+	}
+	if err := auth.Migrate(ctx, mDb); err != nil {
+		closeDbConn(mDb, logger)
+		return nil, fmt.Errorf("auth migration failed: %w", err)
 	}
 	closeDbConn(mDb, logger)
 
