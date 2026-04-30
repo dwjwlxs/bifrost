@@ -88,6 +88,23 @@ type AuthService interface {
 	// ChangePassword changes the user's password after verifying the old password.
 	// All other sessions are revoked after a successful password change.
 	ChangePassword(ctx context.Context, userID string, req ChangePasswordRequest) error
+
+	// --- Sprint 5: Account Lifecycle & Key Rotation ---
+
+	// DeleteAccount initiates account deletion with a 30-day cool-down period.
+	// The user's password is verified to confirm identity.
+	// All sessions are revoked immediately (user is logged out everywhere).
+	// The account can be restored within 30 days via UndoDeleteAccount.
+	DeleteAccount(ctx context.Context, userID string, req DeleteAccountRequest) error
+
+	// UndoDeleteAccount restores a soft-deleted account within the cool-down period.
+	// Returns ErrAccountDeletionExpired if the 30-day window has passed.
+	UndoDeleteAccount(ctx context.Context, userID string) error
+
+	// CleanupExpiredDeletions permanently removes accounts whose cool-down has expired.
+	// This should be called by a scheduled job (e.g., cron).
+	// Returns the number of permanently deleted accounts.
+	CleanupExpiredDeletions(ctx context.Context) (int64, error)
 }
 
 // service is the concrete implementation of AuthService.

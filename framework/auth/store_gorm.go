@@ -418,5 +418,42 @@ func (r *gormIdentityRepo) Delete(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&gormIdentity{}).Error
 }
 
+func (r *gormIdentityRepo) DeleteByUserID(ctx context.Context, userID string) error {
+	return r.db.WithContext(ctx).Where("user_id = ?", userID).Delete(&gormIdentity{}).Error
+}
+
+// --- E4-S7: Account Deletion store methods ---
+
+func (r *gormUserRepo) HardDelete(ctx context.Context, id string) error {
+	// GORM's Unscoped + Delete does a physical delete
+	return r.db.WithContext(ctx).Unscoped().Where("id = ?", id).Delete(&gormUser{}).Error
+}
+
+func (r *gormUserRepo) GetByIDIncludingDeleted(ctx context.Context, id string) (*User, error) {
+	var m gormUser
+	if err := r.db.WithContext(ctx).Unscoped().Where("id = ?", id).First(&m).Error; err != nil {
+		return nil, ErrUserNotFound
+	}
+	return m.toDomain(), nil
+}
+
+func (r *gormUserRepo) GetSoftDeletedUsers(ctx context.Context, before time.Time) ([]*User, error) {
+	var rows []gormUser
+	// Query users with deleted_at set and before the cutoff
+	// Note: GORM's Unscoped is needed to include soft-deleted records
+	err := r.db.WithContext(ctx).Unscoped().
+		Where("deleted_at IS NOT NULL AND deleted_at < ?", before).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	var users []*User
+	for _, row := range rows {
+		users = append(users, row.toDomain())
+	}
+	return users, nil
+}
+
 // Suppress unused import
 var _ = time.Now

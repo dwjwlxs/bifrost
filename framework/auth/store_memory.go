@@ -381,3 +381,58 @@ func (r *memoryIdentityRepo) Delete(_ context.Context, id string) error {
 	delete(r.identities, id)
 	return nil
 }
+
+func (r *memoryIdentityRepo) DeleteByUserID(_ context.Context, userID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for id, identity := range r.identities {
+		if identity.UserID == userID {
+			delete(r.byLookup, string(identity.Provider)+":"+identity.ProviderUID)
+			delete(r.identities, id)
+		}
+	}
+	return nil
+}
+
+// --- E4-S7: Account Deletion store methods ---
+
+func (r *memoryUserRepo) HardDelete(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	user, ok := r.users[id]
+	if !ok {
+		return nil // already gone
+	}
+
+	delete(r.byEmail, user.EmailNormalized)
+	delete(r.users, id)
+	return nil
+}
+
+func (r *memoryUserRepo) GetByIDIncludingDeleted(_ context.Context, id string) (*User, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	user, ok := r.users[id]
+	if !ok {
+		return nil, ErrUserNotFound
+	}
+	cp := *user
+	return &cp, nil
+}
+
+func (r *memoryUserRepo) GetSoftDeletedUsers(_ context.Context, before time.Time) ([]*User, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []*User
+	for _, user := range r.users {
+		if user.Status == UserStatusDeleted && user.DeletedAt != nil && user.DeletedAt.Before(before) {
+			cp := *user
+			result = append(result, &cp)
+		}
+	}
+	return result, nil
+}

@@ -36,6 +36,17 @@ type Config struct {
 
 	// OAuth Configuration
 	OAuth *OAuthConfig `json:"oauth,omitempty"`
+
+	// Account Deletion Configuration (E4-S7)
+	// AccountDeletionCoolDown is the time window during which a soft-deleted
+	// account can be restored. After this period, the account is permanently deleted.
+	// Default: 30 days.
+	AccountDeletionCoolDown time.Duration `json:"account_deletion_cool_down"`
+
+	// Key Rotation Configuration (E2-S5)
+	// KeyRotation holds settings for automatic ES256 key rotation.
+	// If nil, key rotation is disabled and a single static key is used.
+	KeyRotation *KeyRotationConfig `json:"key_rotation,omitempty"`
 }
 
 // OAuthConfig holds OAuth provider configurations.
@@ -74,6 +85,7 @@ func DefaultConfig() *Config {
 		RegisterRateLimitPerIP:  10,
 		RegisterRateLimitWindow: time.Hour,
 		JWKSCacheTTL:            time.Hour,
+		AccountDeletionCoolDown: 30 * 24 * time.Hour, // 30 days
 	}
 }
 
