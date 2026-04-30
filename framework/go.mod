@@ -10,6 +10,7 @@ replace (
 require (
 	cloud.google.com/go/storage v1.61.3
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.97.3
+	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/google/uuid v1.6.0
 	github.com/maximhq/bifrost/core v1.5.3
 	github.com/pinecone-io/go-pinecone/v5 v5.3.0
@@ -54,7 +55,6 @@ require (
 	github.com/envoyproxy/go-control-plane/envoy v1.36.0 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.3.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/swag/cmdutils v0.25.4 // indirect
