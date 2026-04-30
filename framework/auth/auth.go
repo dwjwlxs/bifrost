@@ -54,14 +54,14 @@ type service struct {
 	jwtManager JWTManager
 	tokenGen   *TokenGenerator
 	verifier   *VerificationCodeManager
-	codeSender CodeSender
+	codeSender MessageSender
 	store      StoreFactory
 }
 
 // NewAuthService creates a new AuthService with the given configuration and storage backend.
 // If the JWKS private key is not configured, a new ES256 key pair is generated.
 // If codeSender is nil, a NoopCodeSender is used.
-func NewAuthService(config *Config, store StoreFactory, codeSender CodeSender) (AuthService, error) {
+func NewAuthService(config *Config, store StoreFactory, codeSender MessageSender) (AuthService, error) {
 	if config == nil {
 		config = DefaultConfig()
 	}
@@ -77,7 +77,7 @@ func NewAuthService(config *Config, store StoreFactory, codeSender CodeSender) (
 	}
 
 	if codeSender == nil {
-		codeSender = NoopCodeSender{}
+		codeSender = NoopMessageSender{}
 	}
 
 	hasher := NewPasswordHasher()
