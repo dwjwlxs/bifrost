@@ -8,27 +8,13 @@ import (
 	"github.com/maximhq/bifrost/framework/auth"
 )
 
-// mockCodeSender captures verification codes for testing.
-type mockCodeSender struct {
-	codes map[string]string // recipient -> last code
-}
-
-func newMockCodeSender() *mockCodeSender {
-	return &mockCodeSender{codes: make(map[string]string)}
-}
-
-func (m *mockCodeSender) SendVerificationCode(_ context.Context, recipient string, _ auth.VerificationCodeType, code string) error {
-	m.codes[recipient] = code
-	return nil
-}
-
 func TestRegisterAndLogin(t *testing.T) {
 	config := auth.DefaultConfig()
 	config.JWTIssuer = "test-issuer"
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := newMockCodeSender()
+	sender := &NoopMessageSender{}
 	svc, err := auth.NewAuthService(config, store, sender)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
@@ -249,7 +235,7 @@ func TestFullRegisterVerifyLoginFlow(t *testing.T) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := newMockCodeSender()
+	sender := &NoopMessageSender{}
 	svc, err := auth.NewAuthService(config, store, sender)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
@@ -360,7 +346,7 @@ func TestLogout(t *testing.T) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := newMockCodeSender()
+	sender := &NoopMessageSender{}
 	svc, err := auth.NewAuthService(config, store, sender)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
