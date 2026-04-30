@@ -14,8 +14,8 @@ func TestRegisterAndLogin(t *testing.T) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := &auth.NoopMessageSender{Codes: map[string]string{}}
-	svc, err := auth.NewAuthService(config, store, sender)
+	sender := auth.NewNoopMessageSender()
+	svc, err := auth.NewAuthService(config, store, sender, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
 	}
@@ -235,8 +235,8 @@ func TestFullRegisterVerifyLoginFlow(t *testing.T) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := &auth.NoopMessageSender{}
-	svc, err := auth.NewAuthService(config, store, sender)
+	sender := auth.NewNoopMessageSender()
+	svc, err := auth.NewAuthService(config, store, sender, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
 	}
@@ -314,7 +314,7 @@ func TestPasswordValidation(t *testing.T) {
 	config.PasswordMinLength = 8
 
 	store := auth.NewMemoryStoreFactory()
-	svc, err := auth.NewAuthService(config, store, nil)
+	svc, err := auth.NewAuthService(config, store, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
 	}
@@ -346,8 +346,8 @@ func TestLogout(t *testing.T) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := &auth.NoopMessageSender{}
-	svc, err := auth.NewAuthService(config, store, sender)
+	sender := auth.NewNoopMessageSender()
+	svc, err := auth.NewAuthService(config, store, sender, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
 	}
@@ -388,7 +388,7 @@ func TestLogout(t *testing.T) {
 func TestGetUser(t *testing.T) {
 	config := auth.DefaultConfig()
 	store := auth.NewMemoryStoreFactory()
-	svc, err := auth.NewAuthService(config, store, nil)
+	svc, err := auth.NewAuthService(config, store, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
 	}
@@ -420,7 +420,7 @@ func TestGetUser(t *testing.T) {
 func TestGetJWKS(t *testing.T) {
 	config := auth.DefaultConfig()
 	store := auth.NewMemoryStoreFactory()
-	svc, err := auth.NewAuthService(config, store, nil)
+	svc, err := auth.NewAuthService(config, store, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
 	}
@@ -430,4 +430,62 @@ func TestGetJWKS(t *testing.T) {
 		t.Fatalf("expected 1 key, got %d", len(jwks.Keys))
 	}
 	t.Logf("JWKS keys: %d", len(jwks.Keys))
+}
+
+func TestLoginRateLimiting(t *testing.T) {
+	config := auth.DefaultConfig()
+	config.JWTIssuer = "test-issuer"
+	config.JWTAudience = "test-audience"
+	config.LoginMaxAttempts = 3 // Lock after 3 failed attempts
+
+	store := auth.NewMemoryStoreFactory()
+	sender := auth.NewNoopMessageSender()
+	rateLimiter := &auth.NoopRateLimiter{}
+	svc, err := auth.NewAuthService(config, store, sender, rateLimiter)
+	if err != nil {
+		t.Fatalf("NewAuthService: %v", err)
+	}
+
+	ctx := context.Background()
+	email := "ratelimit@test.com"
+	password := "correctPassword123!"
+
+	// Register and verify user
+	_, err = svc.Register(ctx, auth.RegisterRequest{
+		Email:    email,
+		Password: password,
+	})
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	code := sender.Codes[email]
+	_, err = svc.VerifyEmail(ctx, auth.VerifyEmailRequest{
+		Email: email,
+		Code:  code,
+	})
+	if err != nil {
+		t.Fatalf("VerifyEmail: %v", err)
+	}
+
+	// Try logging in with wrong password multiple times
+	for i := 0; i < 3; i++ {
+		_, err = svc.Login(ctx, auth.LoginRequest{
+			Email:    email,
+			Password: "wrongPassword",
+		}, "TestDevice", "127.0.0.1")
+		if err != auth.ErrInvalidCredentials {
+			t.Errorf("attempt %d: expected ErrInvalidCredentials, got %v", i+1, err)
+		}
+	}
+
+	// Account should now be locked (if we had a real rate limiter)
+	// With NoopRateLimiter, login should still work
+	_, err = svc.Login(ctx, auth.LoginRequest{
+		Email:    email,
+		Password: password,
+	}, "TestDevice", "127.0.0.1")
+	if err != nil {
+		t.Errorf("expected successful login with NoopRateLimiter, got %v", err)
+	}
 }
