@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -27,6 +28,9 @@ func (f *GormStoreFactory) SessionRepo() SessionRepository {
 }
 func (f *GormStoreFactory) VerificationCodeRepo() VerificationCodeRepository {
 	return &gormVerificationCodeRepo{db: f.db}
+}
+func (f *GormStoreFactory) IdentityRepo() IdentityRepository {
+	return &gormIdentityRepo{db: f.db}
 }
 
 // --- GORM table models ---
@@ -169,6 +173,54 @@ func fromDomainVerificationCode(vc *VerificationCode) *gormVerificationCode {
 	return m
 }
 
+type gormIdentity struct {
+	ID          string         `gorm:"column:id;primaryKey;type:varchar(36)"`
+	UserID      string         `gorm:"column:user_id;type:varchar(36);index;not null"`
+	Provider    string         `gorm:"column:provider;type:varchar(20);not null"`
+	ProviderUID string         `gorm:"column:provider_uid;type:varchar(255);not null"`
+	DisplayName string         `gorm:"column:display_name;type:varchar(255)"`
+	AvatarURL   string         `gorm:"column:avatar_url;type:varchar(500)"`
+	Metadata    string         `gorm:"column:metadata;type:text"` // JSON
+	CreatedAt   time.Time      `gorm:"column:created_at;not null"`
+	DeletedAt   gorm.DeletedAt `gorm:"column:deleted_at;index"`
+}
+
+func (gormIdentity) TableName() string { return "auth_identities" }
+
+func (m *gormIdentity) toDomain() *Identity {
+	id := &Identity{
+		ID:          m.ID,
+		UserID:      m.UserID,
+		Provider:    IdentityProvider(m.Provider),
+		ProviderUID: m.ProviderUID,
+		DisplayName: m.DisplayName,
+		AvatarURL:   m.AvatarURL,
+		CreatedAt:   m.CreatedAt,
+	}
+	if m.Metadata != "" {
+		id.Metadata = make(map[string]string)
+		_ = json.Unmarshal([]byte(m.Metadata), &id.Metadata)
+	}
+	return id
+}
+
+func fromDomainIdentity(id *Identity) *gormIdentity {
+	m := &gormIdentity{
+		ID:          id.ID,
+		UserID:      id.UserID,
+		Provider:    string(id.Provider),
+		ProviderUID: id.ProviderUID,
+		DisplayName: id.DisplayName,
+		AvatarURL:   id.AvatarURL,
+		CreatedAt:   id.CreatedAt,
+	}
+	if len(id.Metadata) > 0 {
+		data, _ := json.Marshal(id.Metadata)
+		m.Metadata = string(data)
+	}
+	return m
+}
+
 // --- AutoMigrate creates the auth tables ---
 
 // AutoMigrate creates all auth-related tables.
@@ -177,6 +229,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&gormUser{},
 		&gormSession{},
 		&gormVerificationCode{},
+		&gormIdentity{},
 	)
 }
 
@@ -324,6 +377,42 @@ func (r *gormVerificationCodeRepo) MarkVerified(ctx context.Context, id string) 
 func (r *gormVerificationCodeRepo) DeleteExpired(ctx context.Context) (int64, error) {
 	result := r.db.WithContext(ctx).Where("expires_at < ?", time.Now()).Delete(&gormVerificationCode{})
 	return result.RowsAffected, result.Error
+}
+
+// --- gormIdentityRepo ---
+
+type gormIdentityRepo struct {
+	db *gorm.DB
+}
+
+func (r *gormIdentityRepo) Create(ctx context.Context, identity *Identity) error {
+	return r.db.WithContext(ctx).Create(fromDomainIdentity(identity)).Error
+}
+
+func (r *gormIdentityRepo) GetByProviderAndUID(ctx context.Context, provider IdentityProvider, providerUID string) (*Identity, error) {
+	var m gormIdentity
+	if err := r.db.WithContext(ctx).
+		Where("provider = ? AND provider_uid = ?", string(provider), providerUID).
+		First(&m).Error; err != nil {
+		return nil, fmt.Errorf("identity not found")
+	}
+	return m.toDomain(), nil
+}
+
+func (r *gormIdentityRepo) GetByUserID(ctx context.Context, userID string) ([]*Identity, error) {
+	var rows []gormIdentity
+	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	var identities []*Identity
+	for _, row := range rows {
+		identities = append(identities, row.toDomain())
+	}
+	return identities, nil
+}
+
+func (r *gormIdentityRepo) Delete(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&gormIdentity{}).Error
 }
 
 // Suppress unused import

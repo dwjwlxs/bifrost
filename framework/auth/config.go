@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"os"
 	"time"
 )
 
@@ -32,6 +33,24 @@ type Config struct {
 	// Registration Rate Limiting
 	RegisterRateLimitPerIP  int           `json:"register_rate_limit_per_ip"`
 	RegisterRateLimitWindow time.Duration `json:"register_rate_limit_window"`
+
+	// OAuth Configuration
+	OAuth *OAuthConfig `json:"oauth,omitempty"`
+}
+
+// OAuthConfig holds OAuth provider configurations.
+type OAuthConfig struct {
+	// Wechat holds WeChat OAuth2 settings.
+	// If Enabled is false, WeChat login endpoints return ErrOAuthProviderDisabled.
+	Wechat *WechatOAuthConfig `json:"wechat,omitempty"`
+}
+
+// WechatOAuthConfig holds WeChat-specific OAuth2 configuration.
+type WechatOAuthConfig struct {
+	Enabled       bool   `json:"enabled"`
+	AppID         string `json:"app_id"`
+	AppSecret     string `json:"app_secret"`
+	RedirectURI   string `json:"redirect_uri"`
 }
 
 // JWKSKeyPairConfig holds the PEM-encoded ES256 key pair.
@@ -55,5 +74,32 @@ func DefaultConfig() *Config {
 		RegisterRateLimitPerIP:  10,
 		RegisterRateLimitWindow: time.Hour,
 		JWKSCacheTTL:            time.Hour,
+	}
+}
+
+// LoadOAuthConfigFromEnv populates OAuthConfig from environment variables.
+// This allows controlling WeChat login without changing the config file.
+// Env vars:
+//
+//	BIFROST_OAUTH_WECHAT_ENABLED  = "true"/"false"
+//	BIFROST_OAUTH_WECHAT_APPID    = WeChat AppID
+//	BIFROST_OAUTH_WECHAT_SECRET   = WeChat AppSecret
+//	BIFROST_OAUTH_WECHAT_REDIRECT = OAuth redirect URI
+func (c *Config) LoadOAuthConfigFromEnv() {
+	enabled := os.Getenv("BIFROST_OAUTH_WECHAT_ENABLED")
+	if enabled == "" {
+		return
+	}
+
+	if c.OAuth == nil {
+		c.OAuth = &OAuthConfig{}
+	}
+
+	wechatEnabled := enabled == "true" || enabled == "1" || enabled == "yes"
+	c.OAuth.Wechat = &WechatOAuthConfig{
+		Enabled:     wechatEnabled,
+		AppID:       os.Getenv("BIFROST_OAUTH_WECHAT_APPID"),
+		AppSecret:   os.Getenv("BIFROST_OAUTH_WECHAT_SECRET"),
+		RedirectURI: os.Getenv("BIFROST_OAUTH_WECHAT_REDIRECT"),
 	}
 }

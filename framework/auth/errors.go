@@ -26,9 +26,18 @@ var (
 	ErrAccessTokenExpired   = errors.New("auth: access token expired")
 
 	// Password errors
-	ErrPasswordTooShort    = errors.New("auth: password is too short")
-	ErrPasswordHashFailed  = errors.New("auth: failed to hash password")
+	ErrPasswordTooShort     = errors.New("auth: password is too short")
+	ErrPasswordHashFailed   = errors.New("auth: failed to hash password")
 	ErrPasswordVerifyFailed = errors.New("auth: failed to verify password")
+
+	// Password reset errors
+	ErrPasswordResetInvalid = errors.New("auth: invalid or expired password reset code")
+
+	// OAuth errors
+	ErrOAuthProviderDisabled = errors.New("auth: OAuth provider is disabled")
+	ErrOAuthInvalidCode      = errors.New("auth: invalid OAuth authorization code")
+	ErrOAuthStateMismatch    = errors.New("auth: OAuth state mismatch")
+	ErrOAuthUnsupported      = errors.New("auth: unsupported OAuth provider")
 
 	// Configuration errors
 	ErrMissingJWTKey = errors.New("auth: JWT signing key not configured")

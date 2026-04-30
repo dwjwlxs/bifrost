@@ -489,3 +489,303 @@ func TestLoginRateLimiting(t *testing.T) {
 		t.Errorf("expected successful login with NoopRateLimiter, got %v", err)
 	}
 }
+
+// --- Sprint 3 tests: Password Reset + OAuth ---
+
+func TestForgotAndResetPassword(t *testing.T) {
+	config := auth.DefaultConfig()
+	config.JWTIssuer = "test-issuer"
+	config.JWTAudience = "test-audience"
+
+	store := auth.NewMemoryStoreFactory()
+	sender := auth.NewNoopMessageSender()
+	svc, err := auth.NewAuthService(config, store, sender, nil)
+	if err != nil {
+		t.Fatalf("NewAuthService: %v", err)
+	}
+
+	ctx := context.Background()
+	email := "reset@test.com"
+	originalPassword := "originalPass123!"
+	newPassword := "newSecurePass456!"
+
+	// 1. Register + verify user
+	_, err = svc.Register(ctx, auth.RegisterRequest{
+		Email:    email,
+		Password: originalPassword,
+	})
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	code := sender.Codes[email]
+	_, err = svc.VerifyEmail(ctx, auth.VerifyEmailRequest{
+		Email: email,
+		Code:  code,
+	})
+	if err != nil {
+		t.Fatalf("VerifyEmail: %v", err)
+	}
+
+	// 2. ForgotPassword — should send reset code
+	err = svc.ForgotPassword(ctx, auth.ForgotPasswordRequest{Email: email})
+	if err != nil {
+		t.Fatalf("ForgotPassword: %v", err)
+	}
+
+	resetCode := sender.Codes[email]
+	if resetCode == "" {
+		t.Fatal("expected password reset code to be sent")
+	}
+	t.Logf("Reset code: %s", resetCode)
+
+	// 3. ResetPassword — should succeed
+	err = svc.ResetPassword(ctx, auth.ResetPasswordRequest{
+		Email:       email,
+		Code:        resetCode,
+		NewPassword: newPassword,
+	})
+	if err != nil {
+		t.Fatalf("ResetPassword: %v", err)
+	}
+
+	// 4. Login with old password should fail
+	_, err = svc.Login(ctx, auth.LoginRequest{
+		Email:    email,
+		Password: originalPassword,
+	}, "", "")
+	if err != auth.ErrInvalidCredentials {
+		t.Errorf("expected ErrInvalidCredentials with old password, got %v", err)
+	}
+
+	// 5. Login with new password should succeed
+	_, err = svc.Login(ctx, auth.LoginRequest{
+		Email:    email,
+		Password: newPassword,
+	}, "", "")
+	if err != nil {
+		t.Errorf("expected successful login with new password, got %v", err)
+	}
+}
+
+func TestForgotPasswordEmailNotFound(t *testing.T) {
+	config := auth.DefaultConfig()
+	store := auth.NewMemoryStoreFactory()
+	sender := auth.NewNoopMessageSender()
+	svc, err := auth.NewAuthService(config, store, sender, nil)
+	if err != nil {
+		t.Fatalf("NewAuthService: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Should NOT return error (prevents email enumeration)
+	err = svc.ForgotPassword(ctx, auth.ForgotPasswordRequest{Email: "nonexistent@test.com"})
+	if err != nil {
+		t.Errorf("expected nil error for nonexistent email, got %v", err)
+	}
+
+	// Should NOT send any code
+	if len(sender.Codes) != 0 {
+		t.Errorf("expected no codes sent, got %d", len(sender.Codes))
+	}
+}
+
+func TestResetPasswordTooShort(t *testing.T) {
+	config := auth.DefaultConfig()
+	config.PasswordMinLength = 8
+	store := auth.NewMemoryStoreFactory()
+	sender := auth.NewNoopMessageSender()
+	svc, err := auth.NewAuthService(config, store, sender, nil)
+	if err != nil {
+		t.Fatalf("NewAuthService: %v", err)
+	}
+
+	ctx := context.Background()
+
+	err = svc.ResetPassword(ctx, auth.ResetPasswordRequest{
+		Email:       "test@test.com",
+		Code:        "123456",
+		NewPassword: "short",
+	})
+	if err != auth.ErrPasswordTooShort {
+		t.Errorf("expected ErrPasswordTooShort, got %v", err)
+	}
+}
+
+func TestOAuthProviderRegistry(t *testing.T) {
+	// No config — no providers
+	registry := auth.NewOAuthProviderRegistry(nil)
+	if registry.IsEnabled(auth.IdentityProviderWechat) {
+		t.Error("expected wechat to be disabled with nil config")
+	}
+
+	// Config with wechat disabled
+	registry = auth.NewOAuthProviderRegistry(&auth.OAuthConfig{
+		Wechat: &auth.WechatOAuthConfig{Enabled: false},
+	})
+	if registry.IsEnabled(auth.IdentityProviderWechat) {
+		t.Error("expected wechat to be disabled")
+	}
+
+	// Config with wechat enabled
+	registry = auth.NewOAuthProviderRegistry(&auth.OAuthConfig{
+		Wechat: &auth.WechatOAuthConfig{
+			Enabled:     true,
+			AppID:       "test-app-id",
+			AppSecret:   "test-secret",
+			RedirectURI: "http://localhost/callback",
+		},
+	})
+	if !registry.IsEnabled(auth.IdentityProviderWechat) {
+		t.Error("expected wechat to be enabled")
+	}
+
+	provider := registry.Get(auth.IdentityProviderWechat)
+	if provider == nil {
+		t.Fatal("expected wechat provider to be registered")
+	}
+	if provider.Name() != auth.IdentityProviderWechat {
+		t.Errorf("expected provider name %s, got %s", auth.IdentityProviderWechat, provider.Name())
+	}
+
+	// AuthCodeURL should contain the app ID
+	authURL := provider.AuthCodeURL("test-state")
+	if authURL == "" {
+		t.Error("expected non-empty auth URL")
+	}
+	t.Logf("Auth URL: %s", authURL)
+}
+
+func TestOAuthLoginDisabled(t *testing.T) {
+	config := auth.DefaultConfig()
+	store := auth.NewMemoryStoreFactory()
+	svc, err := auth.NewAuthService(config, store, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAuthService: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// GetOAuthAuthURL should return ErrOAuthProviderDisabled
+	_, err = svc.GetOAuthAuthURL(auth.IdentityProviderWechat, "state")
+	if err != auth.ErrOAuthProviderDisabled {
+		t.Errorf("expected ErrOAuthProviderDisabled, got %v", err)
+	}
+
+	// OAuthLogin should return ErrOAuthProviderDisabled
+	_, err = svc.OAuthLogin(ctx, auth.OAuthCallbackRequest{
+		Provider: auth.IdentityProviderWechat,
+		Code:     "test-code",
+		State:    "test-state",
+	}, "", "")
+	if err != auth.ErrOAuthProviderDisabled {
+		t.Errorf("expected ErrOAuthProviderDisabled, got %v", err)
+	}
+}
+
+func TestOAuthAutoRegistration(t *testing.T) {
+	config := auth.DefaultConfig()
+	config.JWTIssuer = "test-issuer"
+	config.JWTAudience = "test-audience"
+	config.OAuth = &auth.OAuthConfig{
+		Wechat: &auth.WechatOAuthConfig{
+			Enabled:     true,
+			AppID:       "test-app-id",
+			AppSecret:   "test-secret",
+			RedirectURI: "http://localhost/callback",
+		},
+	}
+
+	store := auth.NewMemoryStoreFactory()
+	svc, err := auth.NewAuthService(config, store, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAuthService: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// GetOAuthAuthURL should work now
+	authURL, err := svc.GetOAuthAuthURL(auth.IdentityProviderWechat, "csrf-state-123")
+	if err != nil {
+		t.Fatalf("GetOAuthAuthURL: %v", err)
+	}
+	if authURL == "" {
+		t.Error("expected non-empty auth URL")
+	}
+	t.Logf("Auth URL: %s", authURL)
+
+	// OAuthLogin will fail because we can't reach WeChat API in tests,
+	// but we can verify the provider is enabled
+	_, err = svc.OAuthLogin(ctx, auth.OAuthCallbackRequest{
+		Provider: auth.IdentityProviderWechat,
+		Code:     "test-code",
+		State:    "test-state",
+	}, "TestDevice", "127.0.0.1")
+	// Expected to fail with network error (can't reach WeChat API)
+	if err == auth.ErrOAuthProviderDisabled {
+		t.Error("expected network error, not ErrOAuthProviderDisabled")
+	}
+	t.Logf("Expected error (WeChat API unreachable): %v", err)
+}
+
+func TestPasswordResetAllSessionsRevoked(t *testing.T) {
+	config := auth.DefaultConfig()
+	config.JWTIssuer = "test-issuer"
+	config.JWTAudience = "test-audience"
+
+	store := auth.NewMemoryStoreFactory()
+	sender := auth.NewNoopMessageSender()
+	svc, err := auth.NewAuthService(config, store, sender, nil)
+	if err != nil {
+		t.Fatalf("NewAuthService: %v", err)
+	}
+
+	ctx := context.Background()
+	email := "revokesessions@test.com"
+	password := "securePass123!"
+
+	// Register + verify
+	_, err = svc.Register(ctx, auth.RegisterRequest{Email: email, Password: password})
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	code := sender.Codes[email]
+	_, err = svc.VerifyEmail(ctx, auth.VerifyEmailRequest{Email: email, Code: code})
+	if err != nil {
+		t.Fatalf("VerifyEmail: %v", err)
+	}
+
+	// Login (creates session 1)
+	tokens1, err := svc.Login(ctx, auth.LoginRequest{Email: email, Password: password}, "Device1", "1.1.1.1")
+	if err != nil {
+		t.Fatalf("Login 1: %v", err)
+	}
+
+	// Login again (creates session 2)
+	_, err = svc.Login(ctx, auth.LoginRequest{Email: email, Password: password}, "Device2", "2.2.2.2")
+	if err != nil {
+		t.Fatalf("Login 2: %v", err)
+	}
+
+	// ForgotPassword + ResetPassword
+	err = svc.ForgotPassword(ctx, auth.ForgotPasswordRequest{Email: email})
+	if err != nil {
+		t.Fatalf("ForgotPassword: %v", err)
+	}
+	resetCode := sender.Codes[email]
+	err = svc.ResetPassword(ctx, auth.ResetPasswordRequest{
+		Email:       email,
+		Code:        resetCode,
+		NewPassword: "newSecurePass789!",
+	})
+	if err != nil {
+		t.Fatalf("ResetPassword: %v", err)
+	}
+
+	// All old sessions should be revoked — refresh should fail
+	_, err = svc.RefreshToken(ctx, auth.RefreshTokenRequest{RefreshToken: tokens1.RefreshToken})
+	if err != auth.ErrInvalidRefreshToken {
+		t.Errorf("expected ErrInvalidRefreshToken after password reset, got %v", err)
+	}
+}
