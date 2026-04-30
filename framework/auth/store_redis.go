@@ -469,6 +469,95 @@ func (r *redisIdentityRepo) Delete(ctx context.Context, id string) error {
 	return err
 }
 
+func (r *redisIdentityRepo) DeleteByUserID(ctx context.Context, userID string) error {
+	ids, err := r.client.SMembers(ctx, redisPrefixIdentityUser+userID).Result()
+	if err != nil {
+		return err
+	}
+
+	for _, id := range ids {
+		_ = r.Delete(ctx, id)
+	}
+	return nil
+}
+
+// --- E4-S7: Account Deletion store methods ---
+
+func (r *redisUserRepo) HardDelete(ctx context.Context, id string) error {
+	// First get the user to know the email mapping
+	user, err := r.GetByIDIncludingDeleted(ctx, id)
+	if err != nil {
+		return nil // already gone
+	}
+
+	pipe := r.client.Pipeline()
+	pipe.Del(ctx, redisPrefixUser+id)
+	pipe.Del(ctx, redisPrefixEmail+user.EmailNormalized)
+	_, err = pipe.Exec(ctx)
+	return err
+}
+
+func (r *redisUserRepo) GetByIDIncludingDeleted(ctx context.Context, id string) (*User, error) {
+	data, err := r.client.Get(ctx, redisPrefixUser+id).Bytes()
+	if err == redis.Nil {
+		return nil, ErrUserNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var user User
+	if err := json.Unmarshal(data, &user); err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *redisUserRepo) GetSoftDeletedUsers(ctx context.Context, before time.Time) ([]*User, error) {
+	// Redis doesn't have a query like SQL WHERE.
+	// For production, you'd use SCAN with pattern matching or maintain a separate
+	// sorted set of soft-deleted user IDs. For now, we use SCAN as a basic approach.
+	// This is acceptable for moderate user counts; large-scale deployments should
+	// use a secondary index (sorted set) or rely on GORM/SQL for this query.
+	var result []*User
+
+	var cursor uint64
+	pattern := redisPrefixUser + "*"
+
+	for {
+		keys, nextCursor, err := r.client.Scan(ctx, cursor, pattern, 100).Result()
+		if err != nil {
+			return result, err
+		}
+
+		for _, key := range keys {
+			data, err := r.client.Get(ctx, key).Bytes()
+			if err != nil {
+				continue
+			}
+
+			var user User
+			if err := json.Unmarshal(data, &user); err != nil {
+				continue
+			}
+
+			if user.Status == UserStatusDeleted &&
+				user.DeletedAt != nil &&
+				user.DeletedAt.Before(before) {
+				cp := user
+				result = append(result, &cp)
+			}
+		}
+
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+	}
+
+	return result, nil
+}
+
 // Ensure interface compliance at compile time.
 var (
 	_ StoreFactory               = (*RedisStoreFactory)(nil)

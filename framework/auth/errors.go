@@ -54,6 +54,15 @@ var (
 	// Email change errors
 	ErrEmailChangeInvalid = errors.New("auth: invalid or expired email change code")
 
+	// Account deletion errors (E4-S7)
+	ErrAccountDeletionPending   = errors.New("auth: account deletion already requested")
+	ErrAccountNotDeleted        = errors.New("auth: account has not been marked for deletion")
+	ErrAccountDeletionExpired   = errors.New("auth: account deletion cool-down period has expired, account is gone")
+	ErrPasswordRequiredForDelete = errors.New("auth: password is required to confirm account deletion")
+
+	// Key rotation errors (E2-S5)
+	ErrNoActiveKeys = errors.New("auth: no active signing keys available")
+
 	// Breached password errors
 	ErrPasswordBreached = errors.New("auth: this password has been found in a data breach and cannot be used")
 )

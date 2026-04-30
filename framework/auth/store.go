@@ -1,6 +1,9 @@
 package auth
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // UserRepository abstracts user persistence.
 // Implementations may use PostgreSQL, MySQL, SQLite, or any other backend.
@@ -19,6 +22,17 @@ type UserRepository interface {
 
 	// Delete performs a soft delete on a user.
 	Delete(ctx context.Context, id string) error
+
+	// HardDelete permanently removes a user record (after cool-down period).
+	HardDelete(ctx context.Context, id string) error
+
+	// GetByIDIncludingDeleted retrieves a user by ID, including soft-deleted users.
+	// Used by UndoDeleteAccount to restore soft-deleted accounts.
+	GetByIDIncludingDeleted(ctx context.Context, id string) (*User, error)
+
+	// GetSoftDeletedUsers returns all users marked as deleted before the given time.
+	// Used by the scheduled cleanup job to find users whose 30-day cool-down has expired.
+	GetSoftDeletedUsers(ctx context.Context, before time.Time) ([]*User, error)
 
 	// EmailExists checks if an email is already registered (excluding soft-deleted).
 	EmailExists(ctx context.Context, email string) (bool, error)
@@ -87,6 +101,9 @@ type IdentityRepository interface {
 
 	// Delete removes an identity link.
 	Delete(ctx context.Context, id string) error
+
+	// DeleteByUserID removes all identities for a user (used during account hard-deletion).
+	DeleteByUserID(ctx context.Context, userID string) error
 }
 
 // StoreFactory creates repository instances from a shared backend connection.

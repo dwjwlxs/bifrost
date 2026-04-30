@@ -171,3 +171,25 @@ type SessionInfo struct {
 	ExpiresAt   time.Time `json:"expires_at"`
 	CreatedAt   time.Time `json:"created_at"`
 }
+
+// --- E4-S7: Account Deletion ---
+
+// DeleteAccountRequest holds the input for requesting account deletion.
+// Password is required to confirm the user's identity.
+type DeleteAccountRequest struct {
+	Password string `json:"password"`
+}
+
+// --- E2-S5: Key Rotation ---
+
+// KeyInfo holds metadata about a signing key.
+type KeyInfo struct {
+	KID        string    `json:"kid"`         // Key ID
+	CreatedAt  time.Time `json:"created_at"`  // When this key was created
+	ExpiresAt  time.Time `json:"expires_at"`  // When this key stops being used for verification
+	PrivateKey interface{} `json:"-"`          // Private key (ECDSA, RSA, etc.) — not serialized
+	PublicKey  interface{} `json:"-"`          // Public key — not serialized
+	Algorithm  string    `json:"algorithm"`   // e.g. "ES256"
+	IsSigning  bool      `json:"is_signing"`  // true = used for signing new tokens
+	IsVerifying bool     `json:"is_verifying"` // true = used for verifying existing tokens
+}
