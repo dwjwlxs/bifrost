@@ -1418,6 +1418,7 @@ ui:
 
 # Workspace helpers
 setup-workspace: ## Set up Go workspace with all local modules for development
+	@sh ./scripts/clean_mod.sh restore
 	@$(ECHO) "$(GREEN)Setting up Go workspace for local development...$(NC)"
 	@$(ECHO) "$(YELLOW)Cleaning existing workspace...$(NC)"
 	@rm -f go.work go.work.sum || true
@@ -1448,8 +1449,8 @@ work-init: ## Create local go.work to use local modules for development (legacy)
 	@$(MAKE) setup-workspace
 
 work-clean: ## Remove local go.work
-	@rm -f go.work go.work.sum || true
 	@sh ./scripts/clean_mod.sh restore
+	@rm -f go.work go.work.sum || true
 	@$(ECHO) "$(GREEN)Removed local go.work files$(NC)"
 
 # Module parameter for mod-tidy (all/core/plugins/framework/transport)
