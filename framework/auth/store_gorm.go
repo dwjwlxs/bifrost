@@ -39,6 +39,7 @@ type gormUser struct {
 	ID              string         `gorm:"column:id;primaryKey;type:varchar(36)"`
 	Email           string         `gorm:"column:email;type:varchar(255);not null"`
 	EmailNormalized string         `gorm:"column:email_normalized;type:varchar(255);uniqueIndex;not null"`
+	DisplayName     string         `gorm:"column:display_name;type:varchar(255)"`
 	Phone           string         `gorm:"column:phone;type:varchar(20)"`
 	PasswordHash    string         `gorm:"column:password_hash;type:varchar(255)"`
 	Status          string         `gorm:"column:status;type:varchar(20);not null;default:pending_verification"`
@@ -54,6 +55,7 @@ func (m *gormUser) toDomain() *User {
 		ID:              m.ID,
 		Email:           m.Email,
 		EmailNormalized: m.EmailNormalized,
+		DisplayName:     m.DisplayName,
 		Phone:           m.Phone,
 		PasswordHash:    m.PasswordHash,
 		Status:          UserStatus(m.Status),
@@ -71,6 +73,7 @@ func fromDomainUser(u *User) *gormUser {
 		ID:              u.ID,
 		Email:           u.Email,
 		EmailNormalized: u.EmailNormalized,
+		DisplayName:     u.DisplayName,
 		Phone:           u.Phone,
 		PasswordHash:    u.PasswordHash,
 		Status:          string(u.Status),
