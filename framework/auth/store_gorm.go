@@ -179,8 +179,8 @@ func fromDomainVerificationCode(vc *VerificationCode) *gormVerificationCode {
 type gormIdentity struct {
 	ID          string         `gorm:"column:id;primaryKey;type:varchar(36)"`
 	UserID      string         `gorm:"column:user_id;type:varchar(36);index;not null"`
-	Provider    string         `gorm:"column:provider;type:varchar(20);not null"`
-	ProviderUID string         `gorm:"column:provider_uid;type:varchar(255);not null"`
+	Provider    string         `gorm:"column:provider;type:varchar(20);not null;uniqueIndex:idx_provider_uid"`
+	ProviderUID string         `gorm:"column:provider_uid;type:varchar(255);not null;uniqueIndex:idx_provider_uid"`
 	DisplayName string         `gorm:"column:display_name;type:varchar(255)"`
 	AvatarURL   string         `gorm:"column:avatar_url;type:varchar(500)"`
 	Metadata    string         `gorm:"column:metadata;type:text"` // JSON
@@ -222,18 +222,6 @@ func fromDomainIdentity(id *Identity) *gormIdentity {
 		m.Metadata = string(data)
 	}
 	return m
-}
-
-// --- AutoMigrate creates the auth tables ---
-
-// AutoMigrate creates all auth-related tables.
-func AutoMigrate(db *gorm.DB) error {
-	return db.AutoMigrate(
-		&gormUser{},
-		&gormSession{},
-		&gormVerificationCode{},
-		&gormIdentity{},
-	)
 }
 
 // --- gormUserRepo ---
