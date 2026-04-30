@@ -45,18 +45,36 @@ type AuthService interface {
 
 	// GetJWKS returns the public keys in JWKS format for external verification.
 	GetJWKS() JWKS
+
+	// ForgotPassword sends a password reset code to the user's email.
+	// If the email is not registered, the method returns nil (no-op) to prevent email enumeration.
+	ForgotPassword(ctx context.Context, req ForgotPasswordRequest) error
+
+	// ResetPassword validates the password reset code and sets the new password.
+	// On success, all other sessions for the user are revoked.
+	ResetPassword(ctx context.Context, req ResetPasswordRequest) error
+
+	// OAuthLogin processes an OAuth2 authorization code and returns a token pair.
+	// If the user already has a linked identity, they are logged in.
+	// If the user is new, an account is created automatically (auto-registration).
+	OAuthLogin(ctx context.Context, req OAuthCallbackRequest, deviceInfo string, ipAddress string) (*TokenPair, error)
+
+	// GetOAuthAuthURL returns the OAuth2 authorization URL for the given provider.
+	// The state parameter is used for CSRF protection.
+	GetOAuthAuthURL(provider IdentityProvider, state string) (string, error)
 }
 
 // service is the concrete implementation of AuthService.
 type service struct {
-	config      *Config
-	hasher      PasswordHasher
-	jwtManager  JWTManager
-	tokenGen    *TokenGenerator
-	verifier    *VerificationCodeManager
-	codeSender  MessageSender
-	store       StoreFactory
-	rateLimiter RateLimiter
+	config        *Config
+	hasher        PasswordHasher
+	jwtManager    JWTManager
+	tokenGen      *TokenGenerator
+	verifier      *VerificationCodeManager
+	codeSender    MessageSender
+	store         StoreFactory
+	rateLimiter   RateLimiter
+	oauthRegistry *OAuthProviderRegistry
 }
 
 // NewAuthService creates a new AuthService with the given configuration and storage backend.
@@ -89,16 +107,18 @@ func NewAuthService(config *Config, store StoreFactory, codeSender MessageSender
 	hasher := NewPasswordHasher()
 	tokenGen := NewTokenGenerator(jwtManager, config)
 	verifier := NewVerificationCodeManager(store.VerificationCodeRepo(), config)
+	oauthRegistry := NewOAuthProviderRegistry(config.OAuth)
 
 	return &service{
-		config:      config,
-		hasher:      hasher,
-		jwtManager:  jwtManager,
-		tokenGen:    tokenGen,
-		verifier:    verifier,
-		codeSender:  codeSender,
-		store:       store,
-		rateLimiter: rateLimiter,
+		config:        config,
+		hasher:        hasher,
+		jwtManager:    jwtManager,
+		tokenGen:      tokenGen,
+		verifier:      verifier,
+		codeSender:    codeSender,
+		store:         store,
+		rateLimiter:   rateLimiter,
+		oauthRegistry: oauthRegistry,
 	}, nil
 }
 
@@ -404,4 +424,226 @@ func normalizeEmail(email string) string {
 // generateUUID creates a new UUID v4 string.
 func generateUUID() string {
 	return uuid.New().String()
+}
+
+// --- ForgotPassword ---
+
+func (s *service) ForgotPassword(ctx context.Context, req ForgotPasswordRequest) error {
+	email := normalizeEmail(req.Email)
+	if email == "" || !strings.Contains(email, "@") {
+		// Silently succeed to prevent email enumeration
+		return nil
+	}
+
+	// Look up user — if not found, return nil (no-op)
+	user, err := s.store.UserRepo().GetByEmail(ctx, email)
+	if err != nil || user == nil {
+		return nil
+	}
+
+	// Only allow password reset for active accounts
+	if user.Status != UserStatusActive {
+		return nil
+	}
+
+	// Generate and send password reset code
+	code, err := s.verifier.CreateCode(ctx, user.ID, email, VerificationCodeTypePasswordReset)
+	if err != nil {
+		// Log but don't expose internal errors
+		return nil
+	}
+
+	// Send the code (fire and forget)
+	_ = s.codeSender.SendVerificationCode(ctx, email, VerificationCodeTypePasswordReset, code)
+
+	return nil
+}
+
+// --- ResetPassword ---
+
+func (s *service) ResetPassword(ctx context.Context, req ResetPasswordRequest) error {
+	email := normalizeEmail(req.Email)
+
+	// Validate input
+	if email == "" || req.Code == "" || req.NewPassword == "" {
+		return ErrPasswordResetInvalid
+	}
+
+	if len(req.NewPassword) < s.config.PasswordMinLength {
+		return ErrPasswordTooShort
+	}
+
+	// Look up user
+	user, err := s.store.UserRepo().GetByEmail(ctx, email)
+	if err != nil || user == nil {
+		return ErrPasswordResetInvalid
+	}
+
+	// Verify the code
+	_, err = s.verifier.VerifyCode(ctx, email, VerificationCodeTypePasswordReset, req.Code)
+	if err != nil {
+		return ErrPasswordResetInvalid
+	}
+
+	// Hash the new password
+	hash, err := s.hasher.Hash(req.NewPassword)
+	if err != nil {
+		return fmt.Errorf("auth: failed to hash password: %w", err)
+	}
+
+	// Update password
+	user.PasswordHash = hash
+	user.UpdatedAt = time.Now()
+	if err := s.store.UserRepo().Update(ctx, user); err != nil {
+		return fmt.Errorf("auth: failed to update password: %w", err)
+	}
+
+	// Revoke all other sessions (force re-login everywhere else)
+	_ = s.store.SessionRepo().DeleteByUserID(ctx, user.ID)
+
+	return nil
+}
+
+// --- OAuthLogin ---
+
+func (s *service) GetOAuthAuthURL(provider IdentityProvider, state string) (string, error) {
+	p := s.oauthRegistry.Get(provider)
+	if p == nil {
+		return "", ErrOAuthProviderDisabled
+	}
+	return p.AuthCodeURL(state), nil
+}
+
+func (s *service) OAuthLogin(ctx context.Context, req OAuthCallbackRequest, deviceInfo string, ipAddress string) (*TokenPair, error) {
+	provider := s.oauthRegistry.Get(req.Provider)
+	if provider == nil {
+		return nil, ErrOAuthProviderDisabled
+	}
+
+	// Exchange code for user info
+	userInfo, err := provider.Exchange(ctx, req.Code)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if identity already exists
+	identity, err := s.store.IdentityRepo().GetByProviderAndUID(ctx, userInfo.Provider, userInfo.ProviderUID)
+	if err == nil && identity != nil {
+		// Existing user — check status and issue tokens
+		user, err := s.store.UserRepo().GetByID(ctx, identity.UserID)
+		if err != nil {
+			return nil, ErrUserNotFound
+		}
+
+		switch user.Status {
+		case UserStatusSuspended:
+			return nil, ErrUserSuspended
+		case UserStatusDeleted:
+			return nil, ErrUserDeleted
+		case UserStatusPendingVerification:
+			// OAuth users are automatically verified
+			user.Status = UserStatusActive
+			user.UpdatedAt = time.Now()
+			if err := s.store.UserRepo().Update(ctx, user); err != nil {
+				return nil, fmt.Errorf("auth: failed to activate user: %w", err)
+			}
+		}
+
+		return s.issueTokenPair(ctx, user.ID, deviceInfo, ipAddress, "")
+	}
+
+	// New user — auto-register
+	now := time.Now()
+	userID := uuid.New().String()
+	email := userInfo.Email
+	emailNormalized := normalizeEmail(email)
+
+	// Check if email already exists (link identity to existing account)
+	if emailNormalized != "" {
+		existingUser, err := s.store.UserRepo().GetByEmail(ctx, emailNormalized)
+		if err == nil && existingUser != nil {
+			// Link to existing account
+			identity = &Identity{
+				ID:          uuid.New().String(),
+				UserID:      existingUser.ID,
+				Provider:    userInfo.Provider,
+				ProviderUID: userInfo.ProviderUID,
+				DisplayName: userInfo.DisplayName,
+				AvatarURL:   userInfo.AvatarURL,
+				CreatedAt:   now,
+			}
+			if err := s.store.IdentityRepo().Create(ctx, identity); err != nil {
+				return nil, fmt.Errorf("auth: failed to create identity: %w", err)
+			}
+
+			// Ensure user is active
+			if existingUser.Status != UserStatusActive {
+				existingUser.Status = UserStatusActive
+				existingUser.UpdatedAt = now
+				_ = s.store.UserRepo().Update(ctx, existingUser)
+			}
+
+			return s.issueTokenPair(ctx, existingUser.ID, deviceInfo, ipAddress, "")
+		}
+	}
+
+	// Create new user (password hash is nil for OAuth-only accounts)
+	user := &User{
+		ID:              userID,
+		Email:           email,
+		EmailNormalized: emailNormalized,
+		Status:          UserStatusActive, // OAuth users are auto-verified
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+
+	if err := s.store.UserRepo().Create(ctx, user); err != nil {
+		return nil, fmt.Errorf("auth: failed to create user: %w", err)
+	}
+
+	// Create identity
+	identity = &Identity{
+		ID:          uuid.New().String(),
+		UserID:      userID,
+		Provider:    userInfo.Provider,
+		ProviderUID: userInfo.ProviderUID,
+		DisplayName: userInfo.DisplayName,
+		AvatarURL:   userInfo.AvatarURL,
+		CreatedAt:   now,
+	}
+	if err := s.store.IdentityRepo().Create(ctx, identity); err != nil {
+		return nil, fmt.Errorf("auth: failed to create identity: %w", err)
+	}
+
+	return s.issueTokenPair(ctx, userID, deviceInfo, ipAddress, "")
+}
+
+// issueTokenPair creates a session and returns a token pair.
+// familyID can be empty for new sessions.
+func (s *service) issueTokenPair(ctx context.Context, userID, deviceInfo, ipAddress, familyID string) (*TokenPair, error) {
+	sessionID := uuid.New().String()
+	tokens, err := s.tokenGen.GenerateTokenPair(userID, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	if familyID == "" {
+		familyID = uuid.New().String()
+	}
+
+	rtHash := HashSHA256Base64(tokens.RefreshToken)
+	if err := s.store.SessionRepo().Create(ctx, &Session{
+		ID:               sessionID,
+		UserID:           userID,
+		RefreshTokenHash: rtHash,
+		TokenFamily:      familyID,
+		DeviceInfo:       deviceInfo,
+		IPAddress:        ipAddress,
+		ExpiresAt:        time.Now().Add(s.config.RefreshTokenTTL),
+		CreatedAt:        time.Now(),
+	}); err != nil {
+		return nil, fmt.Errorf("auth: failed to create session: %w", err)
+	}
+
+	return tokens, nil
 }

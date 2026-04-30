@@ -1,6 +1,8 @@
 package auth
 
-import "time"
+import (
+	"time"
+)
 
 // UserStatus represents the status of a user account.
 type UserStatus string
@@ -45,6 +47,48 @@ const (
 	VerificationCodeTypeEmailVerify   VerificationCodeType = "email_verify"
 	VerificationCodeTypePasswordReset VerificationCodeType = "password_reset"
 )
+
+// --- Identity (social login) ---
+
+// IdentityProvider represents a social login provider.
+type IdentityProvider string
+
+const (
+	IdentityProviderWechat IdentityProvider = "wechat"
+)
+
+// Identity represents a linked social login for a user.
+type Identity struct {
+	ID           string           `json:"id"`
+	UserID       string           `json:"user_id"`
+	Provider     IdentityProvider `json:"provider"`
+	ProviderUID  string           `json:"provider_uid"`
+	DisplayName  string           `json:"display_name,omitempty"`
+	AvatarURL    string           `json:"avatar_url,omitempty"`
+	Metadata     map[string]string `json:"metadata,omitempty"`
+	CreatedAt    time.Time        `json:"created_at"`
+}
+
+// --- Request types ---
+
+// ForgotPasswordRequest holds the input for requesting a password reset.
+type ForgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+// ResetPasswordRequest holds the input for resetting a password.
+type ResetPasswordRequest struct {
+	Email       string `json:"email"`
+	Code        string `json:"code"`
+	NewPassword string `json:"new_password"`
+}
+
+// OAuthCallbackRequest holds the input for processing an OAuth callback.
+type OAuthCallbackRequest struct {
+	Provider IdentityProvider `json:"provider"`
+	Code     string           `json:"code"`
+	State    string           `json:"state"`
+}
 
 // VerificationCode represents a one-time verification code.
 type VerificationCode struct {

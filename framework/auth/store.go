@@ -73,6 +73,22 @@ type VerificationCodeRepository interface {
 	DeleteExpired(ctx context.Context) (int64, error)
 }
 
+// IdentityRepository abstracts social-login identity persistence.
+// Maps external OAuth provider identities to local user accounts.
+type IdentityRepository interface {
+	// Create persists a new identity link.
+	Create(ctx context.Context, identity *Identity) error
+
+	// GetByProviderAndUID looks up an identity by provider + provider-issued UID.
+	GetByProviderAndUID(ctx context.Context, provider IdentityProvider, providerUID string) (*Identity, error)
+
+	// GetByUserID retrieves all identities for a user.
+	GetByUserID(ctx context.Context, userID string) ([]*Identity, error)
+
+	// Delete removes an identity link.
+	Delete(ctx context.Context, id string) error
+}
+
 // StoreFactory creates repository instances from a shared backend connection.
 // This allows injecting different storage backends (memory, Redis, GORM, etc.)
 // without changing the auth service code.
@@ -80,4 +96,5 @@ type StoreFactory interface {
 	UserRepo() UserRepository
 	SessionRepo() SessionRepository
 	VerificationCodeRepo() VerificationCodeRepository
+	IdentityRepo() IdentityRepository
 }

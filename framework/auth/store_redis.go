@@ -30,16 +30,22 @@ func (f *RedisStoreFactory) SessionRepo() SessionRepository {
 func (f *RedisStoreFactory) VerificationCodeRepo() VerificationCodeRepository {
 	return &redisVerificationCodeRepo{client: f.client}
 }
+func (f *RedisStoreFactory) IdentityRepo() IdentityRepository {
+	return &redisIdentityRepo{client: f.client}
+}
 
 // Redis key prefixes
 const (
-	redisPrefixUser  = "auth:user:"
-	redisPrefixEmail = "auth:email:" // email_normalized -> user_id
-	redisPrefixSession      = "auth:session:"
-	redisPrefixSessionHash  = "auth:session:hash:"  // rt_hash -> session_id
-	redisPrefixSessionUser  = "auth:session:user:"  // user_id -> set of session_ids
-	redisPrefixSessionFamily = "auth:session:family:" // family -> set of session_ids
-	redisPrefixCode   = "auth:code:" // recipient:type -> latest code_id
+	redisPrefixUser           = "auth:user:"
+	redisPrefixEmail          = "auth:email:" // email_normalized -> user_id
+	redisPrefixSession        = "auth:session:"
+	redisPrefixSessionHash    = "auth:session:hash:"    // rt_hash -> session_id
+	redisPrefixSessionUser    = "auth:session:user:"    // user_id -> set of session_ids
+	redisPrefixSessionFamily  = "auth:session:family:"  // family -> set of session_ids
+	redisPrefixCode           = "auth:code:"            // recipient:type -> latest code_id
+	redisPrefixIdentity       = "auth:identity:"        // id -> JSON(identity)
+	redisPrefixIdentityLookup = "auth:identity:lookup:" // provider:provider_uid -> identity_id
+	redisPrefixIdentityUser   = "auth:identity:user:"   // user_id -> SET of identity_ids
 )
 
 // --- redisUserRepo ---
@@ -383,13 +389,94 @@ func (r *redisVerificationCodeRepo) DeleteExpired(ctx context.Context) (int64, e
 	return 0, nil
 }
 
+// --- redisIdentityRepo ---
+
+type redisIdentityRepo struct {
+	client *redis.Client
+}
+
+func (r *redisIdentityRepo) identityLookupKey(provider IdentityProvider, providerUID string) string {
+	return redisPrefixIdentityLookup + string(provider) + ":" + providerUID
+}
+
+func (r *redisIdentityRepo) Create(ctx context.Context, identity *Identity) error {
+	data, err := json.Marshal(identity)
+	if err != nil {
+		return err
+	}
+
+	pipe := r.client.Pipeline()
+	pipe.Set(ctx, redisPrefixIdentity+identity.ID, data, 0)
+	pipe.Set(ctx, r.identityLookupKey(identity.Provider, identity.ProviderUID), identity.ID, 0)
+	pipe.SAdd(ctx, redisPrefixIdentityUser+identity.UserID, identity.ID)
+	_, err = pipe.Exec(ctx)
+	return err
+}
+
+func (r *redisIdentityRepo) GetByProviderAndUID(ctx context.Context, provider IdentityProvider, providerUID string) (*Identity, error) {
+	id, err := r.client.Get(ctx, r.identityLookupKey(provider, providerUID)).Result()
+	if err == redis.Nil {
+		return nil, fmt.Errorf("identity not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return r.getByID(ctx, id)
+}
+
+func (r *redisIdentityRepo) getByID(ctx context.Context, id string) (*Identity, error) {
+	data, err := r.client.Get(ctx, redisPrefixIdentity+id).Bytes()
+	if err == redis.Nil {
+		return nil, fmt.Errorf("identity not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+	var identity Identity
+	if err := json.Unmarshal(data, &identity); err != nil {
+		return nil, err
+	}
+	return &identity, nil
+}
+
+func (r *redisIdentityRepo) GetByUserID(ctx context.Context, userID string) ([]*Identity, error) {
+	ids, err := r.client.SMembers(ctx, redisPrefixIdentityUser+userID).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	var identities []*Identity
+	for _, id := range ids {
+		identity, err := r.getByID(ctx, id)
+		if err == nil {
+			identities = append(identities, identity)
+		}
+	}
+	return identities, nil
+}
+
+func (r *redisIdentityRepo) Delete(ctx context.Context, id string) error {
+	identity, err := r.getByID(ctx, id)
+	if err != nil {
+		return nil // idempotent
+	}
+
+	pipe := r.client.Pipeline()
+	pipe.Del(ctx, redisPrefixIdentity+id)
+	pipe.Del(ctx, r.identityLookupKey(identity.Provider, identity.ProviderUID))
+	pipe.SRem(ctx, redisPrefixIdentityUser+identity.UserID, id)
+	_, err = pipe.Exec(ctx)
+	return err
+}
+
 // Ensure interface compliance at compile time.
 var (
-	_ StoreFactory         = (*RedisStoreFactory)(nil)
-	_ StoreFactory         = (*MemoryStoreFactory)(nil)
-	_ UserRepository       = (*redisUserRepo)(nil)
-	_ SessionRepository    = (*redisSessionRepo)(nil)
+	_ StoreFactory               = (*RedisStoreFactory)(nil)
+	_ StoreFactory               = (*MemoryStoreFactory)(nil)
+	_ UserRepository             = (*redisUserRepo)(nil)
+	_ SessionRepository          = (*redisSessionRepo)(nil)
 	_ VerificationCodeRepository = (*redisVerificationCodeRepo)(nil)
+	_ IdentityRepository         = (*redisIdentityRepo)(nil)
 )
 
 // Suppress unused import warnings

@@ -9,9 +9,10 @@ import (
 
 // MemoryStoreFactory is an in-memory StoreFactory for testing and development.
 type MemoryStoreFactory struct {
-	userRepo    *memoryUserRepo
-	sessionRepo *memorySessionRepo
-	codeRepo    *memoryVerificationCodeRepo
+	userRepo     *memoryUserRepo
+	sessionRepo  *memorySessionRepo
+	codeRepo     *memoryVerificationCodeRepo
+	identityRepo *memoryIdentityRepo
 }
 
 // NewMemoryStoreFactory creates a new in-memory store factory.
@@ -20,12 +21,14 @@ func NewMemoryStoreFactory() StoreFactory {
 	f.userRepo = &memoryUserRepo{users: make(map[string]*User), byEmail: make(map[string]*User)}
 	f.sessionRepo = &memorySessionRepo{sessions: make(map[string]*Session), byHash: make(map[string]*Session)}
 	f.codeRepo = &memoryVerificationCodeRepo{codes: make(map[string]*VerificationCode)}
+	f.identityRepo = &memoryIdentityRepo{identities: make(map[string]*Identity), byLookup: make(map[string]*Identity)}
 	return f
 }
 
 func (f *MemoryStoreFactory) UserRepo() UserRepository                         { return f.userRepo }
 func (f *MemoryStoreFactory) SessionRepo() SessionRepository                   { return f.sessionRepo }
 func (f *MemoryStoreFactory) VerificationCodeRepo() VerificationCodeRepository { return f.codeRepo }
+func (f *MemoryStoreFactory) IdentityRepo() IdentityRepository                 { return f.identityRepo }
 
 // --- memoryUserRepo ---
 
@@ -313,4 +316,62 @@ func (r *memoryVerificationCodeRepo) DeleteExpired(_ context.Context) (int64, er
 		}
 	}
 	return count, nil
+}
+
+// --- memoryIdentityRepo ---
+
+type memoryIdentityRepo struct {
+	mu         sync.RWMutex
+	identities map[string]*Identity          // id -> identity
+	byLookup   map[string]*Identity          // "provider:provider_uid" -> identity
+}
+
+func (r *memoryIdentityRepo) Create(_ context.Context, identity *Identity) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	cp := *identity
+	r.identities[identity.ID] = &cp
+	r.byLookup[string(identity.Provider)+":"+identity.ProviderUID] = &cp
+	return nil
+}
+
+func (r *memoryIdentityRepo) GetByProviderAndUID(_ context.Context, provider IdentityProvider, providerUID string) (*Identity, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	key := string(provider) + ":" + providerUID
+	identity, ok := r.byLookup[key]
+	if !ok {
+		return nil, fmt.Errorf("identity not found")
+	}
+	cp := *identity
+	return &cp, nil
+}
+
+func (r *memoryIdentityRepo) GetByUserID(_ context.Context, userID string) ([]*Identity, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []*Identity
+	for _, id := range r.identities {
+		if id.UserID == userID {
+			cp := *id
+			result = append(result, &cp)
+		}
+	}
+	return result, nil
+}
+
+func (r *memoryIdentityRepo) Delete(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	identity, ok := r.identities[id]
+	if !ok {
+		return nil // idempotent
+	}
+	delete(r.byLookup, string(identity.Provider)+":"+identity.ProviderUID)
+	delete(r.identities, id)
+	return nil
 }
