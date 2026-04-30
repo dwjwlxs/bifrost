@@ -49,19 +49,21 @@ type AuthService interface {
 
 // service is the concrete implementation of AuthService.
 type service struct {
-	config     *Config
-	hasher     PasswordHasher
-	jwtManager JWTManager
-	tokenGen   *TokenGenerator
-	verifier   *VerificationCodeManager
-	codeSender MessageSender
-	store      StoreFactory
+	config      *Config
+	hasher      PasswordHasher
+	jwtManager  JWTManager
+	tokenGen    *TokenGenerator
+	verifier    *VerificationCodeManager
+	codeSender  MessageSender
+	store       StoreFactory
+	rateLimiter RateLimiter
 }
 
 // NewAuthService creates a new AuthService with the given configuration and storage backend.
 // If the JWKS private key is not configured, a new ES256 key pair is generated.
 // If codeSender is nil, a NoopCodeSender is used.
-func NewAuthService(config *Config, store StoreFactory, codeSender MessageSender) (AuthService, error) {
+// If rateLimiter is nil, a NoopRateLimiter is used.
+func NewAuthService(config *Config, store StoreFactory, codeSender MessageSender, rateLimiter RateLimiter) (AuthService, error) {
 	if config == nil {
 		config = DefaultConfig()
 	}
@@ -80,18 +82,23 @@ func NewAuthService(config *Config, store StoreFactory, codeSender MessageSender
 		codeSender = &NoopMessageSender{}
 	}
 
+	if rateLimiter == nil {
+		rateLimiter = &NoopRateLimiter{}
+	}
+
 	hasher := NewPasswordHasher()
 	tokenGen := NewTokenGenerator(jwtManager, config)
 	verifier := NewVerificationCodeManager(store.VerificationCodeRepo(), config)
 
 	return &service{
-		config:     config,
-		hasher:     hasher,
-		jwtManager: jwtManager,
-		tokenGen:   tokenGen,
-		verifier:   verifier,
-		codeSender: codeSender,
-		store:      store,
+		config:      config,
+		hasher:      hasher,
+		jwtManager:  jwtManager,
+		tokenGen:    tokenGen,
+		verifier:    verifier,
+		codeSender:  codeSender,
+		store:       store,
+		rateLimiter: rateLimiter,
 	}, nil
 }
 
@@ -225,7 +232,21 @@ func (s *service) Login(ctx context.Context, req LoginRequest, deviceInfo string
 	user, err := s.store.UserRepo().GetByEmail(ctx, email)
 	if err != nil {
 		// Don't reveal whether the user exists
+		// Still check rate limiting for IP
+		attempts, _ := s.rateLimiter.IncrementLoginAttempts(ctx, ipAddress)
+		if attempts > int64(s.config.LoginMaxAttempts) {
+			return nil, ErrAccountLocked
+		}
 		return nil, ErrInvalidCredentials
+	}
+
+	// Check if account is locked due to too many failed attempts
+	locked, err := s.rateLimiter.IsAccountLocked(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("auth: failed to check account lockout: %w", err)
+	}
+	if locked {
+		return nil, ErrAccountLocked
 	}
 
 	// Check status
@@ -241,8 +262,17 @@ func (s *service) Login(ctx context.Context, req LoginRequest, deviceInfo string
 	// Verify password
 	ok, err := s.hasher.Verify(req.Password, user.PasswordHash)
 	if err != nil || !ok {
+		// Increment failed login attempts
+		failedCount, _ := s.rateLimiter.IncrementFailedLogins(ctx, user.ID)
+		if failedCount >= int64(s.config.LoginMaxAttempts) {
+			// Lock the account
+			_ = s.rateLimiter.SetAccountLockout(ctx, user.ID, s.config.LoginLockoutDuration)
+		}
 		return nil, ErrInvalidCredentials
 	}
+
+	// Reset failed login attempts on successful login
+	_ = s.rateLimiter.ResetFailedLogins(ctx, user.ID)
 
 	// Issue token pair
 	sessionID := uuid.New().String()

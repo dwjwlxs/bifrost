@@ -34,10 +34,18 @@ type NoopMessageSender struct {
 	Codes map[string]string
 }
 
+func NewNoopMessageSender() *NoopMessageSender {
+	return &NoopMessageSender{
+		Codes: make(map[string]string),
+	}
+}
+
 var _ MessageSender = (*NoopMessageSender)(nil)
 
 func (n *NoopMessageSender) SendVerificationCode(_ context.Context, to string, _ VerificationCodeType, code string) error {
-	n.Codes[to] = code
+	if n.Codes != nil {
+		n.Codes[to] = code
+	}
 	return nil
 }
 
