@@ -48,7 +48,7 @@ func (h *PlatformTeamHandler) RegisterRoutes(r *router.Router, middlewares ...sc
 func (h *PlatformTeamHandler) listMyTeams(ctx *fasthttp.RequestCtx) {
 	claims := GetPlatformClaimsFromContext(ctx)
 	if claims == nil {
-		SendError(ctx, fasthttp.StatusUnauthorized, "Unauthorized")
+		sendError(ctx, fasthttp.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 		return
 	}
 
@@ -58,7 +58,7 @@ func (h *PlatformTeamHandler) listMyTeams(ctx *fasthttp.RequestCtx) {
 	}
 
 	if len(teamIDs) == 0 {
-		SendJSON(ctx, map[string]any{
+		sendJSON(ctx, map[string]any{
 			"code":    "0",
 			"message": "success",
 			"data": map[string]any{
@@ -71,7 +71,7 @@ func (h *PlatformTeamHandler) listMyTeams(ctx *fasthttp.RequestCtx) {
 
 	var teams []tables.TableTeam
 	if err := h.db.Where("id IN ?", teamIDs).Find(&teams).Error; err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to list teams")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to list teams", err.Error())
 		return
 	}
 
@@ -96,7 +96,7 @@ func (h *PlatformTeamHandler) listMyTeams(ctx *fasthttp.RequestCtx) {
 		items = append(items, item)
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -110,13 +110,13 @@ func (h *PlatformTeamHandler) listMyTeams(ctx *fasthttp.RequestCtx) {
 func (h *PlatformTeamHandler) getTeam(ctx *fasthttp.RequestCtx) {
 	teamID, _ := ctx.UserValue("teamId").(string)
 	if teamID == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Team ID is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Team ID is required")
 		return
 	}
 
 	var team tables.TableTeam
 	if err := h.db.Where("id = ?", teamID).First(&team).Error; err != nil {
-		SendError(ctx, fasthttp.StatusNotFound, "Team not found")
+		sendError(ctx, fasthttp.StatusNotFound, "Team not found", err.Error())
 		return
 	}
 
@@ -132,7 +132,7 @@ func (h *PlatformTeamHandler) getTeam(ctx *fasthttp.RequestCtx) {
 		}
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -150,7 +150,7 @@ func (h *PlatformTeamHandler) getTeam(ctx *fasthttp.RequestCtx) {
 func (h *PlatformTeamHandler) updateTeam(ctx *fasthttp.RequestCtx) {
 	teamID, _ := ctx.UserValue("teamId").(string)
 	if teamID == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Team ID is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Team ID is required")
 		return
 	}
 
@@ -158,13 +158,13 @@ func (h *PlatformTeamHandler) updateTeam(ctx *fasthttp.RequestCtx) {
 		Name *string `json:"name"`
 	}
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
-		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request format")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Invalid request format")
 		return
 	}
 
 	var team tables.TableTeam
 	if err := h.db.Where("id = ?", teamID).First(&team).Error; err != nil {
-		SendError(ctx, fasthttp.StatusNotFound, "Team not found")
+		sendError(ctx, fasthttp.StatusNotFound, "Team not found", err.Error())
 		return
 	}
 
@@ -173,11 +173,11 @@ func (h *PlatformTeamHandler) updateTeam(ctx *fasthttp.RequestCtx) {
 	}
 
 	if err := h.db.Save(&team).Error; err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to update team")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to update team", err.Error())
 		return
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -193,13 +193,13 @@ func (h *PlatformTeamHandler) updateTeam(ctx *fasthttp.RequestCtx) {
 func (h *PlatformTeamHandler) listTeamMembers(ctx *fasthttp.RequestCtx) {
 	teamID, _ := ctx.UserValue("teamId").(string)
 	if teamID == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Team ID is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Team ID is required")
 		return
 	}
 
 	var members []tables.TablePlatformTeamMember
 	if err := h.db.Where("team_id = ?", teamID).Find(&members).Error; err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to list team members")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to list team members", err.Error())
 		return
 	}
 
@@ -213,7 +213,7 @@ func (h *PlatformTeamHandler) listTeamMembers(ctx *fasthttp.RequestCtx) {
 		}
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -227,7 +227,7 @@ func (h *PlatformTeamHandler) listTeamMembers(ctx *fasthttp.RequestCtx) {
 func (h *PlatformTeamHandler) inviteMember(ctx *fasthttp.RequestCtx) {
 	teamID, _ := ctx.UserValue("teamId").(string)
 	if teamID == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Team ID is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Team ID is required")
 		return
 	}
 
@@ -237,12 +237,12 @@ func (h *PlatformTeamHandler) inviteMember(ctx *fasthttp.RequestCtx) {
 		Role   string `json:"role"`
 	}
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
-		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request format")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Invalid request format")
 		return
 	}
 
 	if req.UserID == "" && req.Email == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "user_id or email is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "user_id or email is required")
 		return
 	}
 
@@ -252,14 +252,14 @@ func (h *PlatformTeamHandler) inviteMember(ctx *fasthttp.RequestCtx) {
 	}
 
 	if !isValidRole(req.Role) {
-		SendError(ctx, fasthttp.StatusBadRequest, "Invalid role: must be member, admin, or owner")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Invalid role: must be member, admin, or owner")
 		return
 	}
 
 	// Get the team to find its parent org
 	var team tables.TableTeam
 	if err := h.db.Where("id = ?", teamID).First(&team).Error; err != nil {
-		SendError(ctx, fasthttp.StatusNotFound, "Team not found")
+		sendError(ctx, fasthttp.StatusNotFound, "Team not found", err.Error())
 		return
 	}
 
@@ -282,7 +282,7 @@ func (h *PlatformTeamHandler) addMemberDirectly(ctx *fasthttp.RequestCtx, teamID
 	// Check if already a team member
 	var existing tables.TablePlatformTeamMember
 	if err := h.db.Where("team_id = ? AND user_id = ?", teamID, userID).First(&existing).Error; err == nil {
-		SendError(ctx, fasthttp.StatusConflict, "User is already a team member")
+		sendError(ctx, fasthttp.StatusConflict, "User is already a team member", err.Error())
 		return
 	}
 
@@ -296,13 +296,13 @@ func (h *PlatformTeamHandler) addMemberDirectly(ctx *fasthttp.RequestCtx, teamID
 
 	tx := h.db.Begin()
 	if tx.Error != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to start transaction")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to start transaction", tx.Error.Error())
 		return
 	}
 
 	if err := tx.Create(&teamMember).Error; err != nil {
 		tx.Rollback()
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to add team member")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to add team member", err.Error())
 		return
 	}
 
@@ -319,7 +319,7 @@ func (h *PlatformTeamHandler) addMemberDirectly(ctx *fasthttp.RequestCtx, teamID
 			}
 			if err := tx.Create(&orgMember).Error; err != nil {
 				tx.Rollback()
-				SendError(ctx, fasthttp.StatusInternalServerError, "Failed to add org membership")
+				sendError(ctx, fasthttp.StatusInternalServerError, "Failed to add org membership", err.Error())
 				return
 			}
 		}
@@ -327,11 +327,11 @@ func (h *PlatformTeamHandler) addMemberDirectly(ctx *fasthttp.RequestCtx, teamID
 
 	if err := tx.Commit().Error; err != nil {
 		log.Printf("ERROR: failed to commit transaction in addMemberDirectly: %v", err)
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to add team member")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to add team member", err.Error())
 		return
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -356,11 +356,11 @@ func (h *PlatformTeamHandler) createInvitation(ctx *fasthttp.RequestCtx, teamID 
 	}
 
 	if err := h.db.Create(&invitation).Error; err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to create invitation")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to create invitation", err.Error())
 		return
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "Invitation created successfully",
 		"data": map[string]any{
@@ -377,21 +377,21 @@ func (h *PlatformTeamHandler) removeMember(ctx *fasthttp.RequestCtx) {
 	teamID, _ := ctx.UserValue("teamId").(string)
 	uid, _ := ctx.UserValue("uid").(string)
 	if teamID == "" || uid == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Team ID and user ID are required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Team ID and user ID are required")
 		return
 	}
 
 	result := h.db.Where("team_id = ? AND user_id = ?", teamID, uid).Delete(&tables.TablePlatformTeamMember{})
 	if result.Error != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to remove team member")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to remove team member", result.Error.Error())
 		return
 	}
 	if result.RowsAffected == 0 {
-		SendError(ctx, fasthttp.StatusNotFound, "Team member not found")
+		sendError(ctx, fasthttp.StatusNotFound, "NOT_FOUND", "Team member not found")
 		return
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "Team member removed successfully",
 	})
@@ -402,7 +402,7 @@ func (h *PlatformTeamHandler) updateMemberRole(ctx *fasthttp.RequestCtx) {
 	teamID, _ := ctx.UserValue("teamId").(string)
 	uid, _ := ctx.UserValue("uid").(string)
 	if teamID == "" || uid == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Team ID and user ID are required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Team ID and user ID are required")
 		return
 	}
 
@@ -410,33 +410,33 @@ func (h *PlatformTeamHandler) updateMemberRole(ctx *fasthttp.RequestCtx) {
 		Role string `json:"role"`
 	}
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
-		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request format")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Invalid request format")
 		return
 	}
 
 	if req.Role == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Role is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Role is required")
 		return
 	}
 
 	if !isValidRole(req.Role) {
-		SendError(ctx, fasthttp.StatusBadRequest, "Invalid role: must be member, admin, or owner")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Invalid role: must be member, admin, or owner")
 		return
 	}
 
 	var member tables.TablePlatformTeamMember
 	if err := h.db.Where("team_id = ? AND user_id = ?", teamID, uid).First(&member).Error; err != nil {
-		SendError(ctx, fasthttp.StatusNotFound, "Team member not found")
+		sendError(ctx, fasthttp.StatusNotFound, "NOT_FOUND", "Team member not found")
 		return
 	}
 
 	member.Role = req.Role
 	if err := h.db.Save(&member).Error; err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to update team member role")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to update team member role", err.Error())
 		return
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{

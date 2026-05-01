@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"encoding/json"
-	"strconv"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/fasthttp/router"
@@ -58,7 +58,7 @@ func (h *PlatformAdminHandler) listOrgs(ctx *fasthttp.RequestCtx) {
 
 	var customers []tables.TableCustomer
 	if err := h.db.Order("created_at DESC").Offset(int(offset)).Limit(int(limit)).Find(&customers).Error; err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to list organizations")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to list organizations", err.Error())
 		return
 	}
 
@@ -73,7 +73,7 @@ func (h *PlatformAdminHandler) listOrgs(ctx *fasthttp.RequestCtx) {
 		}
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -93,12 +93,12 @@ type createOrgRequest struct {
 func (h *PlatformAdminHandler) createOrg(ctx *fasthttp.RequestCtx) {
 	var req createOrgRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
-		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request format")
+		sendError(ctx, fasthttp.StatusBadRequest, "Invalid request format", err.Error())
 		return
 	}
 
 	if req.Name == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Organization name is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "Organization name is required", "")
 		return
 	}
 
@@ -113,13 +113,13 @@ func (h *PlatformAdminHandler) createOrg(ctx *fasthttp.RequestCtx) {
 
 	tx := h.db.Begin()
 	if tx.Error != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to start transaction")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to start transaction", tx.Error.Error())
 		return
 	}
 
 	if err := tx.Create(&customer).Error; err != nil {
 		tx.Rollback()
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to create organization")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to create organization", err.Error())
 		return
 	}
 
@@ -133,18 +133,18 @@ func (h *PlatformAdminHandler) createOrg(ctx *fasthttp.RequestCtx) {
 		}
 		if err := tx.Create(&orgMember).Error; err != nil {
 			tx.Rollback()
-			SendError(ctx, fasthttp.StatusInternalServerError, "Failed to assign org admin")
+			sendError(ctx, fasthttp.StatusInternalServerError, "Failed to assign org admin", err.Error())
 			return
 		}
 	}
 
 	if err := tx.Commit().Error; err != nil {
 		log.Printf("ERROR: failed to commit transaction in createOrg: %v", err)
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to create organization")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to create organization", err.Error())
 		return
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -158,17 +158,17 @@ func (h *PlatformAdminHandler) createOrg(ctx *fasthttp.RequestCtx) {
 func (h *PlatformAdminHandler) getOrg(ctx *fasthttp.RequestCtx) {
 	orgID, _ := ctx.UserValue("orgId").(string)
 	if orgID == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Organization ID is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "Organization ID is required", "")
 		return
 	}
 
 	var customer tables.TableCustomer
 	if err := h.db.Where("id = ?", orgID).First(&customer).Error; err != nil {
-		SendError(ctx, fasthttp.StatusNotFound, "Organization not found")
+		sendError(ctx, fasthttp.StatusNotFound, "Organization not found", err.Error())
 		return
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -185,7 +185,7 @@ func (h *PlatformAdminHandler) getOrg(ctx *fasthttp.RequestCtx) {
 func (h *PlatformAdminHandler) updateOrg(ctx *fasthttp.RequestCtx) {
 	orgID, _ := ctx.UserValue("orgId").(string)
 	if orgID == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Organization ID is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "Organization ID is required", "")
 		return
 	}
 
@@ -193,28 +193,28 @@ func (h *PlatformAdminHandler) updateOrg(ctx *fasthttp.RequestCtx) {
 		Name string `json:"name"`
 	}
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
-		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request format")
+		sendError(ctx, fasthttp.StatusBadRequest, "Invalid request format", err.Error())
 		return
 	}
 
 	if req.Name == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Organization name is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "Organization name is required", "")
 		return
 	}
 
 	var customer tables.TableCustomer
 	if err := h.db.Where("id = ?", orgID).First(&customer).Error; err != nil {
-		SendError(ctx, fasthttp.StatusNotFound, "Organization not found")
+		sendError(ctx, fasthttp.StatusNotFound, "Organization not found", err.Error())
 		return
 	}
 
 	customer.Name = req.Name
 	if err := h.db.Save(&customer).Error; err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to update organization")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to update organization", err.Error())
 		return
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -229,38 +229,38 @@ func (h *PlatformAdminHandler) updateOrg(ctx *fasthttp.RequestCtx) {
 func (h *PlatformAdminHandler) deleteOrg(ctx *fasthttp.RequestCtx) {
 	orgID, _ := ctx.UserValue("orgId").(string)
 	if orgID == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Organization ID is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "Organization ID is required", "")
 		return
 	}
 
 	tx := h.db.Begin()
 	if tx.Error != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to start transaction")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to start transaction", tx.Error.Error())
 		return
 	}
 
 	// Remove org memberships
 	if err := tx.Where("org_id = ?", orgID).Delete(&tables.TablePlatformOrgMember{}).Error; err != nil {
 		tx.Rollback()
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to delete organization memberships")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to delete organization memberships", err.Error())
 		return
 	}
 
 	// Delete the customer
 	if err := tx.Where("id = ?", orgID).Delete(&tables.TableCustomer{}).Error; err != nil {
 		tx.Rollback()
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to delete organization")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to delete organization", err.Error())
 		return
 	}
 
 	if err := tx.Commit().Error; err != nil {
 		log.Printf("ERROR: failed to commit transaction in deleteOrg: %v", err)
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to delete organization")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to delete organization", err.Error())
 		return
 	}
 
-	SendJSON(ctx, map[string]any{
-		"code":    "0",
+	sendJSON(ctx, map[string]any{
+		"code":    "",
 		"message": "Organization deleted successfully",
 	})
 }

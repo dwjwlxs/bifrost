@@ -12,7 +12,6 @@ import (
 	"github.com/fasthttp/router"
 	"github.com/maximhq/bifrost/core/schemas"
 	fauth "github.com/maximhq/bifrost/framework/auth"
-	"github.com/maximhq/bifrost/transports/bifrost-http/handlers"
 	"github.com/valyala/fasthttp"
 )
 
@@ -104,7 +103,7 @@ func (h *AuthHandler) authMiddleware(next fasthttp.RequestHandler) fasthttp.Requ
 	return func(ctx *fasthttp.RequestCtx) {
 		userID, err := h.extractUserIDFromRequest(ctx)
 		if err != nil {
-			handlers.SendError(ctx, fasthttp.StatusUnauthorized, "unauthorized: "+err.Error())
+			sendError(ctx, fasthttp.StatusUnauthorized, fmt.Sprintf("%d", fasthttp.StatusUnauthorized), "unauthorized: "+err.Error())
 			return
 		}
 		ctx.SetUserValue("auth_user_id", userID)
@@ -188,14 +187,9 @@ func handleServiceError(ctx *fasthttp.RequestCtx, err error) {
 	code, msg := mapAuthError(err)
 	// Special case: email_not_verified should include email in response
 	if errors.Is(err, fauth.ErrUserNotVerified) {
-		handlers.SendJSONWithStatus(ctx, map[string]any{
-			"code":    "email_not_verified",
-			"message": msg,
-			"data":    map[string]any{"email": ""}, // email set by caller
-		}, code)
-		return
+		msg = "email_not_verified"
 	}
-	handlers.SendError(ctx, code, msg)
+	sendError(ctx, code, msg, msg)
 }
 
 // ---------------------------------------------------------------------------
@@ -206,28 +200,15 @@ func handleServiceError(ctx *fasthttp.RequestCtx, err error) {
 func (h *AuthHandler) register(ctx *fasthttp.RequestCtx) {
 	var req fauth.RegisterRequest
 	if err := readJSONBody(ctx, &req); err != nil {
-		handlers.SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		sendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("%d", fasthttp.StatusBadRequest), err.Error())
 		return
 	}
 	user, err := h.svc.Register(ctx, req)
 	if err != nil {
-		// Special case: email already exists but pending verification
-		if errors.Is(err, fauth.ErrUserAlreadyExists) {
-			// Try to get user to check verification status
-			existingUser, getErr := h.svc.GetByEmail(ctx, req.Email)
-			if getErr == nil && existingUser != nil && existingUser.Status == fauth.UserStatusPendingVerification {
-				handlers.SendJSONWithStatus(ctx, map[string]any{
-					"code":    "email_not_verified",
-					"message": "email already registered but not verified",
-					"data":    map[string]any{"email": req.Email},
-				}, fasthttp.StatusConflict)
-				return
-			}
-		}
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSONWithStatus(ctx, map[string]any{
+	sendJSONWithStatus(ctx, map[string]any{
 		"code":    "0",
 		"message": "user created, verification email sent",
 		"data": map[string]any{
@@ -241,7 +222,7 @@ func (h *AuthHandler) register(ctx *fasthttp.RequestCtx) {
 func (h *AuthHandler) verifyEmail(ctx *fasthttp.RequestCtx) {
 	var req fauth.VerifyEmailRequest
 	if err := readJSONBody(ctx, &req); err != nil {
-		handlers.SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		sendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("%d", fasthttp.StatusBadRequest), err.Error())
 		return
 	}
 	tokens, err := h.svc.VerifyEmail(ctx, req)
@@ -249,7 +230,7 @@ func (h *AuthHandler) verifyEmail(ctx *fasthttp.RequestCtx) {
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -266,7 +247,7 @@ func (h *AuthHandler) resendVerification(ctx *fasthttp.RequestCtx) {
 		Email string `json:"email"`
 	}
 	if err := readJSONBody(ctx, &req); err != nil {
-		handlers.SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		sendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("%d", fasthttp.StatusBadRequest), err.Error())
 		return
 	}
 	err := h.svc.ResendVerificationCode(ctx, req.Email)
@@ -275,7 +256,7 @@ func (h *AuthHandler) resendVerification(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	// Always return success to prevent email enumeration
-	handlers.SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "verification code sent",
 		"data":    map[string]any{"success": true},
@@ -286,26 +267,17 @@ func (h *AuthHandler) resendVerification(ctx *fasthttp.RequestCtx) {
 func (h *AuthHandler) login(ctx *fasthttp.RequestCtx) {
 	var req fauth.LoginRequest
 	if err := readJSONBody(ctx, &req); err != nil {
-		handlers.SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		sendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("%d", fasthttp.StatusBadRequest), err.Error())
 		return
 	}
 	deviceInfo := string(ctx.Request.Header.Peek("User-Agent"))
 	ipAddress := ctx.RemoteAddr().String()
 	tokens, err := h.svc.Login(ctx, req, deviceInfo, ipAddress)
 	if err != nil {
-		// Special case: email_not_verified should include email in response
-		if errors.Is(err, fauth.ErrUserNotVerified) {
-			handlers.SendJSONWithStatus(ctx, map[string]any{
-				"code":    "email_not_verified",
-				"message": "email not verified",
-				"data":    map[string]any{"email": req.Email},
-			}, fasthttp.StatusForbidden)
-			return
-		}
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -320,7 +292,7 @@ func (h *AuthHandler) login(ctx *fasthttp.RequestCtx) {
 func (h *AuthHandler) refreshToken(ctx *fasthttp.RequestCtx) {
 	var req fauth.RefreshTokenRequest
 	if err := readJSONBody(ctx, &req); err != nil {
-		handlers.SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		sendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("%d", fasthttp.StatusBadRequest), err.Error())
 		return
 	}
 	tokens, err := h.svc.RefreshToken(ctx, req)
@@ -328,7 +300,7 @@ func (h *AuthHandler) refreshToken(ctx *fasthttp.RequestCtx) {
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -343,7 +315,7 @@ func (h *AuthHandler) refreshToken(ctx *fasthttp.RequestCtx) {
 func (h *AuthHandler) forgotPassword(ctx *fasthttp.RequestCtx) {
 	var req fauth.ForgotPasswordRequest
 	if err := readJSONBody(ctx, &req); err != nil {
-		handlers.SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		sendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("%d", fasthttp.StatusBadRequest), err.Error())
 		return
 	}
 	err := h.svc.ForgotPassword(ctx, req)
@@ -352,7 +324,7 @@ func (h *AuthHandler) forgotPassword(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	// Always return 200 to prevent email enumeration
-	handlers.SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "if the email is registered, a reset code has been sent",
 		"data":    map[string]any{"success": true},
@@ -363,7 +335,7 @@ func (h *AuthHandler) forgotPassword(ctx *fasthttp.RequestCtx) {
 func (h *AuthHandler) resetPassword(ctx *fasthttp.RequestCtx) {
 	var req fauth.ResetPasswordRequest
 	if err := readJSONBody(ctx, &req); err != nil {
-		handlers.SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		sendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("%d", fasthttp.StatusBadRequest), err.Error())
 		return
 	}
 	err := h.svc.ResetPassword(ctx, req)
@@ -371,7 +343,7 @@ func (h *AuthHandler) resetPassword(ctx *fasthttp.RequestCtx) {
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "password has been reset successfully",
 		"data":    map[string]any{"success": true},
@@ -394,7 +366,7 @@ func (h *AuthHandler) oauthLogin(ctx *fasthttp.RequestCtx) {
 		State string `json:"state"`
 	}
 	if err := readJSONBody(ctx, &body); err != nil {
-		handlers.SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		sendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("%d", fasthttp.StatusBadRequest), err.Error())
 		return
 	}
 	deviceInfo := string(ctx.Request.Header.Peek("User-Agent"))
@@ -409,7 +381,15 @@ func (h *AuthHandler) oauthLogin(ctx *fasthttp.RequestCtx) {
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, tokens)
+	sendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "success",
+		"data": map[string]any{
+			"access_token":  tokens.AccessToken,
+			"refresh_token": tokens.RefreshToken,
+			"expires_at":    tokens.ExpiresAt.Format(time.RFC3339),
+		},
+	})
 }
 
 // GET /api/auth/oauth/{provider}/url
@@ -424,9 +404,13 @@ func (h *AuthHandler) oauthAuthURL(ctx *fasthttp.RequestCtx) {
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, map[string]any{
-		"url":   url,
-		"state": state,
+	sendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "success",
+		"data": map[string]any{
+			"url":   url,
+			"state": state,
+		},
 	})
 }
 
@@ -444,14 +428,20 @@ func (h *AuthHandler) logout(ctx *fasthttp.RequestCtx) {
 	if body.RefreshToken != "" {
 		_ = h.svc.Logout(ctx, body.RefreshToken)
 	}
-	handlers.SendJSON(ctx, map[string]any{"message": "logged out"})
+	sendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "logged out",
+	})
 }
 
 // POST /api/auth/logout-all
 func (h *AuthHandler) logoutAll(ctx *fasthttp.RequestCtx) {
 	uid := userID(ctx)
 	_ = h.svc.LogoutAll(ctx, uid)
-	handlers.SendJSON(ctx, map[string]any{"message": "all sessions revoked"})
+	sendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "all sessions revoked",
+	})
 }
 
 // GET /api/auth/me
@@ -462,7 +452,11 @@ func (h *AuthHandler) getProfile(ctx *fasthttp.RequestCtx) {
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, user)
+	sendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "success",
+		"data":    user,
+	})
 }
 
 // PATCH /api/auth/me
@@ -470,7 +464,7 @@ func (h *AuthHandler) updateProfile(ctx *fasthttp.RequestCtx) {
 	uid := userID(ctx)
 	var req fauth.UpdateProfileRequest
 	if err := readJSONBody(ctx, &req); err != nil {
-		handlers.SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		sendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("%d", fasthttp.StatusBadRequest), err.Error())
 		return
 	}
 	user, err := h.svc.UpdateProfile(ctx, uid, req)
@@ -478,7 +472,11 @@ func (h *AuthHandler) updateProfile(ctx *fasthttp.RequestCtx) {
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, user)
+	sendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "success",
+		"data":    user,
+	})
 }
 
 // POST /api/auth/me/change-email
@@ -486,7 +484,7 @@ func (h *AuthHandler) changeEmail(ctx *fasthttp.RequestCtx) {
 	uid := userID(ctx)
 	var req fauth.ChangeEmailRequest
 	if err := readJSONBody(ctx, &req); err != nil {
-		handlers.SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		sendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("%d", fasthttp.StatusBadRequest), err.Error())
 		return
 	}
 	err := h.svc.ChangeEmail(ctx, uid, req)
@@ -494,7 +492,10 @@ func (h *AuthHandler) changeEmail(ctx *fasthttp.RequestCtx) {
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, map[string]any{"message": "verification code sent to new email"})
+	sendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "verification code sent to new email",
+	})
 }
 
 // POST /api/auth/me/verify-email-change
@@ -502,7 +503,7 @@ func (h *AuthHandler) verifyEmailChange(ctx *fasthttp.RequestCtx) {
 	uid := userID(ctx)
 	var req fauth.VerifyEmailChangeRequest
 	if err := readJSONBody(ctx, &req); err != nil {
-		handlers.SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		sendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("%d", fasthttp.StatusBadRequest), err.Error())
 		return
 	}
 	err := h.svc.VerifyEmailChange(ctx, uid, req)
@@ -510,7 +511,10 @@ func (h *AuthHandler) verifyEmailChange(ctx *fasthttp.RequestCtx) {
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, map[string]any{"message": "email changed successfully"})
+	sendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "email changed successfully",
+	})
 }
 
 // POST /api/auth/me/change-password
@@ -518,7 +522,7 @@ func (h *AuthHandler) changePassword(ctx *fasthttp.RequestCtx) {
 	uid := userID(ctx)
 	var req fauth.ChangePasswordRequest
 	if err := readJSONBody(ctx, &req); err != nil {
-		handlers.SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		sendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("%d", fasthttp.StatusBadRequest), err.Error())
 		return
 	}
 	err := h.svc.ChangePassword(ctx, uid, req)
@@ -526,7 +530,10 @@ func (h *AuthHandler) changePassword(ctx *fasthttp.RequestCtx) {
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, map[string]any{"message": "password changed, all other sessions revoked"})
+	sendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "password changed, all other sessions revoked",
+	})
 }
 
 // POST /api/auth/me/delete-account
@@ -534,7 +541,7 @@ func (h *AuthHandler) deleteAccount(ctx *fasthttp.RequestCtx) {
 	uid := userID(ctx)
 	var req fauth.DeleteAccountRequest
 	if err := readJSONBody(ctx, &req); err != nil {
-		handlers.SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		sendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("%d", fasthttp.StatusBadRequest), err.Error())
 		return
 	}
 	err := h.svc.DeleteAccount(ctx, uid, req)
@@ -542,7 +549,8 @@ func (h *AuthHandler) deleteAccount(ctx *fasthttp.RequestCtx) {
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
+		"code":    "0",
 		"message": "account marked for deletion, you have 30 days to undo",
 	})
 }
@@ -555,7 +563,10 @@ func (h *AuthHandler) undoDeleteAccount(ctx *fasthttp.RequestCtx) {
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, map[string]any{"message": "account restored"})
+	sendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "account restored",
+	})
 }
 
 // GET /api/auth/me/sessions
@@ -566,8 +577,12 @@ func (h *AuthHandler) listSessions(ctx *fasthttp.RequestCtx) {
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, map[string]any{
-		"sessions": sessions,
+	sendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "success",
+		"data": map[string]any{
+			"sessions": sessions,
+		},
 	})
 }
 
@@ -580,5 +595,8 @@ func (h *AuthHandler) revokeSession(ctx *fasthttp.RequestCtx) {
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, map[string]any{"message": "session revoked"})
+	sendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "session revoked",
+	})
 }
