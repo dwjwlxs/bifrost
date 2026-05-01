@@ -3,7 +3,7 @@
  * Covers: auth, user profile, virtual keys, organizations, RBAC.
  * Reuses the shared baseApi from the main store.
  */
-import { baseApi } from "@/lib/store/apis/baseApi";
+import { platformBaseApi } from "./platformBaseApi";
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -210,7 +210,7 @@ export interface PlatformModelPrice {
 
 // ─── API Slice ────────────────────────────────────────────────────
 
-export const platformApi = baseApi.injectEndpoints({
+export const platformApi = platformBaseApi.injectEndpoints({
 	endpoints: (builder) => ({
 		// ── Auth ──
 		platformLogin: builder.mutation<
