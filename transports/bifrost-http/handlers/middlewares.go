@@ -760,10 +760,10 @@ func (m *AuthMiddleware) APIMiddleware() schemas.BifrostHTTPMiddleware {
 		"/api/oauth/callback",
 		"/health",
 
-		"/api/platform/user/register",
-		"/api/platform/user/login",
-		"/api/platform/user/verify-email",
-		"/api/platform/user/resend-verification",
+		"/api/platform/register",
+		"/api/platform/login",
+		"/api/platform/verify",
+		"/api/auth/resend-verification",
 	}
 	whitelistedPrefixes := []string{
 		"/api/oauth/callback",

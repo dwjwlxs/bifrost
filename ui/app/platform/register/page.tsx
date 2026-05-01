@@ -1,13 +1,34 @@
 import { useState } from "react";
-import axios from "axios";
 import { useNavigate, Link } from "@tanstack/react-router";
 import { setToken, setUser, type PlatformUser } from "@/lib/platform/auth";
-import { EmailVerificationDialog } from "@/app/platform/components/email-verification-dialog";
+import { EmailVerificationDialog } from "@/app/platform/components/EmailVerificationDialog";
+import { usePlatformRegisterMutation } from "@/lib/platform/platformApi";
+import type { PlatformUserInfo } from "@/lib/platform/platformApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
+
+// Convert PlatformUserInfo to PlatformUser (handles field name differences)
+function toPlatformUser(info: PlatformUserInfo, extra?: Partial<PlatformUser>): PlatformUser {
+	return {
+		id: info.id,
+		email: info.email,
+		username: info.username,
+		nickname: info.nickname,
+		balance: info.balance,
+		is_admin: info.is_admin,
+		role: info.role,
+		customer_id: info.customer_id,
+		team_id: info.team_id,
+		status: info.status,
+		email_verified: info.is_email_verified,
+		created_at: info.created_at,
+		updated_at: info.updated_at,
+		...extra,
+	};
+}
 
 export default function RegisterPage() {
 	const navigate = useNavigate();
@@ -16,9 +37,10 @@ export default function RegisterPage() {
 	const [password, setPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
 	const [error, setError] = useState("");
-	const [loading, setLoading] = useState(false);
 	const [showVerifyDialog, setShowVerifyDialog] = useState(false);
 	const [verifyEmail, setVerifyEmail] = useState("");
+
+	const [platformRegister, { isLoading: loading }] = usePlatformRegisterMutation();
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -34,30 +56,25 @@ export default function RegisterPage() {
 			return;
 		}
 
-		setLoading(true);
-
 		try {
-			const res = await axios.post("/api/user/register", {
-				email,
-				username,
-				password,
-			});
-			const data = res.data.data;
-			// Handle both old (token+user) and new (requires_verification) response shapes
-			if (data.requires_verification) {
-				toast.success("Registration successful! Please check your email for the verification code.");
-				setVerifyEmail(data.email || email);
+			await platformRegister({ email, username, password }).unwrap();
+			// New API: registration always requires email verification
+			toast.success("Registration successful! Please check your email for verification code.");
+			setVerifyEmail(email);
+			setShowVerifyDialog(true);
+		} catch (err: any) {
+			const errData = err?.data;
+			const errCode = errData?.code;
+			const errMsg: string = errData?.message || err?.message || "Registration failed";
+
+			// Handle email_not_verified case (e.g., re-registering with pending verification)
+			if (errCode === "email_not_verified" || errMsg.toLowerCase().includes("not verified")) {
+				const emailFromErr = errData?.data?.email || email;
+				setVerifyEmail(emailFromErr);
 				setShowVerifyDialog(true);
 			} else {
-				const { token, user } = data;
-				setToken(token);
-				setUser(user);
-				navigate({ to: "/platform/console/dashboard" });
+				setError(errMsg);
 			}
-		} catch (err: any) {
-			setError(err.response?.data?.message || err.message || "Registration failed");
-		} finally {
-			setLoading(false);
 		}
 	};
 
@@ -133,9 +150,10 @@ export default function RegisterPage() {
 				open={showVerifyDialog}
 				onOpenChange={setShowVerifyDialog}
 				email={verifyEmail}
-				onVerified={(token, user) => {
+				onVerified={(token, refreshToken) => {
 					setToken(token);
-					setUser(user as unknown as PlatformUser);
+					// @ts-ignore - internal usage
+					window.__bifrost_refresh_token = refreshToken;
 					navigate({ to: "/platform/console/dashboard" });
 				}}
 			/>

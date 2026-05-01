@@ -3,7 +3,6 @@ import { BifrostErrorResponse } from "@/lib/types/config";
 import { getApiBaseUrl } from "@/lib/utils/port";
 import { createBaseQueryWithRefresh } from "@enterprise/lib/store/utils/baseQueryWithRefresh";
 import { clearOAuthStorage } from "@enterprise/lib/store/utils/tokenManager";
-import { getToken as getPlatformToken } from "@/lib/platform/auth";
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
 // Auth tokens are now stored in HTTP-only cookies (set by server)
@@ -44,12 +43,8 @@ const baseQuery = fetchBaseQuery({
 	credentials: "include",
 	prepareHeaders: async (headers) => {
 		headers.set("Content-Type", "application/json");
-		// Check for platform token first, then traditional token
-		const platformToken = getPlatformToken();
-		const token = platformToken || (await getTokenFromStorage());
-		if (token) {
-			headers.set("Authorization", `Bearer ${token}`);
-		}
+		// Non-enterprise: cookie-based auth via credentials: "include"
+		// Enterprise: handled via tokenManager + refresh logic
 		return headers;
 	},
 });
@@ -68,12 +63,7 @@ const baseQueryWithErrorHandling: typeof baseQueryWithRefresh = async (args: any
 
 		// Handle 401 for non-enterprise (no refresh available)
 		if (error?.status === 401 && !IS_ENTERPRISE) {
-			// Platform pages (/platform/*) use their own JWT-based auth (platform_token
-			// in localStorage). Their beforeLoad guards handle unauthenticated access
-			// independently, so the global 401 redirect must not interfere with them.
-			if (typeof window !== "undefined" && window.location.pathname.startsWith("/platform")) {
-				return result;
-			}
+			// Workspace auth is cookie-based; redirect to root login on 401
 			clearAuthStorage();
 			if (typeof window !== "undefined" && !window.location.pathname.includes("/login")) {
 				window.location.href = "/login";
@@ -173,6 +163,11 @@ export const baseApi = createApi({
 		"AccessProfiles",
 		"BusinessUnits",
 		"PromptDeployments",
+		// Platform API tags
+		"CurrentUser",
+		"Packages",
+		"Balance",
+		"ModelPrices",
 	],
 	endpoints: () => ({}),
 });

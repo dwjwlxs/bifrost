@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"regexp"
 	"strings"
 	"time"
@@ -65,11 +66,26 @@ func NewPlatformAuthHandler(db *gorm.DB, authService fauth.AuthService, configSt
 	}
 }
 
+// platformHandleServiceError maps framework/auth errors to HTTP responses for platform handlers.
+func platformHandleServiceError(ctx *fasthttp.RequestCtx, err error) {
+	switch {
+	case errors.Is(err, fauth.ErrVerificationCodeInvalid):
+		SendError(ctx, fasthttp.StatusBadRequest, "invalid verification code")
+	case errors.Is(err, fauth.ErrVerificationCodeExpired):
+		SendError(ctx, fasthttp.StatusBadRequest, "verification code expired")
+	case errors.Is(err, fauth.ErrVerificationCodeMaxAttempts):
+		SendError(ctx, fasthttp.StatusTooManyRequests, "verification code max attempts exceeded")
+	default:
+		SendError(ctx, fasthttp.StatusInternalServerError, "internal server error")
+	}
+}
+
 // RegisterRoutes registers platform auth routes on the router.
 func (h *PlatformAuthHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.BifrostHTTPMiddleware) {
 	// Public routes (no platform auth required)
 	r.POST("/api/platform/login", lib.ChainMiddlewares(h.login, middlewares...))
 	r.POST("/api/platform/register", lib.ChainMiddlewares(h.register, middlewares...))
+	r.POST("/api/platform/verify", lib.ChainMiddlewares(h.verify, middlewares...))
 	r.POST("/api/platform/refresh-token", lib.ChainMiddlewares(h.refreshToken, middlewares...))
 
 	// Protected routes (platform JWT + auth JWT dual verification)
@@ -277,6 +293,68 @@ func (h *PlatformAuthHandler) register(ctx *fasthttp.RequestCtx) {
 		"data": map[string]any{
 			"user_id": user.ID,
 			"email":   user.Email,
+		},
+	})
+}
+
+// verify handles POST /api/platform/verify
+func (h *PlatformAuthHandler) verify(ctx *fasthttp.RequestCtx) {
+	var req struct {
+		Email string `json:"email"`
+		Code  string `json:"code"`
+	}
+
+	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request format")
+		return
+	}
+
+	if req.Email == "" || req.Code == "" {
+		SendError(ctx, fasthttp.StatusBadRequest, "Email and code are required")
+		return
+	}
+
+	goCtx := context.Background()
+
+	// 1. Call authService.VerifyEmail to get auth token pair
+	tokenPair, err := h.authService.VerifyEmail(goCtx, fauth.VerifyEmailRequest{
+		Email: req.Email,
+		Code:  req.Code,
+	})
+	if err != nil {
+		platformHandleServiceError(ctx, err)
+		return
+	}
+
+	// 2. Extract user_id from the auth JWT
+	jwtClaims, err := h.authService.ValidateAccessToken(goCtx, tokenPair.AccessToken)
+	if err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to validate access token")
+		return
+	}
+
+	userID := jwtClaims.Sub
+	if userID == "" {
+		SendError(ctx, fasthttp.StatusInternalServerError, "Invalid user ID in token")
+		return
+	}
+
+	// 3. Build platform claims and sign platform JWT
+	platformClaims := h.buildPlatformClaimsForUser(userID, tokenPair.AccessToken)
+	platformJWT, err := SignPlatformJWT(platformClaims)
+	if err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to sign platform token")
+		return
+	}
+
+	// 4. Return tokens
+	SendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "success",
+		"data": map[string]any{
+			"access_token":  platformJWT,
+			"refresh_token": tokenPair.RefreshToken,
+			"expires_at":    tokenPair.ExpiresAt.Format(time.RFC3339),
 		},
 	})
 }

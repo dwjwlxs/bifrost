@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/fasthttp/router"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -32,6 +33,7 @@ func (h *AuthHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.Bi
 	// Public endpoints (no auth required)
 	r.POST("/api/auth/register", h.register)
 	r.POST("/api/auth/verify", h.verifyEmail)
+	r.POST("/api/auth/resend-verification", h.resendVerification)
 	r.POST("/api/auth/login", h.login)
 	r.POST("/api/auth/refresh", h.refreshToken)
 	r.POST("/api/auth/forgot-password", h.forgotPassword)
@@ -184,6 +186,15 @@ func mapAuthError(err error) (int, string) {
 // handleServiceError maps a service error to an HTTP response.
 func handleServiceError(ctx *fasthttp.RequestCtx, err error) {
 	code, msg := mapAuthError(err)
+	// Special case: email_not_verified should include email in response
+	if errors.Is(err, fauth.ErrUserNotVerified) {
+		handlers.SendJSONWithStatus(ctx, map[string]any{
+			"code":    "email_not_verified",
+			"message": msg,
+			"data":    map[string]any{"email": ""}, // email set by caller
+		}, code)
+		return
+	}
 	handlers.SendError(ctx, code, msg)
 }
 
@@ -200,12 +211,29 @@ func (h *AuthHandler) register(ctx *fasthttp.RequestCtx) {
 	}
 	user, err := h.svc.Register(ctx, req)
 	if err != nil {
+		// Special case: email already exists but pending verification
+		if errors.Is(err, fauth.ErrUserAlreadyExists) {
+			// Try to get user to check verification status
+			existingUser, getErr := h.svc.GetByEmail(ctx, req.Email)
+			if getErr == nil && existingUser != nil && existingUser.Status == fauth.UserStatusPendingVerification {
+				handlers.SendJSONWithStatus(ctx, map[string]any{
+					"code":    "email_not_verified",
+					"message": "email already registered but not verified",
+					"data":    map[string]any{"email": req.Email},
+				}, fasthttp.StatusConflict)
+				return
+			}
+		}
 		handleServiceError(ctx, err)
 		return
 	}
 	handlers.SendJSONWithStatus(ctx, map[string]any{
+		"code":    "0",
 		"message": "user created, verification email sent",
-		"user":    user,
+		"data": map[string]any{
+			"user_id": user.ID,
+			"email":   user.Email,
+		},
 	}, fasthttp.StatusCreated)
 }
 
@@ -221,7 +249,37 @@ func (h *AuthHandler) verifyEmail(ctx *fasthttp.RequestCtx) {
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, tokens)
+	handlers.SendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "success",
+		"data": map[string]any{
+			"access_token":  tokens.AccessToken,
+			"refresh_token": tokens.RefreshToken,
+			"expires_at":    tokens.ExpiresAt.Format(time.RFC3339),
+		},
+	})
+}
+
+// POST /api/auth/resend-verification
+func (h *AuthHandler) resendVerification(ctx *fasthttp.RequestCtx) {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := readJSONBody(ctx, &req); err != nil {
+		handlers.SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		return
+	}
+	err := h.svc.ResendVerificationCode(ctx, req.Email)
+	if err != nil {
+		handleServiceError(ctx, err)
+		return
+	}
+	// Always return success to prevent email enumeration
+	handlers.SendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "verification code sent",
+		"data":    map[string]any{"success": true},
+	})
 }
 
 // POST /api/auth/login
@@ -235,10 +293,27 @@ func (h *AuthHandler) login(ctx *fasthttp.RequestCtx) {
 	ipAddress := ctx.RemoteAddr().String()
 	tokens, err := h.svc.Login(ctx, req, deviceInfo, ipAddress)
 	if err != nil {
+		// Special case: email_not_verified should include email in response
+		if errors.Is(err, fauth.ErrUserNotVerified) {
+			handlers.SendJSONWithStatus(ctx, map[string]any{
+				"code":    "email_not_verified",
+				"message": "email not verified",
+				"data":    map[string]any{"email": req.Email},
+			}, fasthttp.StatusForbidden)
+			return
+		}
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, tokens)
+	handlers.SendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "success",
+		"data": map[string]any{
+			"access_token":  tokens.AccessToken,
+			"refresh_token": tokens.RefreshToken,
+			"expires_at":    tokens.ExpiresAt.Format(time.RFC3339),
+		},
+	})
 }
 
 // POST /api/auth/refresh
@@ -253,7 +328,15 @@ func (h *AuthHandler) refreshToken(ctx *fasthttp.RequestCtx) {
 		handleServiceError(ctx, err)
 		return
 	}
-	handlers.SendJSON(ctx, tokens)
+	handlers.SendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "success",
+		"data": map[string]any{
+			"access_token":  tokens.AccessToken,
+			"refresh_token": tokens.RefreshToken,
+			"expires_at":    tokens.ExpiresAt.Format(time.RFC3339),
+		},
+	})
 }
 
 // POST /api/auth/forgot-password
@@ -270,7 +353,9 @@ func (h *AuthHandler) forgotPassword(ctx *fasthttp.RequestCtx) {
 	}
 	// Always return 200 to prevent email enumeration
 	handlers.SendJSON(ctx, map[string]any{
+		"code":    "0",
 		"message": "if the email is registered, a reset code has been sent",
+		"data":    map[string]any{"success": true},
 	})
 }
 
@@ -287,7 +372,9 @@ func (h *AuthHandler) resetPassword(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	handlers.SendJSON(ctx, map[string]any{
+		"code":    "0",
 		"message": "password has been reset successfully",
+		"data":    map[string]any{"success": true},
 	})
 }
 

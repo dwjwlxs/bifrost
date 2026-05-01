@@ -1,14 +1,35 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import axios from "axios";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { setToken, setUser } from "@/lib/platform/auth";
+import { setToken, setUser, type PlatformUser } from "@/lib/platform/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mail } from "lucide-react";
+import { usePlatformVerifyEmailMutation, usePlatformResendVerificationMutation } from "@/lib/platform/platformApi";
+import type { PlatformUserInfo } from "@/lib/platform/platformApi";
 
 const CODE_LENGTH = 6;
 const RESEND_COOLDOWN = 30;
+
+// Convert PlatformUserInfo to PlatformUser (handles field name differences)
+function toPlatformUser(info: PlatformUserInfo, extra?: Partial<PlatformUser>): PlatformUser {
+	return {
+		id: info.id,
+		email: info.email,
+		username: info.username,
+		nickname: info.nickname,
+		balance: info.balance,
+		is_admin: info.is_admin,
+		role: info.role,
+		customer_id: info.customer_id,
+		team_id: info.team_id,
+		status: info.status,
+		email_verified: info.is_email_verified,
+		created_at: info.created_at,
+		updated_at: info.updated_at,
+		...extra,
+	};
+}
 
 export default function VerifyEmailPage() {
 	const navigate = useNavigate();
@@ -22,10 +43,12 @@ export default function VerifyEmailPage() {
 
 	const [digits, setDigits] = useState<string[]>(Array(CODE_LENGTH).fill(""));
 	const [error, setError] = useState("");
-	const [loading, setLoading] = useState(false);
 	const [cooldown, setCooldown] = useState(0);
 	const inputRefs = useRef<Array<HTMLInputElement | null>>(Array(CODE_LENGTH).fill(null));
 	const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+	const [verifyEmail, { isLoading: loading }] = usePlatformVerifyEmailMutation();
+	const [resendVerification] = usePlatformResendVerificationMutation();
 
 	// Focus first input on mount
 	useEffect(() => {
@@ -116,18 +139,18 @@ export default function VerifyEmailPage() {
 		e.preventDefault();
 		if (!isComplete) return;
 		setError("");
-		setLoading(true);
 
 		try {
-			const res = await axios.post("/api/user/verify-email", { email, code });
-			const { token, user } = res.data.data;
-			setToken(token);
-			setUser(user);
+			const res = await verifyEmail({ email, code }).unwrap();
+			// New response format: { code, message, data: { access_token, refresh_token, expires_at } }
+			const { access_token, refresh_token } = res.data;
+			setToken(access_token);
+			// Store refresh token for later use
+			// @ts-ignore - internal usage
+			window.__bifrost_refresh_token = refresh_token;
 			navigate({ to: "/platform/console/dashboard" });
 		} catch (err: any) {
-			setError(err.response?.data?.message || err.message || "Verification failed. Please try again.");
-		} finally {
-			setLoading(false);
+			setError(err?.data?.message || err?.message || "Verification failed. Please try again.");
 		}
 	};
 
@@ -136,10 +159,10 @@ export default function VerifyEmailPage() {
 		setError("");
 
 		try {
-			await axios.post("/api/user/resend-verification", { email });
+			await resendVerification({ email }).unwrap();
 			startCooldown();
 		} catch (err: any) {
-			setError(err.response?.data?.message || err.message || "Failed to resend code. Please try again.");
+			setError(err?.data?.message || err?.message || "Failed to resend code. Please try again.");
 		}
 	};
 

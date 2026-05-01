@@ -1,39 +1,66 @@
+import { useSearch } from "@tanstack/react-router";
 import { useState } from "react";
-import axios from "axios";
 import { useNavigate, Link } from "@tanstack/react-router";
-import { setToken, setUser } from "@/lib/platform/auth";
+import { setToken, setUser, type PlatformUser } from "@/lib/platform/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { EmailVerificationDialog } from "@/app/platform/components/email-verification-dialog";
-import type { PlatformUser } from "@/lib/platform/auth";
+import { EmailVerificationDialog } from "@/app/platform/components/EmailVerificationDialog";
+import { usePlatformLoginMutation } from "@/lib/platform/platformApi";
 import type { PlatformUserInfo } from "@/lib/platform/platformApi";
+
+// Convert PlatformUserInfo to PlatformUser (handles field name differences)
+function toPlatformUser(info: PlatformUserInfo, extra?: Partial<PlatformUser>): PlatformUser {
+	return {
+		id: info.id,
+		email: info.email,
+		username: info.username,
+		nickname: info.nickname,
+		balance: info.balance,
+		is_admin: info.is_admin,
+		role: info.role,
+		customer_id: info.customer_id,
+		team_id: info.team_id,
+		status: info.status,
+		email_verified: info.is_email_verified,
+		created_at: info.created_at,
+		updated_at: info.updated_at,
+		...extra,
+	};
+}
 
 export default function LoginPage() {
 	const navigate = useNavigate();
+	const searchParams = useSearch({ from: "/platform/login" });
+	const redirect = (searchParams as { redirect?: string }).redirect;
 	const [login, setLogin] = useState("");
 	const [password, setPassword] = useState("");
 	const [error, setError] = useState("");
-	const [loading, setLoading] = useState(false);
 	const [showVerifyDialog, setShowVerifyDialog] = useState(false);
 	const [verifyEmail, setVerifyEmail] = useState("");
+
+	const [platformLogin, { isLoading: loading }] = usePlatformLoginMutation();
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setError("");
-		setLoading(true);
 
 		try {
-			const res = await axios.post("/api/user/login", { login, password });
-			const { token, user } = res.data.data;
-			setToken(token);
-			setUser(user);
-			navigate({ to: "/platform/console/dashboard" });
+			const res = await platformLogin({ login, password }).unwrap();
+			// New response format: { code, message, data: { access_token, refresh_token, expires_at } }
+			const { access_token, refresh_token } = res.data;
+			setToken(access_token);
+			// Store refresh token in memory (not localStorage for security)
+			// @ts-ignore - internal usage
+			window.__bifrost_refresh_token = refresh_token;
+			// For login success, we don't have full user info, redirect to dashboard which fetches profile
+			const redirectTo = redirect && redirect.startsWith("/") ? redirect : "/platform/console/dashboard";
+			navigate({ to: redirectTo });
 		} catch (err: any) {
-			const errData = err.response?.data;
+			const errData = err?.data;
 			const errCode = errData?.code;
-			const errMsg: string = errData?.message || err.message || "Login failed";
+			const errMsg: string = errData?.message || err?.message || "Login failed";
 
 			if (
 				errCode === "email_not_verified" ||
@@ -46,8 +73,6 @@ export default function LoginPage() {
 			} else {
 				setError(errMsg);
 			}
-		} finally {
-			setLoading(false);
 		}
 	};
 
@@ -99,10 +124,13 @@ export default function LoginPage() {
 				open={showVerifyDialog}
 				onOpenChange={setShowVerifyDialog}
 				email={verifyEmail}
-				onVerified={(token: string, user: PlatformUserInfo) => {
+				onVerified={(token: string, refreshToken: string) => {
 					setToken(token);
-					setUser(user as unknown as PlatformUser);
-					navigate({ to: "/platform/console/dashboard" });
+					// Store refresh token for later use
+					// @ts-ignore - internal usage
+					window.__bifrost_refresh_token = refreshToken;
+					const redirectTo = redirect && redirect.startsWith("/") ? redirect : "/platform/console/dashboard";
+					navigate({ to: redirectTo });
 				}}
 			/>
 		</div>
