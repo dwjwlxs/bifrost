@@ -163,11 +163,6 @@ export const baseApi = createApi({
 		"AccessProfiles",
 		"BusinessUnits",
 		"PromptDeployments",
-		// Platform API tags
-		"CurrentUser",
-		"Packages",
-		"Balance",
-		"ModelPrices",
 	],
 	endpoints: () => ({}),
 });
