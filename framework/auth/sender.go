@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"text/template"
 
+	bifrost "github.com/maximhq/bifrost/core"
+	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/email"
 )
 
@@ -31,12 +33,14 @@ type InviteData struct {
 
 // NoopMessageSender is a no-op sender that discards codes (for testing).
 type NoopMessageSender struct {
-	Codes map[string]string
+	Codes  map[string]string
+	logger schemas.Logger
 }
 
-func NewNoopMessageSender() *NoopMessageSender {
+func NewNoopMessageSender(logger schemas.Logger) *NoopMessageSender {
 	return &NoopMessageSender{
-		Codes: make(map[string]string),
+		Codes:  make(map[string]string),
+		logger: logger,
 	}
 }
 
@@ -46,6 +50,7 @@ func (n *NoopMessageSender) SendVerificationCode(_ context.Context, to string, _
 	if n.Codes != nil {
 		n.Codes[to] = code
 	}
+	n.logger.Info("Sending verification code %s to %s", code, to)
 	return nil
 }
 
@@ -54,8 +59,11 @@ func (n *NoopMessageSender) SendInvite(_, _ string, _ InviteData) error {
 }
 
 // NewMessageSender creates a new email sender with the given config.
-func NewMessageSender(config email.Config) MessageSender {
-	return newEmailMessageSender(config)
+func NewMessageSender(config email.Config, logger schemas.Logger) MessageSender {
+	if config.Host == "" || config.Password == "" {
+		return NewNoopMessageSender(logger)
+	}
+	return newEmailMessageSender(config, logger)
 }
 
 // NewDefaultSender creates a real email sender with localhost:25 defaults.
@@ -66,18 +74,20 @@ func NewDefaultSender() MessageSender {
 		Host: "localhost",
 		Port: 25,
 		From: "noreply@localhost",
-	})
+	}, bifrost.NewNoOpLogger())
 }
 
 type EmailMessageSender struct {
 	config email.Config
 	sender email.Sender
+	logger schemas.Logger
 }
 
-func newEmailMessageSender(conf email.Config) MessageSender {
+func newEmailMessageSender(conf email.Config, logger schemas.Logger) MessageSender {
 	return &EmailMessageSender{
 		config: conf,
 		sender: email.NewSender(conf),
+		logger: logger,
 	}
 }
 
@@ -92,6 +102,7 @@ func (s *EmailMessageSender) SendVerificationCode(ctx context.Context, recipient
 	if err != nil {
 		return err
 	}
+	s.logger.Debug("send verify_code %s to %s", code, recipient)
 
 	subject := ""
 	switch codeType {

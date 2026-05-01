@@ -23,9 +23,9 @@ func NewTokenGenerator(jwtManager JWTManager, config *Config) *TokenGenerator {
 // GenerateTokenPair creates a new access token + refresh token pair.
 // The refresh token is an opaque random string; the caller is responsible for
 // storing the session record with the SHA-256 hash of the refresh token.
-func (g *TokenGenerator) GenerateTokenPair(userID, sessionID string) (*TokenPair, error) {
+func (g *TokenGenerator) GenerateTokenPair(user *User, sessionID string) (*TokenPair, error) {
 	// Generate access token (JWT)
-	accessToken, expiresAt, err := g.jwtManager.Sign(userID, sessionID, g.config.AccessTokenTTL)
+	accessToken, expiresAt, err := g.jwtManager.Sign(user, sessionID, g.config.AccessTokenTTL)
 	if err != nil {
 		return nil, fmt.Errorf("auth: failed to generate access token: %w", err)
 	}

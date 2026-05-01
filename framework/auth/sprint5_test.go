@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/framework/auth"
 )
 
@@ -118,7 +119,7 @@ func TestUndoDeleteAccountNotFound(t *testing.T) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := auth.NewNoopMessageSender()
+	sender := auth.NewNoopMessageSender(bifrost.NewNoOpLogger())
 	svc, err := auth.NewAuthService(config, store, sender, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
@@ -168,7 +169,7 @@ func TestCleanupExpiredDeletions(t *testing.T) {
 	config.AccountDeletionCoolDown = 1 * time.Millisecond // Very short for testing
 
 	store := auth.NewMemoryStoreFactory()
-	sender := auth.NewNoopMessageSender()
+	sender := auth.NewNoopMessageSender(bifrost.NewNoOpLogger())
 	svc, err := auth.NewAuthService(config, store, sender, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
@@ -231,7 +232,7 @@ func TestRotatingJWTManagerSignAndVerify(t *testing.T) {
 	}
 
 	// Sign a token
-	token, expires, err := rm.Sign("user-123", "session-456", 15*time.Minute)
+	token, expires, err := rm.Sign(&auth.User{ID: "user-123"}, "session-456", 15*time.Minute)
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
@@ -295,9 +296,9 @@ func TestRotatingJWTManagerGetKid(t *testing.T) {
 
 func TestRotatingJWTManagerMultipleKeysInJWKS(t *testing.T) {
 	config := &auth.KeyRotationConfig{
-		KeyTTL:            1 * time.Hour,
-		RotationInterval:  1 * time.Millisecond, // Very short to trigger rotation quickly
-		GracePeriod:       1 * time.Hour,
+		KeyTTL:           1 * time.Hour,
+		RotationInterval: 1 * time.Millisecond, // Very short to trigger rotation quickly
+		GracePeriod:      1 * time.Hour,
 	}
 
 	rm, err := auth.NewRotatingJWTManager("", "test-issuer", "test-audience", config)
@@ -309,7 +310,7 @@ func TestRotatingJWTManagerMultipleKeysInJWKS(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Sign a new token (should trigger rotation if enough time passed)
-	token, _, err := rm.Sign("user-123", "session-456", 15*time.Minute)
+	token, _, err := rm.Sign(&auth.User{ID: "user-123"}, "session-456", 15*time.Minute)
 	if err != nil {
 		t.Fatalf("Sign after rotation: %v", err)
 	}

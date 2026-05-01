@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dropdownMenu";
 import { ThemeProvider } from "@/components/themeProvider";
 import { ReduxProvider } from "@/lib/store";
-import { getUser, clearToken, type PlatformUser } from "@/lib/platform/auth";
+import { getUser, getToken, clearToken, type PlatformUserInfo } from "@/lib/platform/auth";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { LogOut, User, ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -25,20 +25,21 @@ const publicNavItems = [
 
 /**
  * Unified platform header.
- * Automatically switches between public marketing nav and console nav
- * based on the current route.
+ * Reads user from localStorage synchronously on every render — no stale state.
+ * Re-renders when pathname changes (navigation) or token changes (login/logout).
  */
 export function PlatformHeader() {
 	const pathname = useLocation({ select: (l) => l.pathname });
 	const navigate = useNavigate();
-	const [user, setUser] = useState<PlatformUser | null>(null);
 
-	useEffect(() => {
-		setUser(getUser());
-	}, [pathname]);
+	// Synchronous localStorage read — always fresh
+	const user = getUser();
 
 	const isConsole = pathname.startsWith("/platform/console");
-	const isLoginOrRegister = pathname === "/platform/login" || pathname === "/platform/register" || pathname === "/platform/verify-email";
+	const isLoginOrRegister =
+		pathname === "/platform/login" ||
+		pathname === "/platform/register" ||
+		pathname === "/platform/verify-email";
 
 	// On login/register pages, show a minimal header
 	if (isLoginOrRegister) {
@@ -195,15 +196,20 @@ function ConsoleLayout({ children, isAdmin }: { children: React.ReactNode; isAdm
 /**
  * Lightweight wrapper — ThemeProvider + Toaster + Redux + unified header.
  * Used by /platform root layout for ALL pages (public + console).
+ *
+ * Re-renders when pathname or token changes so user state stays in sync
+ * with localStorage across login/logout/navigation.
  */
 export function PlatformProviders({ children }: { children: React.ReactNode }) {
 	const pathname = useLocation({ select: (l) => l.pathname });
-	const [user, setUser] = useState<PlatformUser | null>(null);
+	// Track token to re-render on auth state changes (login/logout)
+	const [token, setToken] = useState<string | null>(null);
 
 	useEffect(() => {
-		setUser(getUser());
-	}, [pathname]);
+		setToken(getToken());
+	}, []);
 
+	const user = token ? getUser() : null;
 	const isConsole = pathname.startsWith("/platform/console");
 
 	return (

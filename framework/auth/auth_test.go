@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/framework/auth"
 )
 
@@ -14,7 +15,7 @@ func TestRegisterAndLogin(t *testing.T) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := auth.NewNoopMessageSender()
+	sender := auth.NewNoopMessageSender(bifrost.NewNoOpLogger())
 	svc, err := auth.NewAuthService(config, store, sender, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
@@ -104,7 +105,7 @@ func TestJWTSigningAndVerification(t *testing.T) {
 	ttl := 15 * time.Minute
 
 	// Sign
-	token, expiresAt, err := jwtMgr.Sign(userID, sessionID, ttl)
+	token, expiresAt, err := jwtMgr.Sign(&auth.User{ID: userID}, sessionID, ttl)
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
@@ -235,7 +236,7 @@ func TestFullRegisterVerifyLoginFlow(t *testing.T) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := auth.NewNoopMessageSender()
+	sender := auth.NewNoopMessageSender(bifrost.NewNoOpLogger())
 	svc, err := auth.NewAuthService(config, store, sender, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
@@ -346,7 +347,7 @@ func TestLogout(t *testing.T) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := auth.NewNoopMessageSender()
+	sender := auth.NewNoopMessageSender(bifrost.NewNoOpLogger())
 	svc, err := auth.NewAuthService(config, store, sender, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
@@ -439,7 +440,7 @@ func TestLoginRateLimiting(t *testing.T) {
 	config.LoginMaxAttempts = 3 // Lock after 3 failed attempts
 
 	store := auth.NewMemoryStoreFactory()
-	sender := auth.NewNoopMessageSender()
+	sender := auth.NewNoopMessageSender(bifrost.NewNoOpLogger())
 	rateLimiter := &auth.NoopRateLimiter{}
 	svc, err := auth.NewAuthService(config, store, sender, rateLimiter)
 	if err != nil {
@@ -498,7 +499,7 @@ func TestForgotAndResetPassword(t *testing.T) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := auth.NewNoopMessageSender()
+	sender := auth.NewNoopMessageSender(bifrost.NewNoOpLogger())
 	svc, err := auth.NewAuthService(config, store, sender, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
@@ -571,7 +572,7 @@ func TestForgotAndResetPassword(t *testing.T) {
 func TestForgotPasswordEmailNotFound(t *testing.T) {
 	config := auth.DefaultConfig()
 	store := auth.NewMemoryStoreFactory()
-	sender := auth.NewNoopMessageSender()
+	sender := auth.NewNoopMessageSender(bifrost.NewNoOpLogger())
 	svc, err := auth.NewAuthService(config, store, sender, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
@@ -595,7 +596,7 @@ func TestResetPasswordTooShort(t *testing.T) {
 	config := auth.DefaultConfig()
 	config.PasswordMinLength = 8
 	store := auth.NewMemoryStoreFactory()
-	sender := auth.NewNoopMessageSender()
+	sender := auth.NewNoopMessageSender(bifrost.NewNoOpLogger())
 	svc, err := auth.NewAuthService(config, store, sender, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
@@ -735,7 +736,7 @@ func TestPasswordResetAllSessionsRevoked(t *testing.T) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := auth.NewNoopMessageSender()
+	sender := auth.NewNoopMessageSender(bifrost.NewNoOpLogger())
 	svc, err := auth.NewAuthService(config, store, sender, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)

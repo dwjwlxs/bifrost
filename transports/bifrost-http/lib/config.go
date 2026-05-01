@@ -25,11 +25,12 @@ import (
 	"github.com/maximhq/bifrost/core/mcp"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework"
+	fauth "github.com/maximhq/bifrost/framework/auth"
 	"github.com/maximhq/bifrost/framework/configstore"
 	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
+	femail "github.com/maximhq/bifrost/framework/email"
 	"github.com/maximhq/bifrost/framework/encrypt"
 	"github.com/maximhq/bifrost/framework/envutils"
-	fauth "github.com/maximhq/bifrost/framework/auth"
 	"github.com/maximhq/bifrost/framework/kvstore"
 	"github.com/maximhq/bifrost/framework/logstore"
 	"github.com/maximhq/bifrost/framework/mcpcatalog"
@@ -128,20 +129,22 @@ type ConfigData struct {
 	// from config.json. Omitting this field or setting it to 2 uses v1.5.0+ semantics:
 	// empty = deny all, ["*"] = allow all. Setting it to 1 restores v1.4.x semantics:
 	// empty = allow all (equivalent to ["*"]).
-	Version           int                                   `json:"version,omitempty"`
-	Client            *configstore.ClientConfig             `json:"client"`
-	EncryptionKey     *schemas.EnvVar                       `json:"encryption_key"`
+	Version       int                       `json:"version,omitempty"`
+	Client        *configstore.ClientConfig `json:"client"`
+	EncryptionKey *schemas.EnvVar           `json:"encryption_key"`
 	// Deprecated: Use GovernanceConfig.AuthConfig instead
-	AuthConfig        *configstore.AuthConfig               `json:"auth_config,omitempty"`
-	Providers         map[string]configstore.ProviderConfig `json:"providers"`
-	FrameworkConfig   *framework.FrameworkConfig            `json:"framework,omitempty"`
-	MCP               *schemas.MCPConfig                    `json:"mcp,omitempty"`
-	Governance        *configstore.GovernanceConfig         `json:"governance,omitempty"`
-	VectorStoreConfig *vectorstore.Config                   `json:"vector_store,omitempty"`
-	ConfigStoreConfig *configstore.Config                   `json:"config_store,omitempty"`
-	LogsStoreConfig   *logstore.Config                      `json:"logs_store,omitempty"`
-	Plugins           []*schemas.PluginConfig               `json:"plugins,omitempty"`
-	WebSocket         *schemas.WebSocketConfig              `json:"websocket,omitempty"`
+	AuthConfig         *configstore.AuthConfig               `json:"auth_config,omitempty"`
+	Providers          map[string]configstore.ProviderConfig `json:"providers"`
+	FrameworkConfig    *framework.FrameworkConfig            `json:"framework,omitempty"`
+	MCP                *schemas.MCPConfig                    `json:"mcp,omitempty"`
+	Governance         *configstore.GovernanceConfig         `json:"governance,omitempty"`
+	VectorStoreConfig  *vectorstore.Config                   `json:"vector_store,omitempty"`
+	ConfigStoreConfig  *configstore.Config                   `json:"config_store,omitempty"`
+	LogsStoreConfig    *logstore.Config                      `json:"logs_store,omitempty"`
+	Plugins            []*schemas.PluginConfig               `json:"plugins,omitempty"`
+	WebSocket          *schemas.WebSocketConfig              `json:"websocket,omitempty"`
+	EmailConfig        *EmailConfigData                      `json:"email_config,omitempty"`
+	ConsumerAuthConfig *ConsumerAuthConfigData               `json:"consumer_auth_config,omitempty"`
 }
 
 // UnmarshalJSON unmarshals the ConfigData from JSON using internal unmarshallers
@@ -150,19 +153,21 @@ type ConfigData struct {
 func (cd *ConfigData) UnmarshalJSON(data []byte) error {
 	// First, unmarshal into a temporary struct to get all fields except the complex configs
 	type TempConfigData struct {
-		Version           int                                   `json:"version,omitempty"`
-		FrameworkConfig   json.RawMessage                       `json:"framework,omitempty"`
-		Client            *configstore.ClientConfig             `json:"client"`
-		EncryptionKey     *schemas.EnvVar                       `json:"encryption_key"`
-		AuthConfig        *configstore.AuthConfig               `json:"auth_config,omitempty"`
-		Providers         map[string]configstore.ProviderConfig `json:"providers"`
-		MCP               *schemas.MCPConfig                    `json:"mcp,omitempty"`
-		Governance        *configstore.GovernanceConfig         `json:"governance,omitempty"`
-		VectorStoreConfig json.RawMessage                       `json:"vector_store,omitempty"`
-		ConfigStoreConfig json.RawMessage                       `json:"config_store,omitempty"`
-		LogsStoreConfig   json.RawMessage                       `json:"logs_store,omitempty"`
-		Plugins           []*schemas.PluginConfig               `json:"plugins,omitempty"`
-		WebSocket         *schemas.WebSocketConfig              `json:"websocket,omitempty"`
+		Version            int                                   `json:"version,omitempty"`
+		FrameworkConfig    json.RawMessage                       `json:"framework,omitempty"`
+		Client             *configstore.ClientConfig             `json:"client"`
+		EncryptionKey      *schemas.EnvVar                       `json:"encryption_key"`
+		AuthConfig         *configstore.AuthConfig               `json:"auth_config,omitempty"`
+		Providers          map[string]configstore.ProviderConfig `json:"providers"`
+		MCP                *schemas.MCPConfig                    `json:"mcp,omitempty"`
+		Governance         *configstore.GovernanceConfig         `json:"governance,omitempty"`
+		VectorStoreConfig  json.RawMessage                       `json:"vector_store,omitempty"`
+		ConfigStoreConfig  json.RawMessage                       `json:"config_store,omitempty"`
+		LogsStoreConfig    json.RawMessage                       `json:"logs_store,omitempty"`
+		Plugins            []*schemas.PluginConfig               `json:"plugins,omitempty"`
+		WebSocket          *schemas.WebSocketConfig              `json:"websocket,omitempty"`
+		EmailConfig        json.RawMessage                       `json:"email_config,omitempty"`
+		ConsumerAuthConfig json.RawMessage                       `json:"consumer_auth_config,omitempty"`
 	}
 
 	var temp TempConfigData
@@ -220,6 +225,24 @@ func (cd *ConfigData) UnmarshalJSON(data []byte) error {
 		}
 		cd.LogsStoreConfig = &logsStoreConfig
 	}
+
+	// Parse ConsumerAuthConfig
+	if len(temp.ConsumerAuthConfig) > 0 {
+		var consumerAuthConfig ConsumerAuthConfigData
+		if err := json.Unmarshal(temp.ConsumerAuthConfig, &consumerAuthConfig); err != nil {
+			return fmt.Errorf("failed to unmarshal consumer auth config: %w", err)
+		}
+		cd.ConsumerAuthConfig = &consumerAuthConfig
+	}
+
+	// Parse top-level email config (reused by consumer auth)
+	if len(temp.EmailConfig) > 0 {
+		var emailCfg EmailConfigData
+		if err := json.Unmarshal(temp.EmailConfig, &emailCfg); err != nil {
+			return fmt.Errorf("failed to unmarshal email config: %w", err)
+		}
+		cd.EmailConfig = &emailCfg
+	}
 	return nil
 }
 
@@ -243,6 +266,7 @@ type Config struct {
 
 	// Stores
 	ConfigStore configstore.ConfigStore
+	AuthDB      *gorm.DB // Shared database handle for auth store (set during initStores)
 	VectorStore vectorstore.VectorStore
 	LogsStore   logstore.LogStore
 
@@ -526,6 +550,10 @@ func LoadConfig(ctx context.Context, configDirPath string) (*Config, error) {
 	loadGovernanceConfig(ctx, config, &configData)
 	// 8. Auth config
 	loadAuthConfig(ctx, config, &configData)
+	// 8b. Consumer auth service (C-end user accounts)
+	if err := loadConsumerAuthConfig(ctx, config, &configData); err != nil {
+		return nil, fmt.Errorf("failed to load consumer auth config: %w", err)
+	}
 	// 9. Plugins
 	loadPlugins(ctx, config, &configData)
 	// 10. Framework config and pricing manager
@@ -571,6 +599,13 @@ func initStores(ctx context.Context, config *Config, configData *ConfigData, con
 		logger.Info("config store initialized (default SQLite)")
 	}
 	// else: ConfigStoreConfig is present but Enabled == false — leave ConfigStore nil
+
+	// Extract shared DB handle from config store for use by other stores (e.g. auth).
+	// RDBConfigStore is the concrete type returned by NewConfigStore for SQL backends.
+	type rdbStore interface{ DB() *gorm.DB }
+	if rdb, ok := config.ConfigStore.(rdbStore); ok {
+		config.AuthDB = rdb.DB()
+	}
 
 	// Clear restart required flag on server startup
 	if config.ConfigStore != nil {
@@ -1800,6 +1835,225 @@ func preserveEnvVar(source *schemas.EnvVar, value string) *schemas.EnvVar {
 		EnvVar:  source.EnvVar,
 		FromEnv: source.FromEnv,
 	}
+}
+
+// ConsumerAuthConfigData mirrors the JSON structure of consumer_auth_config.
+// String fields for durations (e.g. "15m", "30d") are parsed into time.Duration
+// when building the internal fauth.Config.
+type ConsumerAuthConfigData struct {
+	IsEnabled bool `json:"is_enabled"`
+
+	JWT *ConsumerAuthJWTConfig `json:"jwt,omitempty"`
+
+	// Token / password / verification code / rate limit settings
+	AccessTokenTTL          string `json:"access_token_ttl,omitempty"`
+	RefreshTokenTTL         string `json:"refresh_token_ttl,omitempty"`
+	PasswordMinLength       int    `json:"password_min_length,omitempty"`
+	VerificationCodeLength  int    `json:"verification_code_length,omitempty"`
+	VerificationCodeTTL     string `json:"verification_code_ttl,omitempty"`
+	VerificationMaxAttempts int    `json:"verification_max_attempts,omitempty"`
+	LoginMaxAttempts        int    `json:"login_max_attempts,omitempty"`
+	LoginLockoutDuration    string `json:"login_lockout_duration,omitempty"`
+	RegisterRateLimitPerIP  int    `json:"register_rate_limit_per_ip,omitempty"`
+	RegisterRateLimitWindow string `json:"register_rate_limit_window,omitempty"`
+	AccountDeletionCoolDown string `json:"account_deletion_cool_down,omitempty"`
+
+	KeyRotation *ConsumerAuthKeyRotationConfig `json:"key_rotation,omitempty"`
+	OAuth       *ConsumerAuthOAuthConfig       `json:"oauth,omitempty"`
+}
+
+type ConsumerAuthJWTConfig struct {
+	Issuer   string                     `json:"issuer,omitempty"`
+	Audience string                     `json:"audience,omitempty"`
+	KeyPair  *ConsumerAuthKeyPairConfig `json:"key_pair,omitempty"`
+}
+
+type ConsumerAuthKeyPairConfig struct {
+	PrivateKeyPEM string `json:"private_key_pem,omitempty"`
+	PublicKeyPEM  string `json:"public_key_pem,omitempty"`
+}
+
+type ConsumerAuthKeyRotationConfig struct {
+	KeyTTL           string `json:"key_ttl,omitempty"`
+	RotationInterval string `json:"rotation_interval,omitempty"`
+	GracePeriod      string `json:"grace_period,omitempty"`
+}
+
+type ConsumerAuthOAuthConfig struct {
+	Wechat *ConsumerAuthWechatConfig `json:"wechat,omitempty"`
+}
+
+type ConsumerAuthWechatConfig struct {
+	Enabled     bool   `json:"enabled"`
+	AppID       string `json:"app_id,omitempty"`
+	AppSecret   string `json:"app_secret,omitempty"`
+	RedirectURI string `json:"redirect_uri,omitempty"`
+}
+
+type EmailConfigData struct {
+	Host     string `json:"host,omitempty"`
+	Port     int    `json:"port,omitempty"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+	From     string `json:"from,omitempty"`
+	UseTLS   bool   `json:"use_tls,omitempty"`
+	UseSSL   bool   `json:"use_ssl,omitempty"`
+	AppURL   string `json:"app_url,omitempty"`
+}
+
+// loadConsumerAuthConfig initializes the consumer auth service from config.
+// Returns nil (no error) if consumer_auth_config is absent or is_enabled=false;
+// in that case ConsumerAuthService remains nil and platform auth routes are skipped.
+// Requires config.ConfigDB to be set (populated during initStores step).
+func loadConsumerAuthConfig(ctx context.Context, cfg *Config, configData *ConfigData) error {
+	if configData.ConsumerAuthConfig == nil || !configData.ConsumerAuthConfig.IsEnabled {
+		return nil // Not configured — platform auth disabled
+	}
+	if cfg.AuthDB == nil {
+		return fmt.Errorf("config store DB is required for consumer auth but is nil")
+	}
+
+	data := configData.ConsumerAuthConfig
+
+	// Build fauth.Config
+	authCfg := fauth.DefaultConfig()
+	if data.JWT != nil {
+		if data.JWT.Issuer != "" {
+			authCfg.JWTIssuer = data.JWT.Issuer
+		}
+		if data.JWT.Audience != "" {
+			authCfg.JWTAudience = data.JWT.Audience
+		}
+		if data.JWT.KeyPair != nil && data.JWT.KeyPair.PrivateKeyPEM != "" && data.JWT.KeyPair.PublicKeyPEM != "" {
+			authCfg.JWKSKeyPair = &fauth.JWKSKeyPairConfig{
+				PrivateKeyPEM: data.JWT.KeyPair.PrivateKeyPEM,
+				PublicKeyPEM:  data.JWT.KeyPair.PublicKeyPEM,
+			}
+		}
+	}
+
+	// Override defaults with explicit config values
+	if data.AccessTokenTTL != "" {
+		if d, err := time.ParseDuration(data.AccessTokenTTL); err == nil {
+			authCfg.AccessTokenTTL = d
+		}
+	}
+	if data.RefreshTokenTTL != "" {
+		if d, err := time.ParseDuration(data.RefreshTokenTTL); err == nil {
+			authCfg.RefreshTokenTTL = d
+		}
+	}
+	if data.PasswordMinLength > 0 {
+		authCfg.PasswordMinLength = data.PasswordMinLength
+	}
+	if data.VerificationCodeLength > 0 {
+		authCfg.VerificationCodeLength = data.VerificationCodeLength
+	}
+	if data.VerificationCodeTTL != "" {
+		if d, err := time.ParseDuration(data.VerificationCodeTTL); err == nil {
+			authCfg.VerificationCodeTTL = d
+		}
+	}
+	if data.VerificationMaxAttempts > 0 {
+		authCfg.VerificationMaxAttempts = data.VerificationMaxAttempts
+	}
+	if data.LoginMaxAttempts > 0 {
+		authCfg.LoginMaxAttempts = data.LoginMaxAttempts
+	}
+	if data.LoginLockoutDuration != "" {
+		if d, err := time.ParseDuration(data.LoginLockoutDuration); err == nil {
+			authCfg.LoginLockoutDuration = d
+		}
+	}
+	if data.RegisterRateLimitPerIP > 0 {
+		authCfg.RegisterRateLimitPerIP = data.RegisterRateLimitPerIP
+	}
+	if data.RegisterRateLimitWindow != "" {
+		if d, err := time.ParseDuration(data.RegisterRateLimitWindow); err == nil {
+			authCfg.RegisterRateLimitWindow = d
+		}
+	}
+	if data.AccountDeletionCoolDown != "" {
+		if d, err := time.ParseDuration(data.AccountDeletionCoolDown); err == nil {
+			authCfg.AccountDeletionCoolDown = d
+		}
+	}
+
+	// Key rotation
+	if data.KeyRotation != nil {
+		krc := &fauth.KeyRotationConfig{}
+		if data.KeyRotation.KeyTTL != "" {
+			if d, err := time.ParseDuration(data.KeyRotation.KeyTTL); err == nil {
+				krc.KeyTTL = d
+			}
+		}
+		if data.KeyRotation.RotationInterval != "" {
+			if d, err := time.ParseDuration(data.KeyRotation.RotationInterval); err == nil {
+				krc.RotationInterval = d
+			}
+		}
+		if data.KeyRotation.GracePeriod != "" {
+			if d, err := time.ParseDuration(data.KeyRotation.GracePeriod); err == nil {
+				krc.GracePeriod = d
+			}
+		}
+		authCfg.KeyRotation = krc
+	}
+
+	// OAuth
+	if data.OAuth != nil && data.OAuth.Wechat != nil {
+		wc := data.OAuth.Wechat
+		authCfg.OAuth = &fauth.OAuthConfig{
+			Wechat: &fauth.WechatOAuthConfig{
+				Enabled:     wc.Enabled,
+				AppID:       wc.AppID,
+				AppSecret:   wc.AppSecret,
+				RedirectURI: wc.RedirectURI,
+			},
+		}
+	}
+
+	// Build message sender (uses top-level email config, also used by consumer auth)
+	var emailCfg femail.Config
+	if configData.EmailConfig != nil && configData.EmailConfig.Host != "" {
+		emailCfg = femail.Config{
+			Host:     configData.EmailConfig.Host,
+			Port:     configData.EmailConfig.Port,
+			Username: configData.EmailConfig.Username,
+			Password: configData.EmailConfig.Password,
+			From:     configData.EmailConfig.From,
+			UseTLS:   configData.EmailConfig.UseTLS,
+			UseSSL:   configData.EmailConfig.UseSSL,
+			AppURL:   configData.EmailConfig.AppURL,
+		}
+	}
+
+	// Load OAuth from env (overrides config file values)
+	authCfg.LoadOAuthConfigFromEnv()
+
+	// Run auth migrations to create tables
+	if err := fauth.Migrate(ctx, cfg.AuthDB); err != nil {
+		return fmt.Errorf("failed to run auth migrations: %w", err)
+	}
+
+	// Build store factory
+	storeFactory := fauth.NewGormStoreFactory(cfg.AuthDB)
+
+	// Build message sender
+	codeSender := fauth.NewMessageSender(emailCfg, logger)
+
+	// Rate limiter (in-memory noop for now; redis-backed can be added later)
+	rateLimiter := &fauth.NoopRateLimiter{}
+
+	// Create auth service
+	authService, err := fauth.NewAuthService(authCfg, storeFactory, codeSender, rateLimiter)
+	if err != nil {
+		return fmt.Errorf("failed to create consumer auth service: %w", err)
+	}
+
+	cfg.ConsumerAuthService = authService
+	logger.Info("consumer auth service initialized")
+	return nil
 }
 
 // loadAuthConfig loads auth config from file.

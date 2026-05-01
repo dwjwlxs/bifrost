@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pkg/errors"
 )
 
 // AuthService defines the public interface for consumer authentication.
@@ -189,7 +190,7 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (*User, err
 
 	// Check if email already exists
 	existingUser, err := s.store.UserRepo().GetByEmail(ctx, email)
-	if err != nil {
+	if err != nil && err != ErrUserNotFound {
 		return nil, fmt.Errorf("auth: failed to check email: %w", err)
 	}
 	if existingUser != nil {
@@ -206,7 +207,11 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (*User, err
 	}
 
 	now := time.Now()
-	userID := uuid.New().String()
+	_userID, err := uuid.NewV7()
+	if err != nil {
+		return nil, errors.Wrap(ErrUserIDAllocation, err.Error())
+	}
+	userID := _userID.String()
 	user := &User{
 		ID:              userID,
 		Email:           req.Email,
@@ -272,7 +277,7 @@ func (s *service) VerifyEmail(ctx context.Context, req VerifyEmailRequest) (*Tok
 
 	// Issue token pair
 	sessionID := uuid.New().String()
-	tokens, err := s.tokenGen.GenerateTokenPair(user.ID, sessionID)
+	tokens, err := s.tokenGen.GenerateTokenPair(user, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +381,7 @@ func (s *service) Login(ctx context.Context, req LoginRequest, deviceInfo string
 
 	// Issue token pair
 	sessionID := uuid.New().String()
-	tokens, err := s.tokenGen.GenerateTokenPair(user.ID, sessionID)
+	tokens, err := s.tokenGen.GenerateTokenPair(user, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -431,9 +436,15 @@ func (s *service) RefreshToken(ctx context.Context, req RefreshTokenRequest) (*T
 		return nil, fmt.Errorf("auth: failed to mark session used: %w", err)
 	}
 
+	// user info
+	user, err := s.store.UserRepo().GetByID(ctx, session.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("auth: failed to get user: %w", err)
+	}
+
 	// Issue new token pair with the SAME family
 	newSessionID := uuid.New().String()
-	tokens, err := s.tokenGen.GenerateTokenPair(session.UserID, newSessionID)
+	tokens, err := s.tokenGen.GenerateTokenPair(user, newSessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -701,8 +712,13 @@ func (s *service) OAuthLogin(ctx context.Context, req OAuthCallbackRequest, devi
 // issueTokenPair creates a session and returns a token pair.
 // familyID can be empty for new sessions.
 func (s *service) issueTokenPair(ctx context.Context, userID, deviceInfo, ipAddress, familyID string) (*TokenPair, error) {
+	user, err := s.store.UserRepo().GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("auth: failed to get user: %w", err)
+	}
+
 	sessionID := uuid.New().String()
-	tokens, err := s.tokenGen.GenerateTokenPair(userID, sessionID)
+	tokens, err := s.tokenGen.GenerateTokenPair(user, sessionID)
 	if err != nil {
 		return nil, err
 	}

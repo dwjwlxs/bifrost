@@ -657,29 +657,7 @@ export default function AppSidebar() {
 					},
 				],
 			},
-			{
-				title: "My Account",
-				url: "/workspace/user",
-				icon: User,
-				description: "My keys and profile",
-				hasAccess: true,
-				subItems: [
-					{
-						title: "My Keys",
-						url: "/workspace/user/my-keys",
-						icon: KeyRound,
-						description: "My virtual keys",
-						hasAccess: true,
-					},
-					{
-						title: "Profile",
-						url: "/workspace/user/profile",
-						icon: UserRoundCheck,
-						description: "My profile settings",
-						hasAccess: true,
-					},
-				],
-			},
+
 			{
 				title: "Guardrails",
 				url: "/workspace/guardrails",

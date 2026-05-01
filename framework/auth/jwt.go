@@ -41,6 +41,8 @@ type JWTClaims struct {
 	Exp       int64  `json:"exp"`
 	Iat       int64  `json:"iat"`
 	KID       string `json:"kid"`
+	Email     string `json:"email"`
+	Name      string `json:"name"`
 	Scope     string `json:"scope,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
 }
@@ -54,7 +56,7 @@ type JWTClaims struct {
 type JWTManager interface {
 	// Sign creates a signed token with the given subject, session ID, and TTL.
 	// Returns the serialized token string and its expiration time.
-	Sign(userID string, sessionID string, ttl time.Duration) (string, time.Time, error)
+	Sign(user *User, sessionID string, ttl time.Duration) (string, time.Time, error)
 
 	// Verify validates a token and returns its parsed claims.
 	Verify(tokenString string) (*JWTClaims, error)
@@ -127,23 +129,21 @@ func newES256JWTManager(privatePEM string, issuer, audience string) (JWTManager,
 }
 
 // Sign creates a new ES256-signed JWT.
-func (m *ES256JWTManager) Sign(userID string, sessionID string, ttl time.Duration) (string, time.Time, error) {
+func (m *ES256JWTManager) Sign(user *User, sessionID string, ttl time.Duration) (string, time.Time, error) {
 	now := time.Now()
 	expiresAt := now.Add(ttl)
 
 	builder := jwt.Signed(m.getSigner()).
-		Claims(&jwt.Claims{
-			Subject:   userID,
-			Issuer:    m.issuer,
-			Audience:  jwt.Audience{m.audience},
-			Expiry:    jwt.NewNumericDate(expiresAt),
-			IssuedAt:  jwt.NewNumericDate(now),
-			NotBefore: jwt.NewNumericDate(now),
-			ID:        sessionID,
-		}).
-		Claims(&es256CustomClaims{
+		Claims(&JWTClaims{
+			Sub:       user.ID,
+			Iss:       m.issuer,
+			Aud:       m.audience,
+			Exp:       expiresAt.Unix(),
+			Iat:       now.Unix(),
 			KID:       m.kid,
-			Scope:     "read write",
+			Email:     user.Email,
+			Name:      user.DisplayName,
+			Scope:     "",
 			SessionID: sessionID,
 		})
 
@@ -167,7 +167,7 @@ func (m *ES256JWTManager) Verify(tokenString string) (*JWTClaims, error) {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidAccessToken, err)
 	}
 
-	var custom es256CustomClaims
+	var custom JWTClaims
 	if err := tok.Claims(m.publicKey, &custom); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidAccessToken, err)
 	}
@@ -191,6 +191,8 @@ func (m *ES256JWTManager) Verify(tokenString string) (*JWTClaims, error) {
 		Exp:       stdClaims.Expiry.Time().Unix(),
 		Iat:       stdClaims.IssuedAt.Time().Unix(),
 		KID:       custom.KID,
+		Email:     custom.Email,
+		Name:      custom.Name,
 		Scope:     custom.Scope,
 		SessionID: custom.SessionID,
 	}, nil
@@ -224,15 +226,6 @@ func (m *ES256JWTManager) GetKid() string {
 // GetPublicKey returns the raw ECDSA public key (ES256-specific, not part of the interface).
 func (m *ES256JWTManager) GetPublicKey() *ecdsa.PublicKey {
 	return m.publicKey
-}
-
-// --- internal types ---
-
-// es256CustomClaims holds non-standard claims for ES256 tokens.
-type es256CustomClaims struct {
-	KID       string `json:"kid"`
-	Scope     string `json:"scope,omitempty"`
-	SessionID string `json:"session_id,omitempty"`
 }
 
 // getSigner creates a go-jose signer for ES256.
