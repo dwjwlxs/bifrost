@@ -22,6 +22,10 @@ type AuthService interface {
 	// On success, returns a token pair (access + refresh).
 	VerifyEmail(ctx context.Context, req VerifyEmailRequest) (*TokenPair, error)
 
+	// ResendVerificationCode resends the email verification code to the user's email.
+	// Works regardless of account status (including pending_verification).
+	ResendVerificationCode(ctx context.Context, email string) error
+
 	// Login authenticates a user with email+password and returns a token pair.
 	// Checks account status, verification, and lockout before issuing tokens.
 	Login(ctx context.Context, req LoginRequest, deviceInfo string, ipAddress string) (*TokenPair, error)
@@ -284,6 +288,36 @@ func (s *service) VerifyEmail(ctx context.Context, req VerifyEmailRequest) (*Tok
 	}
 
 	return tokens, nil
+}
+
+// --- ResendVerificationCode ---
+
+func (s *service) ResendVerificationCode(ctx context.Context, email string) error {
+	email = normalizeEmail(email)
+	if email == "" || !strings.Contains(email, "@") {
+		return nil // Silent success to prevent enumeration
+	}
+
+	// Get user
+	user, err := s.store.UserRepo().GetByEmail(ctx, email)
+	if err != nil || user == nil {
+		return nil // Silent success to prevent enumeration
+	}
+
+	// Only resend for pending verification status
+	if user.Status != UserStatusPendingVerification {
+		return nil
+	}
+
+	// Generate new code
+	code, err := s.verifier.CreateCode(ctx, user.ID, email, VerificationCodeTypeEmailVerify)
+	if err != nil {
+		return err
+	}
+
+	// Send the code
+	_ = s.codeSender.SendVerificationCode(ctx, email, VerificationCodeTypeEmailVerify, code)
+	return nil
 }
 
 // --- Login ---

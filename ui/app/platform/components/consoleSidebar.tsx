@@ -1,39 +1,7 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import {
-	LayoutDashboard,
-	KeyRound,
-	Building2,
-	ShieldCheck,
-	Wallet,
-	Activity,
-	Package,
-	Server,
-	Users,
-	DollarSign,
-	ChevronLeft,
-	ChevronRight,
-	Menu,
-	X,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import { useConsoleSidebar } from "./consoleSidebarContext";
-
-// ── Console nav links (shown on /platform/console/* pages) ────────
-const consoleNavItems = [
-	{ label: "Dashboard", to: "/platform/console/dashboard", icon: LayoutDashboard },
-	{ label: "Wallet", to: "/platform/console/wallet", icon: Wallet },
-	{ label: "Virtual Keys", to: "/platform/console/virtual-keys", icon: KeyRound },
-	{ label: "Organizations", to: "/platform/console/organizations", icon: Building2 },
-	{ label: "Usage", to: "/platform/console/usage", icon: Activity },
-	{ label: "RBAC", to: "/platform/console/rbac", icon: ShieldCheck },
-];
-
-// ── Admin nav links (shown only for admin users) ──────────────────
-const adminNavItems = [
-	{ label: "Packages", to: "/platform/console/admin/packages", icon: Package },
-	{ label: "Providers", to: "/platform/console/admin/providers", icon: Server },
-	{ label: "Users & Orgs", to: "/platform/console/admin/users", icon: Users },
-	{ label: "Model Prices", to: "/platform/console/admin/model-prices", icon: DollarSign },
-];
+import { getVisibleNavItems } from "@/lib/platform/config";
 
 interface ConsoleSidebarProps {
 	isAdmin?: boolean;
@@ -42,10 +10,13 @@ interface ConsoleSidebarProps {
 /**
  * Console sidebar with collapsible navigation.
  * Left side panel with expandable/collapsible menu items.
+ * Navigation items are role-based via lib/platform/config.ts.
  */
 export function ConsoleSidebar({ isAdmin = false }: ConsoleSidebarProps) {
 	const pathname = useLocation({ select: (l) => l.pathname });
 	const { isCollapsed, isMobile, isMobileMenuOpen, toggleCollapse, toggleMobileMenu, closeMobileMenu } = useConsoleSidebar();
+
+	const navItems = getVisibleNavItems(isAdmin);
 
 	const handleNavClick = () => {
 		if (isMobile) {
@@ -89,7 +60,7 @@ export function ConsoleSidebar({ isAdmin = false }: ConsoleSidebarProps) {
 
 				{/* Navigation items */}
 				<nav className="flex-1 space-y-1 overflow-y-auto px-2 py-2">
-					{consoleNavItems.map((item) => {
+					{navItems.map((item) => {
 						const isActive = pathname.startsWith(item.to);
 						return (
 							<Link
@@ -106,29 +77,6 @@ export function ConsoleSidebar({ isAdmin = false }: ConsoleSidebarProps) {
 							</Link>
 						);
 					})}
-
-					{isAdmin && (
-						<>
-							<div className="my-2 border-t" />
-							{adminNavItems.map((item) => {
-								const isActive = pathname.startsWith(item.to);
-								return (
-									<Link
-										key={item.to}
-										to={item.to}
-										onClick={handleNavClick}
-										className={`group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
-											isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-										}`}
-										title={isCollapsed && !isMobile ? item.label : undefined}
-									>
-										<item.icon className="h-5 w-5 flex-shrink-0" />
-										{(!isCollapsed || isMobile) && <span className="truncate">{item.label}</span>}
-									</Link>
-								);
-							})}
-						</>
-					)}
 				</nav>
 			</aside>
 

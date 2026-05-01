@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import axios from "axios";
 import { Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { usePlatformVerifyEmailMutation, usePlatformResendVerificationMutation } from "@/lib/platform/platformApi";
 import type { PlatformUserInfo } from "@/lib/platform/platformApi";
 
 const CODE_LENGTH = 6;
@@ -13,16 +13,18 @@ export interface EmailVerificationDialogProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	email: string;
-	onVerified: (token: string, user: PlatformUserInfo) => void;
+	onVerified: (token: string, refreshToken: string) => void;
 }
 
 export function EmailVerificationDialog({ open, onOpenChange, email, onVerified }: EmailVerificationDialogProps) {
 	const [digits, setDigits] = useState<string[]>(Array(CODE_LENGTH).fill(""));
 	const [error, setError] = useState("");
-	const [loading, setLoading] = useState(false);
 	const [cooldown, setCooldown] = useState(0);
 	const inputRefs = useRef<Array<HTMLInputElement | null>>(Array(CODE_LENGTH).fill(null));
 	const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+	const [verifyEmail, { isLoading: isVerifying }] = usePlatformVerifyEmailMutation();
+	const [resendVerification, { isLoading: isResending }] = usePlatformResendVerificationMutation();
 
 	// Focus first input when dialog opens
 	useEffect(() => {
@@ -34,7 +36,6 @@ export function EmailVerificationDialog({ open, onOpenChange, email, onVerified 
 			// Reset state when dialog closes
 			setDigits(Array(CODE_LENGTH).fill(""));
 			setError("");
-			setLoading(false);
 		}
 	}, [open]);
 
@@ -127,16 +128,14 @@ export function EmailVerificationDialog({ open, onOpenChange, email, onVerified 
 		e.preventDefault();
 		if (!isComplete) return;
 		setError("");
-		setLoading(true);
 
 		try {
-			const res = await axios.post("/api/user/verify-email", { email, code });
-			const { token, user } = res.data.data;
-			onVerified(token, user);
+			const res = await verifyEmail({ email, code }).unwrap();
+			// New response format: { code, message, data: { access_token, refresh_token, expires_at } }
+			const { access_token, refresh_token } = res.data;
+			onVerified(access_token, refresh_token);
 		} catch (err: any) {
-			setError(err.response?.data?.message || err.message || "Verification failed. Please try again.");
-		} finally {
-			setLoading(false);
+			setError(err?.data?.message || err?.message || "Verification failed. Please try again.");
 		}
 	};
 
@@ -145,12 +144,14 @@ export function EmailVerificationDialog({ open, onOpenChange, email, onVerified 
 		setError("");
 
 		try {
-			await axios.post("/api/user/resend-verification", { email });
+			await resendVerification({ email }).unwrap();
 			startCooldown();
 		} catch (err: any) {
-			setError(err.response?.data?.message || err.message || "Failed to resend code. Please try again.");
+			setError(err?.data?.message || err?.message || "Failed to resend code. Please try again.");
 		}
 	};
+
+	const isLoading = isVerifying || isResending;
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
@@ -200,8 +201,8 @@ export function EmailVerificationDialog({ open, onOpenChange, email, onVerified 
 						))}
 					</div>
 
-					<Button type="submit" className="w-full" disabled={!isComplete || loading} data-testid="email-verification-dialog-submit">
-						{loading ? "Verifying..." : "Verify"}
+					<Button type="submit" className="w-full" disabled={!isComplete || isLoading} data-testid="email-verification-dialog-submit">
+						{isLoading ? "Verifying..." : "Verify"}
 					</Button>
 
 					<div className="text-muted-foreground text-center text-sm">
@@ -210,12 +211,12 @@ export function EmailVerificationDialog({ open, onOpenChange, email, onVerified 
 							type="button"
 							data-testid="email-verification-dialog-resend"
 							onClick={handleResend}
-							disabled={cooldown > 0}
+							disabled={cooldown > 0 || isResending}
 							className={`font-medium transition-colors ${
 								cooldown > 0 ? "text-muted-foreground cursor-not-allowed" : "text-primary underline-offset-4 hover:underline"
 							}`}
 						>
-							{cooldown > 0 ? `Resend in ${cooldown}s` : "Resend Code"}
+							{cooldown > 0 ? `Resend in ${cooldown}s` : isResending ? "Sending..." : "Resend Code"}
 						</button>
 					</div>
 				</form>

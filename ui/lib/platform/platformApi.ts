@@ -213,17 +213,23 @@ export interface PlatformModelPrice {
 export const platformApi = baseApi.injectEndpoints({
 	endpoints: (builder) => ({
 		// ── Auth ──
-		platformLogin: builder.mutation<AuthResponse, { login: string; password: string }>({
+		platformLogin: builder.mutation<
+			{ code: string; message: string; data: { access_token: string; refresh_token: string; expires_at: string } },
+			{ login: string; password: string }
+		>({
 			query: (body) => ({
-				url: "/platform/user/login",
+				url: "/platform/login",
 				method: "POST",
 				body,
 			}),
 		}),
 
-		platformRegister: builder.mutation<AuthResponse, { email: string; username: string; password: string; nickname?: string }>({
+		platformRegister: builder.mutation<
+			{ code: string; message: string; data: { user_id: number; email: string } },
+			{ email: string; username: string; password: string; nickname?: string }
+		>({
 			query: (body) => ({
-				url: "/platform/user/register",
+				url: "/platform/register",
 				method: "POST",
 				body,
 			}),
@@ -246,17 +252,20 @@ export const platformApi = baseApi.injectEndpoints({
 			invalidatesTags: ["CurrentUser"],
 		}),
 
-		platformVerifyEmail: builder.mutation<AuthResponse, { email: string; code: string }>({
+		platformVerifyEmail: builder.mutation<
+			{ code: string; message: string; data: { access_token: string; refresh_token: string; expires_at: string } },
+			{ email: string; code: string }
+		>({
 			query: (body) => ({
-				url: "/platform/user/verify-email",
+				url: "/platform/verify",
 				method: "POST",
 				body,
 			}),
 		}),
 
-		platformResendVerification: builder.mutation<{ success: boolean; message: string }, { email: string }>({
+		platformResendVerification: builder.mutation<{ code: string; message: string; data: { success: boolean } }, { email: string }>({
 			query: (body) => ({
-				url: "/platform/user/resend-verification",
+				url: "/auth/resend-verification",
 				method: "POST",
 				body,
 			}),
