@@ -1,7 +1,6 @@
 import {
 	Budget,
 	CreateCustomerRequest,
-	CreateRoleRequest,
 	CreateModelConfigRequest,
 	CreatePricingOverrideRequest,
 	UpdatePricingOverrideRequest,
@@ -17,41 +16,26 @@ import {
 	GetPricingOverridesResponse,
 	GetProviderGovernanceResponse,
 	GetRateLimitsResponse,
-	GetRolesResponse,
 	GetTeamsParams,
 	GetTeamsResponse,
 	GetUsageStatsResponse,
 	GetVirtualKeysParams,
 	GetVirtualKeysResponse,
 	HealthCheckResponse,
-	ListPermissionsResponse,
 	ModelConfig,
 	ProviderGovernance,
 	PricingOverride,
 	RateLimit,
 	ResetUsageRequest,
-	Role,
-	RoleScope,
 	Team,
 	UpdateBudgetRequest,
 	UpdateCustomerRequest,
 	UpdateModelConfigRequest,
 	UpdateProviderGovernanceRequest,
 	UpdateRateLimitRequest,
-	UpdateRoleRequest,
 	UpdateTeamRequest,
 	UpdateVirtualKeyRequest,
 	VirtualKey,
-	// User management (Phase 1/2)
-	GetUsersParams,
-	GetUsersResponse,
-	GetUserRolesResponse,
-	PresetRole,
-	SetUserRoleRequest,
-	SetUserTeamRequest,
-	SetUserCustomerRequest,
-	User,
-	UserStatus,
 } from "@/lib/types/governance";
 import { baseApi } from "./baseApi";
 
@@ -794,146 +778,6 @@ export const governanceApi = baseApi.injectEndpoints({
 				}
 			},
 		}),
-
-		// Custom Roles (Phase 5 RBAC)
-		listPermissions: builder.query<ListPermissionsResponse, void>({
-			query: () => ({
-				url: "/admin/roles/permissions",
-			}),
-			providesTags: ["Permissions"],
-		}),
-
-		listRoles: builder.query<GetRolesResponse, { limit?: number; offset?: number; scope?: RoleScope; search?: string } | void>({
-			query: (params) => ({
-				url: "/admin/roles",
-				params: params ?? {},
-			}),
-			providesTags: (result) =>
-				result?.roles
-					? [...result.roles.map(({ id }) => ({ type: "Roles" as const, id })), { type: "Roles" as const, id: "LIST" }]
-					: [{ type: "Roles" as const, id: "LIST" }],
-		}),
-
-		getRole: builder.query<Role, string>({
-			query: (roleId) => ({
-				url: `/admin/roles/${roleId}`,
-			}),
-			providesTags: (result, error, id) => [{ type: "Roles", id }],
-		}),
-
-		createRole: builder.mutation<Role, CreateRoleRequest>({
-			query: (data) => ({
-				url: "/admin/roles",
-				method: "POST",
-				body: data,
-			}),
-			invalidatesTags: [{ type: "Roles", id: "LIST" }],
-		}),
-
-		updateRole: builder.mutation<Role, { id: string; data: UpdateRoleRequest }>({
-			query: ({ id, data }) => ({
-				url: `/admin/roles/${id}`,
-				method: "PUT",
-				body: data,
-			}),
-			invalidatesTags: (result, error, { id }) => [
-				{ type: "Roles", id },
-				{ type: "Roles", id: "LIST" },
-			],
-		}),
-
-		deleteRole: builder.mutation<{ message: string }, string>({
-			query: (roleId) => ({
-				url: `/admin/roles/${roleId}`,
-				method: "DELETE",
-			}),
-			invalidatesTags: [{ type: "Roles", id: "LIST" }],
-		}),
-
-		// ============================================================
-		// User Management (Phase 1/2 - Multi-user Architecture)
-		// ============================================================
-
-		// List users with filters and pagination
-		getUsers: builder.query<GetUsersResponse, GetUsersParams | void>({
-			query: (params) => ({
-				url: "/admin/user/list",
-				params: {
-					...(params?.limit && { limit: params.limit }),
-					...(params?.offset !== undefined && { offset: params.offset }),
-					...(params?.status && { status: params.status }),
-					...(params?.role && { role: params.role }),
-					...(params?.customer_id && { customer_id: params.customer_id }),
-					...(params?.team_id && { team_id: params.team_id }),
-					...(params?.search && { search: params.search }),
-				},
-			}),
-			providesTags: (result) =>
-				result?.list
-					? [...result.list.map(({ id }) => ({ type: "Users" as const, id })), { type: "Users" as const, id: "LIST" }]
-					: [{ type: "Users" as const, id: "LIST" }],
-		}),
-
-		// Set user's preset role
-		setUserRole: builder.mutation<{ message: string }, SetUserRoleRequest>({
-			query: (data) => ({
-				url: `/admin/users/${data.target_user_id}/role`,
-				method: "PUT",
-				body: data,
-			}),
-			invalidatesTags: [{ type: "Users", id: "LIST" }],
-		}),
-
-		// Assign user to a team
-		setUserTeam: builder.mutation<{ message: string }, SetUserTeamRequest>({
-			query: (data) => ({
-				url: `/admin/users/${data.target_user_id}/team`,
-				method: "PUT",
-				body: data,
-			}),
-			invalidatesTags: [{ type: "Users", id: "LIST" }],
-		}),
-
-		// Assign user to a customer/organization
-		setUserCustomer: builder.mutation<{ message: string }, SetUserCustomerRequest>({
-			query: (data) => ({
-				url: `/admin/users/${data.target_user_id}/customer`,
-				method: "PUT",
-				body: data,
-			}),
-			invalidatesTags: [{ type: "Users", id: "LIST" }],
-		}),
-
-		// Get user's roles (preset + custom)
-		getUserRoles: builder.query<GetUserRolesResponse, number>({
-			query: (userId) => `/admin/users/${userId}/roles`,
-			providesTags: (result, error, userId) => [{ type: "UserRoles", id: userId }],
-		}),
-
-		// Assign custom role to user
-		assignUserCustomRole: builder.mutation<{ message: string }, { userId: number; roleId: string; customerId?: string; teamId?: string }>({
-			query: ({ userId, ...body }) => ({
-				url: `/admin/users/${userId}/roles`,
-				method: "POST",
-				body,
-			}),
-			invalidatesTags: (result, error, { userId }) => [
-				{ type: "Users", id: "LIST" },
-				{ type: "UserRoles", id: userId },
-			],
-		}),
-
-		// Remove custom role from user
-		removeUserCustomRole: builder.mutation<{ message: string }, { userId: number; roleId: string }>({
-			query: ({ userId, roleId }) => ({
-				url: `/admin/users/${userId}/roles/${roleId}`,
-				method: "DELETE",
-			}),
-			invalidatesTags: (result, error, { userId }) => [
-				{ type: "Users", id: "LIST" },
-				{ type: "UserRoles", id: userId },
-			],
-		}),
 	}),
 });
 
@@ -994,23 +838,6 @@ export const {
 	useGetProviderGovernanceQuery,
 	useUpdateProviderGovernanceMutation,
 	useDeleteProviderGovernanceMutation,
-
-	// User Management (Phase 1/2)
-	useGetUsersQuery,
-	useSetUserRoleMutation,
-	useSetUserTeamMutation,
-	useSetUserCustomerMutation,
-	useGetUserRolesQuery,
-	useAssignUserCustomRoleMutation,
-	useRemoveUserCustomRoleMutation,
-
-	// Custom Roles (Phase 5 RBAC)
-	useListPermissionsQuery,
-	useListRolesQuery,
-	useGetRoleQuery,
-	useCreateRoleMutation,
-	useUpdateRoleMutation,
-	useDeleteRoleMutation,
 
 	// Lazy queries
 	useLazyGetVirtualKeysQuery,

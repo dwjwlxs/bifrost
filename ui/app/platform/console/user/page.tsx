@@ -4,7 +4,7 @@ import { useEffect } from "react";
 export default function UserRedirectPage() {
 	const navigate = useNavigate();
 	useEffect(() => {
-		navigate({ to: "/workspace/user/my-keys", replace: true });
+		navigate({ to: "/platform/console/user/my-keys", replace: true });
 	}, [navigate]);
 	return null;
 }

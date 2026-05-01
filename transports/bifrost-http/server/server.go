@@ -30,6 +30,7 @@ import (
 	"github.com/maximhq/bifrost/plugins/telemetry"
 	"github.com/maximhq/bifrost/transports/bifrost-http/handlers"
 	auth_handlers "github.com/maximhq/bifrost/transports/bifrost-http/handlers/auth"
+	platform_handlers "github.com/maximhq/bifrost/transports/bifrost-http/handlers/platform"
 	"github.com/maximhq/bifrost/transports/bifrost-http/integrations"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	bfws "github.com/maximhq/bifrost/transports/bifrost-http/websocket"
@@ -1068,7 +1069,7 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	}
 	governancePlugin, _ := lib.FindPluginAs[schemas.LLMPlugin](s.Config, governancePluginName)
 	if governancePlugin != nil {
-		governanceHandler, err = handlers.NewGovernanceHandler(callbacks, s.Config.ConfigStore)
+		governanceHandler, err = handlers.NewGovernanceHandler(callbacks, s.Config.ConfigStore, s.Config.ConfigStore.(*configstore.RDBConfigStore).DB())
 		if err != nil {
 			return fmt.Errorf("failed to initialize governance handler: %v", err)
 		}
@@ -1104,17 +1105,48 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	healthHandler := handlers.NewHealthHandler(s.Config)
 	providerHandler := handlers.NewProviderHandler(callbacks, s.Config, s.Client)
 	oauthHandler := handlers.NewOAuthHandler(s.Config.OAuthProvider, s.Client, s.Config)
-	mcpHandler := handlers.NewMCPHandler(callbacks, callbacks, s.Client, s.Config, oauthHandler)
 	configHandler := handlers.NewConfigHandler(callbacks, s.Config)
 	pluginsHandler := handlers.NewPluginsHandler(callbacks, s.Config.ConfigStore)
 	sessionHandler := handlers.NewSessionHandler(s.Config.ConfigStore, s.WSTicketStore)
 	promptsHandler := handlers.NewPromptsHandler(s.Config.ConfigStore, promptsReloader)
+	// Platform multi-tenant handlers
+	db := s.Config.ConfigStore.DB()
+	if err := tables.PlatformMigrate(db); err != nil {
+		return fmt.Errorf("failed to migrate platform tables: %v", err)
+	}
+	platformAdminHandler := platform_handlers.NewPlatformAdminHandler(db, s.Config.ConfigStore)
+	platformOrgHandler := platform_handlers.NewPlatformOrgHandler(db, s.Config.ConfigStore)
+	platformTeamHandler := platform_handlers.NewPlatformTeamHandler(db, s.Config.ConfigStore)
+	platformVKHandler := platform_handlers.NewPlatformVKHandler(db, s.Config.ConfigStore)
+	var platformAuthHandler *platform_handlers.PlatformAuthHandler
+	if s.Config.ConsumerAuthService != nil {
+		platformAuthHandler = platform_handlers.NewPlatformAuthHandler(db, s.Config.ConsumerAuthService, s.Config.ConfigStore)
+	}
 	// Going ahead with API handlers
 	healthHandler.RegisterRoutes(s.Router, middlewares...)
 	providerHandler.RegisterRoutes(s.Router, middlewares...)
-	mcpHandler.RegisterRoutes(s.Router, middlewares...)
+	// Note: mcpHandler routes already registered by mcpInferenceHandler in RegisterDefaultRoutes
 	configHandler.RegisterRoutes(s.Router, middlewares...)
 	oauthHandler.RegisterRoutes(s.Router, middlewares...)
+	// Platform multi-tenant routes
+	// Platform protected routes need PlatformAuthMiddleware
+	var platformProtectedMw []schemas.BifrostHTTPMiddleware
+	if platformAuthHandler != nil {
+		platformProtectedMw = append([]schemas.BifrostHTTPMiddleware{
+			platform_handlers.PlatformAuthMiddleware(db, s.Config.ConsumerAuthService),
+		}, middlewares...)
+	} else {
+		platformProtectedMw = middlewares
+	}
+
+	if platformAuthHandler != nil {
+		platformAuthHandler.RegisterRoutes(s.Router, middlewares...)  // login/register are public
+	}
+	platformAdminHandler.RegisterRoutes(s.Router, platformProtectedMw...)   // admin needs auth
+	platformOrgHandler.RegisterRoutes(s.Router, platformProtectedMw...)     // org needs auth
+	platformTeamHandler.RegisterRoutes(s.Router, platformProtectedMw...)    // team needs auth
+	platformVKHandler.RegisterRoutes(s.Router, platformProtectedMw...)      // VK needs auth
+
 	// OAuth metadata + per-user OAuth endpoints (no auth middleware — must be publicly accessible)
 	oauthMetadataHandler := handlers.NewOAuthMetadataHandler(s.Config)
 	oauthMetadataHandler.RegisterRoutes(s.Router)

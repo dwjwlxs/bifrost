@@ -15,7 +15,10 @@ interface InviteInfo {
 }
 
 export default function InvitePage() {
-	const { token } = useParams({ from: "/platform/invite/$token" });
+	// Get token from URL path: /platform/invite/invite-token/:token
+	const params = useParams({ strict: false }) as { token?: string };
+	const token = params?.token;
+
 	const navigate = useNavigate();
 	const [inviteInfo, setInviteInfo] = useState<InviteInfo | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -29,14 +32,16 @@ export default function InvitePage() {
 	const [formError, setFormError] = useState("");
 
 	useEffect(() => {
-		fetchInviteInfo();
+		if (token) {
+			fetchInviteInfo(token);
+		}
 	}, [token]);
 
-	const fetchInviteInfo = async () => {
+	const fetchInviteInfo = async (t: string) => {
 		setLoading(true);
 		setError("");
 		try {
-			const res = await axios.get(`/api/invite/${token}`);
+			const res = await axios.get(`/api/invite/${t}`);
 			if (res.data.success) {
 				setInviteInfo(res.data.data);
 			}
@@ -50,6 +55,11 @@ export default function InvitePage() {
 	const handleAccept = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setFormError("");
+
+		if (!token) {
+			setFormError("Invalid invite token");
+			return;
+		}
 
 		if (form.password !== form.confirmPassword) {
 			setFormError("Passwords do not match");
@@ -71,10 +81,10 @@ export default function InvitePage() {
 			});
 
 			if (res.data.success) {
-				// Store token and redirect to dashboard
+				// Store token and redirect to platform console
 				localStorage.setItem("token", res.data.data.token);
 				localStorage.setItem("user", JSON.stringify(res.data.data.user));
-				navigate({ to: "/workspace/dashboard" });
+				navigate({ to: "/platform/console" });
 			}
 		} catch (err: any) {
 			setFormError(err.response?.data?.message || "Failed to accept invite");

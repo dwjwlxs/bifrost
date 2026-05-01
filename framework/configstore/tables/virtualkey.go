@@ -205,7 +205,9 @@ type TableVirtualKey struct {
 	ProviderConfigs []TableVirtualKeyProviderConfig `gorm:"foreignKey:VirtualKeyID;constraint:OnDelete:CASCADE" json:"provider_configs"` // Empty means no providers allowed (deny-by-default)
 	MCPConfigs      []TableVirtualKeyMCPConfig      `gorm:"foreignKey:VirtualKeyID;constraint:OnDelete:CASCADE" json:"mcp_configs"`
 
-	// Foreign key relationships (mutually exclusive: either TeamID or CustomerID, not both)
+	// Foreign key relationships
+	// TeamID and CustomerID are mutually exclusive with each other, but UserID can coexist with either.
+	UserID      *string `gorm:"index" json:"user_id,omitempty"`
 	TeamID      *string `gorm:"type:varchar(255);index" json:"team_id,omitempty"`
 	CustomerID  *string `gorm:"type:varchar(255);index" json:"customer_id,omitempty"`
 	RateLimitID *string `gorm:"type:varchar(255);index" json:"rate_limit_id,omitempty"`
@@ -236,11 +238,13 @@ type TableVirtualKey struct {
 // TableName sets the table name for each model
 func (TableVirtualKey) TableName() string { return "governance_virtual_keys" }
 
-// BeforeSave is a GORM hook that enforces mutual exclusion (team vs customer), computes
-// a SHA-256 hash of the plaintext value for indexed lookups, and encrypts the virtual key
-// value before writing to the database.
+// BeforeSave is a GORM hook that enforces mutual exclusion between team and customer
+// (a VK cannot belong to both team and customer simultaneously, but UserID can coexist
+// with either), computes a SHA-256 hash of the plaintext value for indexed lookups,
+// and encrypts the virtual key value before writing to the database.
 func (vk *TableVirtualKey) BeforeSave(tx *gorm.DB) error {
 	// Enforce mutual exclusion: VK can belong to either Team OR Customer, not both
+	// (UserID can coexist with either TeamID or CustomerID)
 	if vk.TeamID != nil && vk.CustomerID != nil {
 		return fmt.Errorf("virtual key cannot belong to both team and customer")
 	}

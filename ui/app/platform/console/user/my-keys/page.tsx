@@ -4,7 +4,7 @@ import { getErrorMessage, useGetCustomersQuery, useGetTeamsQuery, useGetVirtualK
 import { parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import VirtualKeysTable from "@/app/workspace/virtual-keys/views/virtualKeysTable";
+import PlatformVirtualKeysTable from "./views/platformVirtualKeysTable";
 
 const POLLING_INTERVAL = 5000;
 const PAGE_SIZE = 25;
@@ -115,7 +115,7 @@ export default function MyKeysPage() {
 				</p>
 			</div>
 
-			<VirtualKeysTable
+			<PlatformVirtualKeysTable
 				virtualKeys={virtualKeysData?.virtual_keys || []}
 				totalCount={virtualKeysData?.total_count || 0}
 				teams={teamsData?.teams || []}
@@ -123,17 +123,12 @@ export default function MyKeysPage() {
 				search={urlState.search}
 				debouncedSearch={debouncedSearch}
 				onSearchChange={handleSearchChange}
-				customerFilter={currentUser?.customer_id || ""}
-				onCustomerFilterChange={() => {}} // No-op for user view
-				teamFilter={currentUser?.team_id || ""}
-				onTeamFilterChange={() => {}} // No-op for user view
 				offset={urlState.offset}
 				limit={PAGE_SIZE}
 				onOffsetChange={handleOffsetChange}
 				sortBy={urlState.sort_by}
 				order={urlState.order}
 				onSortChange={handleSortChange}
-				hideFilters={true} // Hide filter dropdowns for user view
 			/>
 		</div>
 	);

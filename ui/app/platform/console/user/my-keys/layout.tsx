@@ -6,6 +6,6 @@ function RouteComponent() {
 	return <MyKeysPage />;
 }
 
-export const Route = createFileRoute("/workspace/user/my-keys")({
+export const Route = createFileRoute("/platform/console/user/my-keys")({
 	component: RouteComponent,
 });
