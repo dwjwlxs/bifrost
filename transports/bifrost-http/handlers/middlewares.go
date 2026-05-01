@@ -759,9 +759,16 @@ func (m *AuthMiddleware) APIMiddleware() schemas.BifrostHTTPMiddleware {
 		"/api/session/login",
 		"/api/oauth/callback",
 		"/health",
+
+		"/api/platform/register",
+		"/api/platform/login",
+		"/api/platform/verify",
+		"/api/auth/resend-verification",
 	}
 	whitelistedPrefixes := []string{
 		"/api/oauth/callback",
+
+		"/api/platform/",
 	}
 	return m.middleware(func(authConfig *configstore.AuthConfig, url string) bool {
 		if slices.Contains(systemWhitelistedRoutes, url) ||

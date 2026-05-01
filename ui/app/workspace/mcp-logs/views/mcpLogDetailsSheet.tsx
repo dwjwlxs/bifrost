@@ -12,7 +12,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/ui/codeEditor";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdownMenu";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdownMenu";
 import { DottedSeparator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { downloadAsJson } from "@/lib/utils/browser-download";
@@ -121,10 +127,7 @@ export function MCPLogDetailSheet({
 								</Button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="end">
-								<DropdownMenuItem
-									data-testid="export-log-json"
-									onClick={() => downloadAsJson(log, `mcp-log-${log.id ?? "export"}.json`)}
-								>
+								<DropdownMenuItem data-testid="export-log-json" onClick={() => downloadAsJson(log, `mcp-log-${log.id ?? "export"}.json`)}>
 									<Download className="h-4 w-4" />
 									Export as JSON
 								</DropdownMenuItem>

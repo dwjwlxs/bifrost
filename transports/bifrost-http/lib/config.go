@@ -29,6 +29,7 @@ import (
 	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
 	"github.com/maximhq/bifrost/framework/encrypt"
 	"github.com/maximhq/bifrost/framework/envutils"
+	fauth "github.com/maximhq/bifrost/framework/auth"
 	"github.com/maximhq/bifrost/framework/kvstore"
 	"github.com/maximhq/bifrost/framework/logstore"
 	"github.com/maximhq/bifrost/framework/mcpcatalog"
@@ -283,6 +284,14 @@ type Config struct {
 	// Catalog managers
 	ModelCatalog *modelcatalog.ModelCatalog
 	MCPCatalog   *mcpcatalog.MCPCatalog
+
+	// Consumer Authentication Service (C-end user account system).
+	// If non-nil, /api/auth/* routes are registered.
+	ConsumerAuthService fauth.AuthService
+
+	// PlatformAuth holds configuration for platform multi-tenant authentication.
+	// If ConsumerAuthService is nil, platform auth is disabled.
+	PlatformAuthEnabled bool `json:"platform_auth_enabled"`
 
 	// Optional event broadcaster for real-time updates (e.g., WebSocket).
 	// Set by HTTP server at startup; may be nil in non-HTTP usage.
