@@ -1659,6 +1659,9 @@
     },
     "scim_config": {
       "$ref": "#/$defs/scim_config"
+    },
+    "email": {
+      "$ref": "#/$defs/email_config"
     }
   },
   "additionalProperties": false,
@@ -3887,6 +3890,49 @@
         }
       },
       "required": ["base_provider_type"],
+      "additionalProperties": false
+    },
+    "email_config": {
+      "type": "object",
+      "description": "Email configuration for sending invite emails and notifications",
+      "properties": {
+        "host": {
+          "type": "string",
+          "description": "SMTP server host (e.g., smtp.gmail.com)"
+        },
+        "port": {
+          "type": "integer",
+          "description": "SMTP server port (e.g., 587 for TLS, 465 for SSL)",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "username": {
+          "type": "string",
+          "description": "SMTP authentication username"
+        },
+        "password": {
+          "type": "string",
+          "description": "SMTP authentication password or app password"
+        },
+        "from": {
+          "type": "string",
+          "description": "Sender email address"
+        },
+        "use_tls": {
+          "type": "boolean",
+          "description": "Use TLS (STARTTLS) for connection (default: true for port 587)",
+          "default": true
+        },
+        "use_ssl": {
+          "type": "boolean",
+          "description": "Use SSL (implicit TLS) for connection (default: true for port 465)",
+          "default": false
+        },
+        "app_url": {
+          "type": "string",
+          "description": "Base URL for constructing invite links (e.g., https://app.bifrost.ai)"
+        }
+      },
       "additionalProperties": false
     }
   }

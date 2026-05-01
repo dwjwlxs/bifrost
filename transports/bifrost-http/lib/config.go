@@ -289,6 +289,10 @@ type Config struct {
 	// If non-nil, /api/auth/* routes are registered.
 	ConsumerAuthService fauth.AuthService
 
+	// PlatformAuth holds configuration for platform multi-tenant authentication.
+	// If ConsumerAuthService is nil, platform auth is disabled.
+	PlatformAuthEnabled bool `json:"platform_auth_enabled"`
+
 	// Optional event broadcaster for real-time updates (e.g., WebSocket).
 	// Set by HTTP server at startup; may be nil in non-HTTP usage.
 	EventBroadcaster schemas.EventBroadcaster

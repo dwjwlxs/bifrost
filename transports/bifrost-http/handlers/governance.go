@@ -49,10 +49,11 @@ type GovernanceManager interface {
 type GovernanceHandler struct {
 	configStore       configstore.ConfigStore
 	governanceManager GovernanceManager
+	db                *gorm.DB // for RBAC permission checks
 }
 
 // NewGovernanceHandler creates a new governance handler instance
-func NewGovernanceHandler(manager GovernanceManager, configStore configstore.ConfigStore) (*GovernanceHandler, error) {
+func NewGovernanceHandler(manager GovernanceManager, configStore configstore.ConfigStore, db *gorm.DB) (*GovernanceHandler, error) {
 	if manager == nil {
 		return nil, fmt.Errorf("governance manager is required")
 	}
@@ -62,6 +63,7 @@ func NewGovernanceHandler(manager GovernanceManager, configStore configstore.Con
 	return &GovernanceHandler{
 		governanceManager: manager,
 		configStore:       configStore,
+		db:                db,
 	}, nil
 }
 
@@ -292,6 +294,19 @@ func (h *GovernanceHandler) RegisterRoutes(r *router.Router, middlewares ...sche
 	r.GET("/api/governance/customers/{customer_id}", lib.ChainMiddlewares(h.getCustomer, middlewares...))
 	r.PUT("/api/governance/customers/{customer_id}", lib.ChainMiddlewares(h.updateCustomer, middlewares...))
 	r.DELETE("/api/governance/customers/{customer_id}", lib.ChainMiddlewares(h.deleteCustomer, middlewares...))
+
+	// ── Platform-prefixed governance routes ──
+	r.GET("/api/platform/governance/teams", lib.ChainMiddlewares(h.getTeams, middlewares...))
+	r.POST("/api/platform/governance/teams", lib.ChainMiddlewares(h.createTeam, middlewares...))
+	r.GET("/api/platform/governance/teams/{team_id}", lib.ChainMiddlewares(h.getTeam, middlewares...))
+	r.PUT("/api/platform/governance/teams/{team_id}", lib.ChainMiddlewares(h.updateTeam, middlewares...))
+	r.DELETE("/api/platform/governance/teams/{team_id}", lib.ChainMiddlewares(h.deleteTeam, middlewares...))
+
+	r.GET("/api/platform/governance/customers", lib.ChainMiddlewares(h.getCustomers, middlewares...))
+	r.POST("/api/platform/governance/customers", lib.ChainMiddlewares(h.createCustomer, middlewares...))
+	r.GET("/api/platform/governance/customers/{customer_id}", lib.ChainMiddlewares(h.getCustomer, middlewares...))
+	r.PUT("/api/platform/governance/customers/{customer_id}", lib.ChainMiddlewares(h.updateCustomer, middlewares...))
+	r.DELETE("/api/platform/governance/customers/{customer_id}", lib.ChainMiddlewares(h.deleteCustomer, middlewares...))
 
 	// Budget and Rate Limit GET operations
 	r.GET("/api/governance/budgets", lib.ChainMiddlewares(h.getBudgets, middlewares...))

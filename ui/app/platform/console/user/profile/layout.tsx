@@ -5,6 +5,6 @@ function RouteComponent() {
 	return <ProfilePage />;
 }
 
-export const Route = createFileRoute("/workspace/user/profile")({
+export const Route = createFileRoute("/platform/console/user/profile")({
 	component: RouteComponent,
 });
