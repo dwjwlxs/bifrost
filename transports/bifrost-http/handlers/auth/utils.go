@@ -16,7 +16,7 @@ func sendJSONWithStatus(ctx *fasthttp.RequestCtx, data interface{}, statusCode i
 }
 
 // sendError sends a BifrostError response.
-func sendError(ctx *fasthttp.RequestCtx, statusCode int, code, message string) {
+func sendError(ctx *fasthttp.RequestCtx, statusCode int, code string, message string) {
 	handlers.SendJSONWithStatus(ctx, map[string]any{
 		"code":    code,
 		"message": message,

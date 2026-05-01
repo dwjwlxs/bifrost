@@ -40,7 +40,7 @@ func (h *PlatformOrgHandler) RegisterRoutes(r *router.Router, middlewares ...sch
 func (h *PlatformOrgHandler) listMyOrgs(ctx *fasthttp.RequestCtx) {
 	claims := GetPlatformClaimsFromContext(ctx)
 	if claims == nil {
-		SendError(ctx, fasthttp.StatusUnauthorized, "Unauthorized")
+		sendError(ctx, fasthttp.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 		return
 	}
 
@@ -51,7 +51,7 @@ func (h *PlatformOrgHandler) listMyOrgs(ctx *fasthttp.RequestCtx) {
 	}
 
 	if len(orgIDs) == 0 {
-		SendJSON(ctx, map[string]any{
+		sendJSON(ctx, map[string]any{
 			"code":    "0",
 			"message": "success",
 			"data": map[string]any{
@@ -65,7 +65,7 @@ func (h *PlatformOrgHandler) listMyOrgs(ctx *fasthttp.RequestCtx) {
 	// Query governance_customers for org details
 	var customers []tables.TableCustomer
 	if err := h.db.Where("id IN ?", orgIDs).Find(&customers).Error; err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to list organizations")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to list organizations", err.Error())
 		return
 	}
 
@@ -90,7 +90,7 @@ func (h *PlatformOrgHandler) listMyOrgs(ctx *fasthttp.RequestCtx) {
 		items = append(items, item)
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -104,13 +104,13 @@ func (h *PlatformOrgHandler) listMyOrgs(ctx *fasthttp.RequestCtx) {
 func (h *PlatformOrgHandler) getOrg(ctx *fasthttp.RequestCtx) {
 	orgID, _ := ctx.UserValue("orgId").(string)
 	if orgID == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Organization ID is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Organization ID is required")
 		return
 	}
 
 	var customer tables.TableCustomer
 	if err := h.db.Where("id = ?", orgID).First(&customer).Error; err != nil {
-		SendError(ctx, fasthttp.StatusNotFound, "Organization not found")
+		sendError(ctx, fasthttp.StatusNotFound, "NOT_FOUND", "Organization not found")
 		return
 	}
 
@@ -126,7 +126,7 @@ func (h *PlatformOrgHandler) getOrg(ctx *fasthttp.RequestCtx) {
 		}
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -144,13 +144,13 @@ func (h *PlatformOrgHandler) getOrg(ctx *fasthttp.RequestCtx) {
 func (h *PlatformOrgHandler) listOrgTeams(ctx *fasthttp.RequestCtx) {
 	orgID, _ := ctx.UserValue("orgId").(string)
 	if orgID == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Organization ID is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Organization ID is required")
 		return
 	}
 
 	var teams []tables.TableTeam
 	if err := h.db.Where("customer_id = ?", orgID).Find(&teams).Error; err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to list teams")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to list teams", err.Error())
 		return
 	}
 
@@ -165,7 +165,7 @@ func (h *PlatformOrgHandler) listOrgTeams(ctx *fasthttp.RequestCtx) {
 		}
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -179,13 +179,13 @@ func (h *PlatformOrgHandler) listOrgTeams(ctx *fasthttp.RequestCtx) {
 func (h *PlatformOrgHandler) listOrgMembers(ctx *fasthttp.RequestCtx) {
 	orgID, _ := ctx.UserValue("orgId").(string)
 	if orgID == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Organization ID is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Organization ID is required")
 		return
 	}
 
 	var members []tables.TablePlatformOrgMember
 	if err := h.db.Where("org_id = ?", orgID).Find(&members).Error; err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to list org members")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to list org members", err.Error())
 		return
 	}
 
@@ -199,7 +199,7 @@ func (h *PlatformOrgHandler) listOrgMembers(ctx *fasthttp.RequestCtx) {
 		}
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{

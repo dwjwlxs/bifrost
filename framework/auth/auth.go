@@ -188,11 +188,14 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (*User, err
 	}
 
 	// Check if email already exists
-	exists, err := s.store.UserRepo().EmailExists(ctx, email)
+	existingUser, err := s.store.UserRepo().GetByEmail(ctx, email)
 	if err != nil {
 		return nil, fmt.Errorf("auth: failed to check email: %w", err)
 	}
-	if exists {
+	if existingUser != nil {
+		if existingUser.Status == UserStatusPendingVerification {
+			return nil, ErrUserNotVerified
+		}
 		return nil, ErrUserAlreadyExists
 	}
 

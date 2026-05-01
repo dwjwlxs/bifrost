@@ -68,15 +68,19 @@ func NewPlatformAuthHandler(db *gorm.DB, authService fauth.AuthService, configSt
 
 // platformHandleServiceError maps framework/auth errors to HTTP responses for platform handlers.
 func platformHandleServiceError(ctx *fasthttp.RequestCtx, err error) {
+	errMsg := ""
+	if err != nil {
+		errMsg = err.Error()
+	}
 	switch {
 	case errors.Is(err, fauth.ErrVerificationCodeInvalid):
-		SendError(ctx, fasthttp.StatusBadRequest, "invalid verification code")
+		sendError(ctx, fasthttp.StatusBadRequest, "invalid verification code", errMsg)
 	case errors.Is(err, fauth.ErrVerificationCodeExpired):
-		SendError(ctx, fasthttp.StatusBadRequest, "verification code expired")
+		sendError(ctx, fasthttp.StatusBadRequest, "verification code expired", errMsg)
 	case errors.Is(err, fauth.ErrVerificationCodeMaxAttempts):
-		SendError(ctx, fasthttp.StatusTooManyRequests, "verification code max attempts exceeded")
+		sendError(ctx, fasthttp.StatusTooManyRequests, "verification code max attempts exceeded", errMsg)
 	default:
-		SendError(ctx, fasthttp.StatusInternalServerError, "internal server error")
+		sendError(ctx, fasthttp.StatusInternalServerError, "internal server error", errMsg)
 	}
 }
 
@@ -108,20 +112,20 @@ func PlatformAuthMiddleware(db *gorm.DB, authService fauth.AuthService) schemas.
 			authHeader := string(ctx.Request.Header.Peek("Authorization"))
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 			if token == "" || token == authHeader {
-				SendError(ctx, fasthttp.StatusUnauthorized, "Missing or invalid Authorization header")
+				sendError(ctx, fasthttp.StatusUnauthorized, "Missing or invalid Authorization header", "")
 				return
 			}
 
 			// 2. Verify platform JWT
 			platformClaims, err := VerifyPlatformJWT(token)
 			if err != nil {
-				SendError(ctx, fasthttp.StatusUnauthorized, "Invalid platform token")
+				sendError(ctx, fasthttp.StatusUnauthorized, "Invalid platform token", err.Error())
 				return
 			}
 
 			// 3. Extract and verify the embedded auth JWT
 			if platformClaims.AuthToken == "" {
-				SendError(ctx, fasthttp.StatusUnauthorized, "Platform token missing embedded auth token")
+				sendError(ctx, fasthttp.StatusUnauthorized, "Platform token missing embedded auth token", "")
 				return
 			}
 
@@ -131,7 +135,7 @@ func PlatformAuthMiddleware(db *gorm.DB, authService fauth.AuthService) schemas.
 				// Auth JWT is invalid or expired → reject even if platform JWT is still valid.
 				// This is the safety-first approach: if the underlying auth identity is gone,
 				// the platform session should be invalid too.
-				SendError(ctx, fasthttp.StatusUnauthorized, "Embedded auth token invalid or expired")
+				sendError(ctx, fasthttp.StatusUnauthorized, "Embedded auth token invalid or expired", err.Error())
 				return
 			}
 
@@ -193,12 +197,12 @@ func (h *PlatformAuthHandler) login(ctx *fasthttp.RequestCtx) {
 	}
 
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
-		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request format")
+		sendError(ctx, fasthttp.StatusBadRequest, "Invalid request format", err.Error())
 		return
 	}
 
 	if req.Email == "" || req.Password == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Email and password are required")
+		sendError(ctx, fasthttp.StatusBadRequest, "Email and password are required", "")
 		return
 	}
 
@@ -210,20 +214,20 @@ func (h *PlatformAuthHandler) login(ctx *fasthttp.RequestCtx) {
 		Password: req.Password,
 	}, "", ctx.RemoteIP().String())
 	if err != nil {
-		SendError(ctx, fasthttp.StatusUnauthorized, "Invalid credentials")
+		sendError(ctx, fasthttp.StatusUnauthorized, "Invalid credentials", err.Error())
 		return
 	}
 
 	// 2. Extract user_id from the auth JWT
 	jwtClaims, err := h.authService.ValidateAccessToken(goCtx, tokenPair.AccessToken)
 	if err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to validate access token")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to validate access token", err.Error())
 		return
 	}
 
 	userID := jwtClaims.Sub
 	if userID == "" {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Invalid user ID in token")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Invalid user ID in token", "")
 		return
 	}
 
@@ -233,18 +237,18 @@ func (h *PlatformAuthHandler) login(ctx *fasthttp.RequestCtx) {
 	// 4. Sign platform JWT
 	platformJWT, err := SignPlatformJWT(platformClaims)
 	if err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to sign platform token")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to sign platform token", err.Error())
 		return
 	}
 
 	// 5. Return tokens
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
-			"access_token": platformJWT,
+			"access_token":  platformJWT,
 			"refresh_token": tokenPair.RefreshToken,
-			"expires_at":   tokenPair.ExpiresAt.Format(time.RFC3339),
+			"expires_at":    tokenPair.ExpiresAt.Format(time.RFC3339),
 		},
 	})
 }
@@ -257,22 +261,22 @@ func (h *PlatformAuthHandler) register(ctx *fasthttp.RequestCtx) {
 	}
 
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
-		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request format")
+		sendError(ctx, fasthttp.StatusBadRequest, "Invalid request format", err.Error())
 		return
 	}
 
 	if req.Email == "" || req.Password == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Email and password are required")
+		sendError(ctx, fasthttp.StatusBadRequest, "Email and password are required", "")
 		return
 	}
 
 	if len(req.Password) < 6 {
-		SendError(ctx, fasthttp.StatusBadRequest, "Password must be at least 6 characters")
+		sendError(ctx, fasthttp.StatusBadRequest, "Password must be at least 6 characters", "")
 		return
 	}
 
 	if !emailRegex.MatchString(req.Email) {
-		SendError(ctx, fasthttp.StatusBadRequest, "Invalid email format")
+		sendError(ctx, fasthttp.StatusBadRequest, "Invalid email format", "")
 		return
 	}
 
@@ -283,11 +287,11 @@ func (h *PlatformAuthHandler) register(ctx *fasthttp.RequestCtx) {
 		Password: req.Password,
 	})
 	if err != nil {
-		SendError(ctx, fasthttp.StatusConflict, "Registration failed")
+		sendError(ctx, fasthttp.StatusConflict, "Registration failed", err.Error())
 		return
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -305,12 +309,12 @@ func (h *PlatformAuthHandler) verify(ctx *fasthttp.RequestCtx) {
 	}
 
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
-		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request format")
+		sendError(ctx, fasthttp.StatusBadRequest, "Invalid request format", err.Error())
 		return
 	}
 
 	if req.Email == "" || req.Code == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Email and code are required")
+		sendError(ctx, fasthttp.StatusBadRequest, "Email and code are required", "")
 		return
 	}
 
@@ -329,13 +333,13 @@ func (h *PlatformAuthHandler) verify(ctx *fasthttp.RequestCtx) {
 	// 2. Extract user_id from the auth JWT
 	jwtClaims, err := h.authService.ValidateAccessToken(goCtx, tokenPair.AccessToken)
 	if err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to validate access token")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to validate access token", err.Error())
 		return
 	}
 
 	userID := jwtClaims.Sub
 	if userID == "" {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Invalid user ID in token")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Invalid user ID in token", "")
 		return
 	}
 
@@ -343,12 +347,12 @@ func (h *PlatformAuthHandler) verify(ctx *fasthttp.RequestCtx) {
 	platformClaims := h.buildPlatformClaimsForUser(userID, tokenPair.AccessToken)
 	platformJWT, err := SignPlatformJWT(platformClaims)
 	if err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to sign platform token")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to sign platform token", err.Error())
 		return
 	}
 
 	// 4. Return tokens
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -366,12 +370,12 @@ func (h *PlatformAuthHandler) refreshToken(ctx *fasthttp.RequestCtx) {
 	}
 
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
-		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request format")
+		sendError(ctx, fasthttp.StatusBadRequest, "Invalid request format", err.Error())
 		return
 	}
 
 	if req.RefreshToken == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Refresh token is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "Refresh token is required", "")
 		return
 	}
 
@@ -382,20 +386,20 @@ func (h *PlatformAuthHandler) refreshToken(ctx *fasthttp.RequestCtx) {
 		RefreshToken: req.RefreshToken,
 	})
 	if err != nil {
-		SendError(ctx, fasthttp.StatusUnauthorized, "Invalid refresh token")
+		sendError(ctx, fasthttp.StatusUnauthorized, "Invalid refresh token", err.Error())
 		return
 	}
 
 	// 2. Extract user_id from the new access token
 	jwtClaims, err := h.authService.ValidateAccessToken(goCtx, tokenPair.AccessToken)
 	if err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to validate new access token")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to validate new access token", err.Error())
 		return
 	}
 
 	userID := jwtClaims.Sub
 	if userID == "" {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Invalid user ID in token")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Invalid user ID in token", "")
 		return
 	}
 
@@ -405,18 +409,18 @@ func (h *PlatformAuthHandler) refreshToken(ctx *fasthttp.RequestCtx) {
 	// 4. Sign new platform JWT
 	platformJWT, err := SignPlatformJWT(platformClaims)
 	if err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to sign platform token")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to sign platform token", err.Error())
 		return
 	}
 
 	// 5. Return new tokens
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
-			"access_token": platformJWT,
+			"access_token":  platformJWT,
 			"refresh_token": tokenPair.RefreshToken,
-			"expires_at":   tokenPair.ExpiresAt.Format(time.RFC3339),
+			"expires_at":    tokenPair.ExpiresAt.Format(time.RFC3339),
 		},
 	})
 }
@@ -425,11 +429,11 @@ func (h *PlatformAuthHandler) refreshToken(ctx *fasthttp.RequestCtx) {
 func (h *PlatformAuthHandler) getProfile(ctx *fasthttp.RequestCtx) {
 	platformClaims := GetPlatformClaimsFromContext(ctx)
 	if platformClaims == nil {
-		SendError(ctx, fasthttp.StatusUnauthorized, "Unauthorized")
+		sendError(ctx, fasthttp.StatusUnauthorized, "Unauthorized", "")
 		return
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{

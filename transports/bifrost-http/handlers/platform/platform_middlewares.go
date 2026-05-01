@@ -43,7 +43,7 @@ func RequireAdmin(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		claims := GetPlatformClaimsFromContext(ctx)
 		if claims == nil || !claims.IsAdmin {
-			SendError(ctx, fasthttp.StatusForbidden, "Admin access required")
+			sendError(ctx, fasthttp.StatusForbidden, "FORBIDDEN", "Admin access required")
 			return
 		}
 		next(ctx)
@@ -57,18 +57,18 @@ func RequireOrgAdmin(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		claims := GetPlatformClaimsFromContext(ctx)
 		if claims == nil {
-			SendError(ctx, fasthttp.StatusUnauthorized, "Unauthorized")
+			sendError(ctx, fasthttp.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 			return
 		}
 
 		orgID, _ := ctx.UserValue("orgId").(string)
 		if orgID == "" {
-			SendError(ctx, fasthttp.StatusBadRequest, "Organization ID is required")
+			sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Organization ID is required")
 			return
 		}
 
 		if !claims.IsOrgAdmin(orgID) {
-			SendError(ctx, fasthttp.StatusForbidden, "Organization admin access required")
+			sendError(ctx, fasthttp.StatusForbidden, "FORBIDDEN", "Organization admin access required")
 			return
 		}
 
@@ -83,13 +83,13 @@ func RequireOrgMember(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		claims := GetPlatformClaimsFromContext(ctx)
 		if claims == nil {
-			SendError(ctx, fasthttp.StatusUnauthorized, "Unauthorized")
+			sendError(ctx, fasthttp.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 			return
 		}
 
 		orgID, _ := ctx.UserValue("orgId").(string)
 		if orgID == "" {
-			SendError(ctx, fasthttp.StatusBadRequest, "Organization ID is required")
+			sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Organization ID is required")
 			return
 		}
 
@@ -101,7 +101,7 @@ func RequireOrgMember(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 			}
 		}
 		if !isMember {
-			SendError(ctx, fasthttp.StatusForbidden, "Organization membership required")
+			sendError(ctx, fasthttp.StatusForbidden, "FORBIDDEN", "Organization membership required")
 			return
 		}
 
@@ -119,13 +119,13 @@ func RequireTeamAdmin(db *gorm.DB) schemas.BifrostHTTPMiddleware {
 		return func(ctx *fasthttp.RequestCtx) {
 			claims := GetPlatformClaimsFromContext(ctx)
 			if claims == nil {
-				SendError(ctx, fasthttp.StatusUnauthorized, "Unauthorized")
+				sendError(ctx, fasthttp.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 				return
 			}
 
 			teamID, _ := ctx.UserValue("teamId").(string)
 			if teamID == "" {
-				SendError(ctx, fasthttp.StatusBadRequest, "Team ID is required")
+				sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Team ID is required")
 				return
 			}
 
@@ -147,7 +147,7 @@ func RequireTeamAdmin(db *gorm.DB) schemas.BifrostHTTPMiddleware {
 				return
 			}
 
-			SendError(ctx, fasthttp.StatusForbidden, "Team admin access required")
+			sendError(ctx, fasthttp.StatusForbidden, "FORBIDDEN", "Team admin access required")
 		}
 	}
 }
@@ -158,13 +158,13 @@ func RequireTeamMember(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		claims := GetPlatformClaimsFromContext(ctx)
 		if claims == nil {
-			SendError(ctx, fasthttp.StatusUnauthorized, "Unauthorized")
+			sendError(ctx, fasthttp.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 			return
 		}
 
 		teamID, _ := ctx.UserValue("teamId").(string)
 		if teamID == "" {
-			SendError(ctx, fasthttp.StatusBadRequest, "Team ID is required")
+			sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Team ID is required")
 			return
 		}
 
@@ -184,7 +184,7 @@ func RequireTeamMember(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 			}
 		}
 
-		SendError(ctx, fasthttp.StatusForbidden, "Team membership required")
+		sendError(ctx, fasthttp.StatusForbidden, "FORBIDDEN", "Team membership required")
 	}
 }
 
@@ -196,26 +196,26 @@ func RequireVKOwner(db *gorm.DB) schemas.BifrostHTTPMiddleware {
 		return func(ctx *fasthttp.RequestCtx) {
 			claims := GetPlatformClaimsFromContext(ctx)
 			if claims == nil {
-				SendError(ctx, fasthttp.StatusUnauthorized, "Unauthorized")
+				sendError(ctx, fasthttp.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 				return
 			}
 
 			vkID, _ := ctx.UserValue("vkId").(string)
 			if vkID == "" {
-				SendError(ctx, fasthttp.StatusBadRequest, "Virtual key ID is required")
+				sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Virtual key ID is required")
 				return
 			}
 
 			var vk tables.TableVirtualKey
 			if err := db.Where("id = ?", vkID).First(&vk).Error; err != nil {
 				// Intentionally return 403, not 404 — avoid info leakage
-				SendError(ctx, fasthttp.StatusForbidden, "Virtual key access denied")
+				sendError(ctx, fasthttp.StatusForbidden, "FORBIDDEN", "Virtual key access denied")
 				return
 			}
 
 			// Check ownership
 			if vk.UserID == nil || *vk.UserID != claims.UserID {
-				SendError(ctx, fasthttp.StatusForbidden, "Virtual key access denied")
+				sendError(ctx, fasthttp.StatusForbidden, "FORBIDDEN", "Virtual key access denied")
 				return
 			}
 

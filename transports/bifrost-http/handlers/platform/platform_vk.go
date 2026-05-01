@@ -50,7 +50,7 @@ func (h *PlatformVKHandler) RegisterRoutes(r *router.Router, middlewares ...sche
 func (h *PlatformVKHandler) listMyVKs(ctx *fasthttp.RequestCtx) {
 	userID := GetPlatformUserIDFromContext(ctx)
 	if userID == "" {
-		SendError(ctx, fasthttp.StatusUnauthorized, "Unauthorized")
+		sendError(ctx, fasthttp.StatusUnauthorized, "UNAUTHORIZED", "user_id is required")
 		return
 	}
 
@@ -72,7 +72,7 @@ func (h *PlatformVKHandler) listMyVKs(ctx *fasthttp.RequestCtx) {
 		Offset(int(offset)).
 		Limit(int(limit)).
 		Find(&vks).Error; err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to list virtual keys")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to list virtual keys", err.Error())
 		return
 	}
 
@@ -81,7 +81,7 @@ func (h *PlatformVKHandler) listMyVKs(ctx *fasthttp.RequestCtx) {
 		items[i] = marshalVK(&vk)
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -95,7 +95,7 @@ func (h *PlatformVKHandler) listMyVKs(ctx *fasthttp.RequestCtx) {
 func (h *PlatformVKHandler) createVK(ctx *fasthttp.RequestCtx) {
 	userID := GetPlatformUserIDFromContext(ctx)
 	if userID == "" {
-		SendError(ctx, fasthttp.StatusUnauthorized, "Unauthorized")
+		sendError(ctx, fasthttp.StatusUnauthorized, "UNAUTHORIZED", "user_id is required")
 		return
 	}
 
@@ -106,12 +106,12 @@ func (h *PlatformVKHandler) createVK(ctx *fasthttp.RequestCtx) {
 	}
 
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
-		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request format")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Invalid request format")
 		return
 	}
 
 	if req.Name == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Virtual key name is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Virtual key name is required")
 		return
 	}
 
@@ -129,11 +129,11 @@ func (h *PlatformVKHandler) createVK(ctx *fasthttp.RequestCtx) {
 	}
 
 	if err := h.db.Create(&vk).Error; err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to create virtual key")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to create virtual key", err.Error())
 		return
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data":    marshalVK(&vk),
@@ -144,23 +144,23 @@ func (h *PlatformVKHandler) createVK(ctx *fasthttp.RequestCtx) {
 func (h *PlatformVKHandler) getVK(ctx *fasthttp.RequestCtx) {
 	userID := GetPlatformUserIDFromContext(ctx)
 	if userID == "" {
-		SendError(ctx, fasthttp.StatusUnauthorized, "Unauthorized")
+		sendError(ctx, fasthttp.StatusUnauthorized, "UNAUTHORIZED", "user_id is required")
 		return
 	}
 
 	vkID, _ := ctx.UserValue("vkId").(string)
 	if vkID == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Virtual key ID is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Virtual key ID is required")
 		return
 	}
 
 	var vk tables.TableVirtualKey
 	if err := h.db.Where("id = ? AND user_id = ?", vkID, userID).First(&vk).Error; err != nil {
-		SendError(ctx, fasthttp.StatusNotFound, "Virtual key not found")
+		sendError(ctx, fasthttp.StatusNotFound, "NOT_FOUND", "Virtual key not found")
 		return
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data":    marshalVK(&vk),
@@ -171,13 +171,13 @@ func (h *PlatformVKHandler) getVK(ctx *fasthttp.RequestCtx) {
 func (h *PlatformVKHandler) updateVK(ctx *fasthttp.RequestCtx) {
 	userID := GetPlatformUserIDFromContext(ctx)
 	if userID == "" {
-		SendError(ctx, fasthttp.StatusUnauthorized, "Unauthorized")
+		sendError(ctx, fasthttp.StatusUnauthorized, "UNAUTHORIZED", "user_id is required")
 		return
 	}
 
 	vkID, _ := ctx.UserValue("vkId").(string)
 	if vkID == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Virtual key ID is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Virtual key ID is required")
 		return
 	}
 
@@ -189,13 +189,13 @@ func (h *PlatformVKHandler) updateVK(ctx *fasthttp.RequestCtx) {
 	}
 
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
-		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request format")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Invalid request format")
 		return
 	}
 
 	var vk tables.TableVirtualKey
 	if err := h.db.Where("id = ? AND user_id = ?", vkID, userID).First(&vk).Error; err != nil {
-		SendError(ctx, fasthttp.StatusNotFound, "Virtual key not found")
+		sendError(ctx, fasthttp.StatusNotFound, "NOT_FOUND", "Virtual key not found")
 		return
 	}
 
@@ -216,11 +216,11 @@ func (h *PlatformVKHandler) updateVK(ctx *fasthttp.RequestCtx) {
 	}
 
 	if err := h.db.Save(&vk).Error; err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to update virtual key")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to update virtual key", err.Error())
 		return
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data":    marshalVK(&vk),
@@ -231,27 +231,27 @@ func (h *PlatformVKHandler) updateVK(ctx *fasthttp.RequestCtx) {
 func (h *PlatformVKHandler) deleteVK(ctx *fasthttp.RequestCtx) {
 	userID := GetPlatformUserIDFromContext(ctx)
 	if userID == "" {
-		SendError(ctx, fasthttp.StatusUnauthorized, "Unauthorized")
+		sendError(ctx, fasthttp.StatusUnauthorized, "UNAUTHORIZED", "user_id is required")
 		return
 	}
 
 	vkID, _ := ctx.UserValue("vkId").(string)
 	if vkID == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Virtual key ID is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Virtual key ID is required")
 		return
 	}
 
 	result := h.db.Where("id = ? AND user_id = ?", vkID, userID).Delete(&tables.TableVirtualKey{})
 	if result.Error != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to delete virtual key")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to delete virtual key", result.Error.Error())
 		return
 	}
 	if result.RowsAffected == 0 {
-		SendError(ctx, fasthttp.StatusNotFound, "Virtual key not found")
+		sendError(ctx, fasthttp.StatusNotFound, "NOT_FOUND", "Virtual key not found")
 		return
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "deleted",
 	})
@@ -261,7 +261,7 @@ func (h *PlatformVKHandler) deleteVK(ctx *fasthttp.RequestCtx) {
 func (h *PlatformVKHandler) listTeamVKs(ctx *fasthttp.RequestCtx) {
 	teamID, _ := ctx.UserValue("teamId").(string)
 	if teamID == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Team ID is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Team ID is required")
 		return
 	}
 
@@ -283,7 +283,7 @@ func (h *PlatformVKHandler) listTeamVKs(ctx *fasthttp.RequestCtx) {
 		Offset(int(offset)).
 		Limit(int(limit)).
 		Find(&vks).Error; err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to list team virtual keys")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to list team virtual keys", err.Error())
 		return
 	}
 
@@ -292,7 +292,7 @@ func (h *PlatformVKHandler) listTeamVKs(ctx *fasthttp.RequestCtx) {
 		items[i] = marshalVK(&vk)
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
@@ -307,11 +307,11 @@ func (h *PlatformVKHandler) updateTeamVK(ctx *fasthttp.RequestCtx) {
 	teamID, _ := ctx.UserValue("teamId").(string)
 	vkID, _ := ctx.UserValue("vkId").(string)
 	if teamID == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Team ID is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Team ID is required")
 		return
 	}
 	if vkID == "" {
-		SendError(ctx, fasthttp.StatusBadRequest, "Virtual key ID is required")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Virtual key ID is required")
 		return
 	}
 
@@ -322,13 +322,13 @@ func (h *PlatformVKHandler) updateTeamVK(ctx *fasthttp.RequestCtx) {
 	}
 
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
-		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request format")
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Invalid request format")
 		return
 	}
 
 	var vk tables.TableVirtualKey
 	if err := h.db.Where("id = ? AND team_id = ?", vkID, teamID).First(&vk).Error; err != nil {
-		SendError(ctx, fasthttp.StatusNotFound, "Virtual key not found in this team")
+		sendError(ctx, fasthttp.StatusNotFound, "NOT_FOUND", "Virtual key not found in this team")
 		return
 	}
 
@@ -343,11 +343,11 @@ func (h *PlatformVKHandler) updateTeamVK(ctx *fasthttp.RequestCtx) {
 	}
 
 	if err := h.db.Save(&vk).Error; err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to update virtual key")
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to update virtual key", err.Error())
 		return
 	}
 
-	SendJSON(ctx, map[string]any{
+	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data":    marshalVK(&vk),
