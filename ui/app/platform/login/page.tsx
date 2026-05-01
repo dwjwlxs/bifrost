@@ -1,34 +1,13 @@
 import { useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { useNavigate, Link } from "@tanstack/react-router";
-import { setToken, setUser, type PlatformUser } from "@/lib/platform/auth";
+import { setToken, decodeAndStoreUser } from "@/lib/platform/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmailVerificationDialog } from "@/app/platform/components/EmailVerificationDialog";
 import { usePlatformLoginMutation } from "@/lib/platform/platformApi";
-import type { PlatformUserInfo } from "@/lib/platform/platformApi";
-
-// Convert PlatformUserInfo to PlatformUser (handles field name differences)
-function toPlatformUser(info: PlatformUserInfo, extra?: Partial<PlatformUser>): PlatformUser {
-	return {
-		id: info.id,
-		email: info.email,
-		username: info.username,
-		nickname: info.nickname,
-		balance: info.balance,
-		is_admin: info.is_admin,
-		role: info.role,
-		customer_id: info.customer_id,
-		team_id: info.team_id,
-		status: info.status,
-		email_verified: info.is_email_verified,
-		created_at: info.created_at,
-		updated_at: info.updated_at,
-		...extra,
-	};
-}
 
 export default function LoginPage() {
 	const navigate = useNavigate();
@@ -47,14 +26,17 @@ export default function LoginPage() {
 		setError("");
 
 		try {
-			const res = await platformLogin({ login, password }).unwrap();
+			const res = await platformLogin({ email: login, password: password }).unwrap();
 			// New response format: { code, message, data: { access_token, refresh_token, expires_at } }
 			const { access_token, refresh_token } = res.data;
 			setToken(access_token);
 			// Store refresh token in memory (not localStorage for security)
 			// @ts-ignore - internal usage
 			window.__bifrost_refresh_token = refresh_token;
-			// For login success, we don't have full user info, redirect to dashboard which fetches profile
+
+			// Decode JWT payload to: get user info for immediate header display
+			decodeAndStoreUser(access_token);
+
 			const redirectTo = redirect && redirect.startsWith("/") ? redirect : "/platform/console/dashboard";
 			navigate({ to: redirectTo });
 		} catch (err: any) {
@@ -129,6 +111,8 @@ export default function LoginPage() {
 					// Store refresh token for later use
 					// @ts-ignore - internal usage
 					window.__bifrost_refresh_token = refreshToken;
+					// Decode JWT payload to get user info for immediate header display
+					decodeAndStoreUser(token);
 					const redirectTo = redirect && redirect.startsWith("/") ? redirect : "/platform/console/dashboard";
 					navigate({ to: redirectTo });
 				}}

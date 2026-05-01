@@ -4,12 +4,17 @@
  */
 import { getApiBaseUrl } from "@/lib/utils/port";
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { getToken } from "./auth";
 
 const baseQuery = fetchBaseQuery({
 	baseUrl: getApiBaseUrl(),
 	credentials: "include",
-	prepareHeaders: async (headers) => {
+	prepareHeaders: (headers) => {
 		headers.set("Content-Type", "application/json");
+		const token = getToken();
+		if (token) {
+			headers.set("Authorization", `Bearer ${token}`);
+		}
 		return headers;
 	},
 });

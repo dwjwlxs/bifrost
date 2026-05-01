@@ -49,6 +49,8 @@ type PlatformAuthHandler struct {
 	db          *gorm.DB
 	authService fauth.AuthService
 	configStore configstore.ConfigStore
+	jwtKey      []byte
+	jwtExpiry   time.Duration
 }
 
 // NewPlatformAuthHandler creates a new PlatformAuthHandler.
@@ -59,10 +61,13 @@ func NewPlatformAuthHandler(db *gorm.DB, authService fauth.AuthService, configSt
 	if authService == nil {
 		panic("NewPlatformAuthHandler: authService must not be nil")
 	}
+
 	return &PlatformAuthHandler{
 		db:          db,
 		authService: authService,
 		configStore: configStore,
+		jwtKey:      PlatformJWTKey,
+		jwtExpiry:   PlatformJWTExpiry,
 	}
 }
 
@@ -106,6 +111,10 @@ func PlatformAuthMiddleware(db *gorm.DB, authService fauth.AuthService) schemas.
 	if db == nil || authService == nil {
 		panic("PlatformAuthMiddleware: db and authService must not be nil")
 	}
+	jwtKey := PlatformJWTKey
+	if len(jwtKey) == 0 {
+		panic("PlatformAuthMiddleware: jwtKey must not be empty")
+	}
 	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 		return func(ctx *fasthttp.RequestCtx) {
 			// 1. Extract Bearer token
@@ -117,7 +126,7 @@ func PlatformAuthMiddleware(db *gorm.DB, authService fauth.AuthService) schemas.
 			}
 
 			// 2. Verify platform JWT
-			platformClaims, err := VerifyPlatformJWT(token)
+			platformClaims, err := VerifyPlatformJWT(token, jwtKey)
 			if err != nil {
 				sendError(ctx, fasthttp.StatusUnauthorized, "Invalid platform token", err.Error())
 				return
@@ -154,7 +163,7 @@ var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-
 
 // buildPlatformClaimsForUser queries the membership tables for the given user
 // and constructs PlatformClaims. It does NOT set AuthToken — callers must do that.
-func (h *PlatformAuthHandler) buildPlatformClaimsForUser(userID, authToken string) *PlatformClaims {
+func (h *PlatformAuthHandler) buildPlatformClaimsForUser(userID string, authToken string, jwtClaims *fauth.JWTClaims) *PlatformClaims {
 	var admin tables.TablePlatformAdmin
 	isAdmin := false
 	if err := h.db.Where("user_id = ?", userID).First(&admin).Error; err == nil {
@@ -183,6 +192,11 @@ func (h *PlatformAuthHandler) buildPlatformClaimsForUser(userID, authToken strin
 		Orgs:      orgs,
 		Teams:     teams,
 		AuthToken: authToken,
+		Name:      jwtClaims.Name,
+		Email:     jwtClaims.Email,
+		Exp:       jwtClaims.Exp,
+		Iat:       jwtClaims.Iat,
+		Jti:       "",
 	}
 
 	// Email is already in auth JWT claims — no need to query old user table
@@ -232,10 +246,10 @@ func (h *PlatformAuthHandler) login(ctx *fasthttp.RequestCtx) {
 	}
 
 	// 3. Build platform claims using shared helper
-	platformClaims := h.buildPlatformClaimsForUser(userID, tokenPair.AccessToken)
+	platformClaims := h.buildPlatformClaimsForUser(userID, tokenPair.AccessToken, jwtClaims)
 
 	// 4. Sign platform JWT
-	platformJWT, err := SignPlatformJWT(platformClaims)
+	platformJWT, err := SignPlatformJWT(platformClaims, h.jwtKey, h.jwtExpiry)
 	if err != nil {
 		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to sign platform token", err.Error())
 		return
@@ -344,8 +358,8 @@ func (h *PlatformAuthHandler) verify(ctx *fasthttp.RequestCtx) {
 	}
 
 	// 3. Build platform claims and sign platform JWT
-	platformClaims := h.buildPlatformClaimsForUser(userID, tokenPair.AccessToken)
-	platformJWT, err := SignPlatformJWT(platformClaims)
+	platformClaims := h.buildPlatformClaimsForUser(userID, tokenPair.AccessToken, jwtClaims)
+	platformJWT, err := SignPlatformJWT(platformClaims, h.jwtKey, h.jwtExpiry)
 	if err != nil {
 		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to sign platform token", err.Error())
 		return
@@ -404,10 +418,10 @@ func (h *PlatformAuthHandler) refreshToken(ctx *fasthttp.RequestCtx) {
 	}
 
 	// 3. Build platform claims using shared helper
-	platformClaims := h.buildPlatformClaimsForUser(userID, tokenPair.AccessToken)
+	platformClaims := h.buildPlatformClaimsForUser(userID, tokenPair.AccessToken, jwtClaims)
 
 	// 4. Sign new platform JWT
-	platformJWT, err := SignPlatformJWT(platformClaims)
+	platformJWT, err := SignPlatformJWT(platformClaims, h.jwtKey, h.jwtExpiry)
 	if err != nil {
 		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to sign platform token", err.Error())
 		return

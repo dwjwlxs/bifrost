@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/framework/auth"
 )
 
@@ -17,7 +18,7 @@ func setupActiveUser(t *testing.T) (auth.AuthService, string, *auth.TokenPair) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := auth.NewNoopMessageSender()
+	sender := auth.NewNoopMessageSender(bifrost.NewNoOpLogger())
 	svc, err := auth.NewAuthService(config, store, sender, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
@@ -89,7 +90,7 @@ func TestListSessionsEmpty(t *testing.T) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := auth.NewNoopMessageSender()
+	sender := auth.NewNoopMessageSender(bifrost.NewNoOpLogger())
 	svc, err := auth.NewAuthService(config, store, sender, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
@@ -197,7 +198,7 @@ func TestGetProfile(t *testing.T) {
 func TestGetProfileNotFound(t *testing.T) {
 	config := auth.DefaultConfig()
 	store := auth.NewMemoryStoreFactory()
-	svc, _ := auth.NewAuthService(config, store, auth.NewNoopMessageSender(), nil)
+	svc, _ := auth.NewAuthService(config, store, auth.NewNoopMessageSender(bifrost.NewNoOpLogger()), nil)
 
 	_, err := svc.GetProfile(context.Background(), "non-existent")
 	if err != auth.ErrUserNotFound {
@@ -265,7 +266,7 @@ func TestVerifyEmailChange(t *testing.T) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := auth.NewNoopMessageSender()
+	sender := auth.NewNoopMessageSender(bifrost.NewNoOpLogger())
 	svc, err := auth.NewAuthService(config, store, sender, nil)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
@@ -337,7 +338,7 @@ func TestChangeEmailAlreadyInUse(t *testing.T) {
 	config.JWTAudience = "test-audience"
 
 	store := auth.NewMemoryStoreFactory()
-	sender := auth.NewNoopMessageSender()
+	sender := auth.NewNoopMessageSender(bifrost.NewNoOpLogger())
 	svc, _ := auth.NewAuthService(config, store, sender, nil)
 	ctx := context.Background()
 

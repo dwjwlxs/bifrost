@@ -4,6 +4,8 @@
  * Reuses the shared baseApi from the main store.
  */
 import { platformBaseApi } from "./platformBaseApi";
+import { PlatformUserInfo } from "./auth";
+
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -16,21 +18,6 @@ export interface AuthResponse {
 	message?: string;
 }
 
-export interface PlatformUserInfo {
-	id: number;
-	email: string;
-	username: string;
-	nickname: string;
-	balance: number;
-	is_admin: boolean;
-	is_email_verified: boolean;
-	role: string;
-	customer_id?: string;
-	team_id?: string;
-	status: string;
-	created_at: string;
-	updated_at: string;
-}
 
 export interface PlatformVirtualKey {
 	id: string;
@@ -215,7 +202,7 @@ export const platformApi = platformBaseApi.injectEndpoints({
 		// ── Auth ──
 		platformLogin: builder.mutation<
 			{ code: string; message: string; data: { access_token: string; refresh_token: string; expires_at: string } },
-			{ login: string; password: string }
+			{ email: string; password: string }
 		>({
 			query: (body) => ({
 				url: "/platform/login",

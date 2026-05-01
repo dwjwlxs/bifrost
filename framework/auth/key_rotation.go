@@ -31,9 +31,9 @@ type KeyRotationConfig struct {
 // Keys rotate every 24h, valid for 7 days, with 24h grace period.
 func DefaultKeyRotationConfig() *KeyRotationConfig {
 	return &KeyRotationConfig{
-		KeyTTL:            7 * 24 * time.Hour,
-		RotationInterval:  24 * time.Hour,
-		GracePeriod:       24 * time.Hour,
+		KeyTTL:           7 * 24 * time.Hour,
+		RotationInterval: 24 * time.Hour,
+		GracePeriod:      24 * time.Hour,
 	}
 }
 
@@ -41,11 +41,11 @@ func DefaultKeyRotationConfig() *KeyRotationConfig {
 // with automatic rotation. It implements the JWTManager interface.
 //
 // Key lifecycle:
-//   1. New key is generated at creation time (and at each rotation)
-//   2. During RotationInterval, the latest key signs new tokens AND verifies
-//   3. After RotationInterval, the previous key becomes verify-only
-//   4. After KeyTTL + GracePeriod, old keys are permanently removed
-//   5. JWKS endpoint returns all active (verify) keys
+//  1. New key is generated at creation time (and at each rotation)
+//  2. During RotationInterval, the latest key signs new tokens AND verifies
+//  3. After RotationInterval, the previous key becomes verify-only
+//  4. After KeyTTL + GracePeriod, old keys are permanently removed
+//  5. JWKS endpoint returns all active (verify) keys
 type RotatingJWTManager struct {
 	mu       sync.RWMutex
 	keys     []*rotatingKey // sorted newest first
@@ -61,9 +61,9 @@ type RotatingJWTManager struct {
 type rotatingKey struct {
 	es256       *ES256JWTManager // the actual key manager
 	createdAt   time.Time
-	expiresAt   time.Time   // when this key can no longer verify tokens
-	lastRotated time.Time   // when rotation happened (new key was created after this one)
-	isSigning   bool        // true = used for signing new tokens
+	expiresAt   time.Time // when this key can no longer verify tokens
+	lastRotated time.Time // when rotation happened (new key was created after this one)
+	isSigning   bool      // true = used for signing new tokens
 }
 
 // NewRotatingJWTManager creates a RotatingJWTManager.
@@ -178,13 +178,13 @@ func (m *RotatingJWTManager) cleanExpired() {
 }
 
 // Sign creates a new token using the current signing key.
-func (m *RotatingJWTManager) Sign(userID string, sessionID string, ttl time.Duration) (string, time.Time, error) {
+func (m *RotatingJWTManager) Sign(user *User, sessionID string, ttl time.Duration) (string, time.Time, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	for _, k := range m.keys {
 		if k.isSigning {
-			return k.es256.Sign(userID, sessionID, ttl)
+			return k.es256.Sign(user, sessionID, ttl)
 		}
 	}
 

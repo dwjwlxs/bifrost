@@ -1,0 +1,62 @@
+{
+    "$schema": "https://www.getbifrost.ai/schema",
+    "consumer_auth_config": {
+        "is_enabled": true,
+        "jwt": {
+            "issuer": "bifrost",
+            "audience": "bifrost-client",
+            "key_pair": {
+                "private_key_pem": "-----BEGIN PRIVATE KEY-----\nMHcCAQEEIIvqK8q7u5TbEOdJWBv1LHg2m7bMwDMY8pJkLqH+2rSloAoGCCqGSM49\nAwEHoUQDQgAE32OKVC115KXGqqHBX2SnHoHdN3im7PBMBpedCO9Vw2neVC6X6Xeq\nbhVfvxAzZEyEzZu1QORqefetqHBp7MUQ2g==\n-----END PRIVATE KEY-----",
+                "public_key_pem": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE32OKVC115KXGqqHBX2SnHoHdN3im\n7PBMBpedCO9Vw2neVC6X6XeqbhVfvxAzZEyEzZu1QORqefetqHBp7MUQ2g==\n-----END PUBLIC KEY-----"
+            }
+        },
+        "access_token_ttl": "15m",
+        "refresh_token_ttl": "30d",
+        "password_min_length": 8,
+        "verification_code_length": 6,
+        "verification_code_ttl": "15m",
+        "verification_max_attempts": 5,
+        "login_max_attempts": 5,
+        "login_lockout_duration": "15m",
+        "register_rate_limit_per_ip": 10,
+        "register_rate_limit_window": "1h",
+        "account_deletion_cool_down": "30d",
+        "key_rotation": {
+            "key_ttl": "7d",
+            "rotation_interval": "1h",
+            "grace_period": "1h"
+        },
+        "oauth": {
+            "wechat": {
+                "enabled": false,
+                "app_id": "",
+                "app_secret": "",
+                "redirect_uri": ""
+            }
+        }
+    },
+    "email_config": {
+        "host": "smtp.gmail.com",
+        "port": 587,
+        "username": "your-email@gmail.com",
+        "password": "your-app-password",
+        "from": "your-email@gmail.com",
+        "use_tls": true,
+        "use_ssl": false,
+        "app_url": "http://localhost:8080"
+    },
+    "config_store": {
+        "enabled": true,
+        "type": "sqlite",
+        "config": {
+            "path": "../../examples/configs/withconsumerauth/config.db"
+        }
+    },
+    "logs_store": {
+        "enabled": true,
+        "type": "sqlite",
+        "config": {
+            "path": "../../examples/configs/withconsumerauth/logs.db"
+        }
+    }
+}

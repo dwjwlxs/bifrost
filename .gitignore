@@ -1,6 +1,7 @@
 .env
 .vscode
 .qoder
+.hermes
 .DS_Store
 *_creds*
 **/venv/

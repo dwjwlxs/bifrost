@@ -1,5 +1,6 @@
 import { configureStore } from "@reduxjs/toolkit";
 import { baseApi } from "./apis/baseApi";
+import { platformApi } from "@/lib/platform/platformApi";
 import { appReducer, pluginReducer, providerReducer } from "./slices";
 import { reducers as enterpriseReducers, type EnterpriseState } from "@enterprise/lib/store/slices";
 // Importing enterprise APIs triggers their self-injection into baseApi
@@ -9,6 +10,8 @@ export const store = configureStore({
 	reducer: {
 		// RTK Query API
 		[baseApi.reducerPath]: baseApi.reducer,
+		// Platform RTK Query API
+		[platformApi.reducerPath]: platformApi.reducer,
 		// App state slice
 		app: appReducer,
 		// Provider state slice
@@ -37,7 +40,7 @@ export const store = configureStore({
 				// Ignore these paths in the state
 				ignoredPaths: ["api.queries", "api.mutations"],
 			},
-		}).concat(baseApi.middleware),
+		}).concat(baseApi.middleware, platformApi.middleware),
 	devTools: process.env.NODE_ENV !== "production",
 });
 

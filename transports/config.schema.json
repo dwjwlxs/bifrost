@@ -1660,8 +1660,11 @@
     "scim_config": {
       "$ref": "#/$defs/scim_config"
     },
-    "email": {
+    "email_config": {
       "$ref": "#/$defs/email_config"
+    },
+    "consumer_auth_config": {
+      "$ref": "#/$defs/consumer_auth_config"
     }
   },
   "additionalProperties": false,
@@ -3934,6 +3937,154 @@
         }
       },
       "additionalProperties": false
+    },
+    "consumer_auth_config": {
+      "type": "object",
+      "description": "Consumer (C-end) authentication service configuration for user registration, login, and account management. If absent or is_enabled=false, ConsumerAuthService is nil and /api/auth/* routes are not registered.",
+      "properties": {
+        "is_enabled": {
+          "type": "boolean",
+          "description": "Enable/disable the consumer auth service (default: false). When false, platform auth routes are not registered.",
+          "default": false
+        },
+        "jwt": {
+          "type": "object",
+          "description": "JWT signing configuration",
+          "properties": {
+            "issuer": {
+              "type": "string",
+              "description": "JWT issuer claim (iss). Must be non-empty.",
+              "default": "bifrost"
+            },
+            "audience": {
+              "type": "string",
+              "description": "JWT audience claim (aud). Must be non-empty.",
+              "default": "bifrost-client"
+            },
+            "key_pair": {
+              "type": "object",
+              "description": "ES256 key pair for JWT signing. If omitted, a new key pair is generated on startup (tokens invalidated on restart).",
+              "properties": {
+                "private_key_pem": {
+                  "type": "string",
+                  "description": "PEM-encoded ECDSA P-256 private key (base64-encoded in JSON). Must begin with -----BEGIN PRIVATE KEY-----"
+                },
+                "public_key_pem": {
+                  "type": "string",
+                  "description": "PEM-encoded ECDSA P-256 public key (base64-encoded in JSON). Must begin with -----BEGIN PUBLIC KEY-----"
+                }
+              }
+            }
+          }
+        },
+        "access_token_ttl": {
+          "type": "string",
+          "description": "Access token lifetime (default: 15m).",
+          "default": "15m"
+        },
+        "refresh_token_ttl": {
+          "type": "string",
+          "description": "Refresh token lifetime (default: 30d).",
+          "default": "30d"
+        },
+        "password_min_length": {
+          "type": "integer",
+          "description": "Minimum password length (default: 8).",
+          "minimum": 1,
+          "default": 8
+        },
+        "verification_code_length": {
+          "type": "integer",
+          "description": "Length of email verification code (default: 6).",
+          "minimum": 4,
+          "default": 6
+        },
+        "verification_code_ttl": {
+          "type": "string",
+          "description": "Verification code validity window (default: 15m).",
+          "default": "15m"
+        },
+        "verification_max_attempts": {
+          "type": "integer",
+          "description": "Max incorrect verification attempts before code is invalidated (default: 5).",
+          "minimum": 1,
+          "default": 5
+        },
+        "login_max_attempts": {
+          "type": "integer",
+          "description": "Max failed login attempts before lockout (default: 5).",
+          "minimum": 1,
+          "default": 5
+        },
+        "login_lockout_duration": {
+          "type": "string",
+          "description": "Account lockout duration after too many failed attempts (default: 15m).",
+          "default": "15m"
+        },
+        "register_rate_limit_per_ip": {
+          "type": "integer",
+          "description": "Max registration attempts per IP per window (default: 10).",
+          "minimum": 1,
+          "default": 10
+        },
+        "register_rate_limit_window": {
+          "type": "string",
+          "description": "Registration rate limit window (default: 1h).",
+          "default": "1h"
+        },
+        "account_deletion_cool_down": {
+          "type": "string",
+          "description": "Account deletion cooldown period (default: 30d).",
+          "default": "30d"
+        },
+        "key_rotation": {
+          "type": "object",
+          "description": "Automatic ES256 key rotation settings. If omitted, key rotation is disabled and a single static key is used.",
+          "properties": {
+            "key_ttl": {
+              "type": "string",
+              "description": "How long each key version remains active before rotation (default: 7d)."
+            },
+            "rotation_interval": {
+              "type": "string",
+              "description": "How often the rotation check runs (default: 1h)."
+            },
+            "grace_period": {
+              "type": "string",
+              "description": "Old key remains valid after rotation for this window to allow clients to refresh (default: 1h)."
+            }
+          }
+        },
+        "oauth": {
+          "type": "object",
+          "description": "OAuth2 provider configuration",
+          "properties": {
+            "wechat": {
+              "type": "object",
+              "description": "WeChat OAuth2 configuration",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable WeChat login (default: false).",
+                  "default": false
+                },
+                "app_id": {
+                  "type": "string",
+                  "description": "WeChat app ID"
+                },
+                "app_secret": {
+                  "type": "string",
+                  "description": "WeChat app secret"
+                },
+                "redirect_uri": {
+                  "type": "string",
+                  "description": "OAuth2 redirect URI registered in WeChat open platform"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

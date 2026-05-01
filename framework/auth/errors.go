@@ -5,6 +5,7 @@ import "errors"
 // Sentinel errors for the auth package.
 var (
 	// User errors
+	ErrUserIDAllocation   = errors.New("auth: failed to allocate user ID")
 	ErrUserNotFound       = errors.New("auth: user not found")
 	ErrUserAlreadyExists  = errors.New("auth: user already exists with this email")
 	ErrInvalidCredentials = errors.New("auth: invalid email or password")

@@ -1109,43 +1109,41 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	pluginsHandler := handlers.NewPluginsHandler(callbacks, s.Config.ConfigStore)
 	sessionHandler := handlers.NewSessionHandler(s.Config.ConfigStore, s.WSTicketStore)
 	promptsHandler := handlers.NewPromptsHandler(s.Config.ConfigStore, promptsReloader)
-	// Platform multi-tenant handlers
-	db := s.Config.ConfigStore.DB()
-	if err := tables.PlatformMigrate(db); err != nil {
-		return fmt.Errorf("failed to migrate platform tables: %v", err)
-	}
-	platformAdminHandler := platform_handlers.NewPlatformAdminHandler(db, s.Config.ConfigStore)
-	platformOrgHandler := platform_handlers.NewPlatformOrgHandler(db, s.Config.ConfigStore)
-	platformTeamHandler := platform_handlers.NewPlatformTeamHandler(db, s.Config.ConfigStore)
-	platformVKHandler := platform_handlers.NewPlatformVKHandler(db, s.Config.ConfigStore)
-	var platformAuthHandler *platform_handlers.PlatformAuthHandler
-	if s.Config.ConsumerAuthService != nil {
-		platformAuthHandler = platform_handlers.NewPlatformAuthHandler(db, s.Config.ConsumerAuthService, s.Config.ConfigStore)
-	}
+
 	// Going ahead with API handlers
 	healthHandler.RegisterRoutes(s.Router, middlewares...)
 	providerHandler.RegisterRoutes(s.Router, middlewares...)
 	// Note: mcpHandler routes already registered by mcpInferenceHandler in RegisterDefaultRoutes
 	configHandler.RegisterRoutes(s.Router, middlewares...)
 	oauthHandler.RegisterRoutes(s.Router, middlewares...)
-	// Platform multi-tenant routes
-	// Platform protected routes need PlatformAuthMiddleware
-	var platformProtectedMw []schemas.BifrostHTTPMiddleware
-	if platformAuthHandler != nil {
-		platformProtectedMw = append([]schemas.BifrostHTTPMiddleware{
-			platform_handlers.PlatformAuthMiddleware(db, s.Config.ConsumerAuthService),
-		}, middlewares...)
-	} else {
-		platformProtectedMw = middlewares
+
+	// Consumer auth service routes (/api/auth/*)
+	if s.Config != nil && s.Config.ConsumerAuthService != nil {
+		consumerAuthHandler := auth_handlers.NewAuthHandler(s.Config.ConsumerAuthService)
+		consumerAuthHandler.RegisterRoutes(s.Router, middlewares...)
 	}
 
-	if platformAuthHandler != nil {
-		platformAuthHandler.RegisterRoutes(s.Router, middlewares...)  // login/register are public
+	// Platform multi-tenant handlers
+	db := s.Config.ConfigStore.DB()
+	if err := tables.PlatformMigrate(db); err != nil {
+		return fmt.Errorf("failed to migrate platform tables: %v", err)
 	}
-	platformAdminHandler.RegisterRoutes(s.Router, platformProtectedMw...)   // admin needs auth
-	platformOrgHandler.RegisterRoutes(s.Router, platformProtectedMw...)     // org needs auth
-	platformTeamHandler.RegisterRoutes(s.Router, platformProtectedMw...)    // team needs auth
-	platformVKHandler.RegisterRoutes(s.Router, platformProtectedMw...)      // VK needs auth
+	platformAuthHandler := platform_handlers.NewPlatformAuthHandler(db, s.Config.ConsumerAuthService, s.Config.ConfigStore)
+	platformAdminHandler := platform_handlers.NewPlatformAdminHandler(db, s.Config.ConfigStore)
+	platformOrgHandler := platform_handlers.NewPlatformOrgHandler(db, s.Config.ConfigStore)
+	platformTeamHandler := platform_handlers.NewPlatformTeamHandler(db, s.Config.ConfigStore)
+	platformVKHandler := platform_handlers.NewPlatformVKHandler(db, s.Config.ConfigStore)
+	// Platform protected routes need PlatformAuthMiddleware
+	platformProtectedMw := append([]schemas.BifrostHTTPMiddleware{
+		platform_handlers.PlatformAuthMiddleware(db, s.Config.ConsumerAuthService),
+	}, middlewares...)
+
+	// Platform multi-tenant routes
+	platformAuthHandler.RegisterRoutes(s.Router, middlewares...)          // login/register are public
+	platformAdminHandler.RegisterRoutes(s.Router, platformProtectedMw...) // admin needs auth
+	platformOrgHandler.RegisterRoutes(s.Router, platformProtectedMw...)   // org needs auth
+	platformTeamHandler.RegisterRoutes(s.Router, platformProtectedMw...)  // team needs auth
+	platformVKHandler.RegisterRoutes(s.Router, platformProtectedMw...)    // VK needs auth
 
 	// OAuth metadata + per-user OAuth endpoints (no auth middleware — must be publicly accessible)
 	oauthMetadataHandler := handlers.NewOAuthMetadataHandler(s.Config)
@@ -1175,11 +1173,7 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	if s.WebSocketHandler != nil {
 		s.WebSocketHandler.RegisterRoutes(s.Router, middlewares...)
 	}
-	// Consumer auth service routes (/api/auth/*)
-	if s.Config != nil && s.Config.ConsumerAuthService != nil {
-		consumerAuthHandler := auth_handlers.NewAuthHandler(s.Config.ConsumerAuthService)
-		consumerAuthHandler.RegisterRoutes(s.Router, middlewares...)
-	}
+
 	// Register dev pprof handler only in dev mode
 	if handlers.IsDevMode() {
 		logger.Info("dev mode enabled, registering pprof endpoints")

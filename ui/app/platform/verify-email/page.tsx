@@ -1,35 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { setToken, setUser, type PlatformUser } from "@/lib/platform/auth";
+import { setToken, setUser, type PlatformUserInfo } from "@/lib/platform/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mail } from "lucide-react";
 import { usePlatformVerifyEmailMutation, usePlatformResendVerificationMutation } from "@/lib/platform/platformApi";
-import type { PlatformUserInfo } from "@/lib/platform/platformApi";
 
 const CODE_LENGTH = 6;
 const RESEND_COOLDOWN = 30;
-
-// Convert PlatformUserInfo to PlatformUser (handles field name differences)
-function toPlatformUser(info: PlatformUserInfo, extra?: Partial<PlatformUser>): PlatformUser {
-	return {
-		id: info.id,
-		email: info.email,
-		username: info.username,
-		nickname: info.nickname,
-		balance: info.balance,
-		is_admin: info.is_admin,
-		role: info.role,
-		customer_id: info.customer_id,
-		team_id: info.team_id,
-		status: info.status,
-		email_verified: info.is_email_verified,
-		created_at: info.created_at,
-		updated_at: info.updated_at,
-		...extra,
-	};
-}
 
 export default function VerifyEmailPage() {
 	const navigate = useNavigate();
