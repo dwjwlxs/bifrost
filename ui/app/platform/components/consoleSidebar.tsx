@@ -1,7 +1,7 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import { useConsoleSidebar } from "./consoleSidebarContext";
-import { getVisibleNavItems } from "@/lib/platform/config";
+import { getVisibleNavItems } from "@/app/platform/config/navigation";
 import { useUserRole } from "@/lib/platform/hooks";
 
 interface ConsoleSidebarProps {

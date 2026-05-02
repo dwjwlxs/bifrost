@@ -8,9 +8,8 @@ import {
 	usePlatformAdminUpdateOrgMutation,
 	usePlatformAdminDeleteOrgMutation,
 	usePlatformListOrgTeamsQuery,
-	type PlatformOrg,
 } from "@/lib/platform/platformApi";
-import { type PlatformUserInfo } from "@/lib/platform/auth";
+import { type PlatformOrg, type PlatformUserInfo } from "@/lib/platform/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

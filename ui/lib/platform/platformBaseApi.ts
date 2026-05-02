@@ -4,7 +4,7 @@
  */
 import { getApiBaseUrl } from "@/lib/utils/port";
 import { createApi, fetchBaseQuery, BaseQueryFn } from "@reduxjs/toolkit/query/react";
-import { getToken, setUserInfo, clearUserInfo } from "./auth";
+import { getToken, setLoggedInfo, clearLoggedInfo } from "./auth";
 import type { FetchArgs, FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import type { Router } from "@tanstack/react-router";
 
@@ -18,12 +18,32 @@ let platformRouter: Router | null = null;
 let platformStore: { dispatch: (action: { type: string }) => void } | null = null;
 
 export function setPlatformRouter(router: Router) {
+	if (platformRouter) {
+		console.warn("[platformBaseApi] setPlatformRouter called more than once — overwriting previous reference");
+	}
 	platformRouter = router;
 }
 
 export function setPlatformStore(s: { dispatch: (action: { type: string }) => void }) {
+	if (platformStore) {
+		console.warn("[platformBaseApi] setPlatformStore called more than once — overwriting previous reference");
+	}
 	platformStore = s;
 }
+
+// Shared fetchBaseQuery instance — same config used for initial request and retry after refresh.
+const rawBaseQuery = fetchBaseQuery({
+	baseUrl: getApiBaseUrl(),
+	credentials: "include",
+	prepareHeaders: (headers) => {
+		headers.set("Content-Type", "application/json");
+		const token = getToken();
+		if (token) {
+			headers.set("Authorization", `Bearer ${token}`);
+		}
+		return headers;
+	},
+});
 
 // Shared promise ref to prevent concurrent refresh races —
 // if multiple requests get 401 simultaneously, only one triggers refresh
@@ -33,7 +53,7 @@ let refreshPromise: Promise<boolean> | null = null;
 // resetApiState() does NOT abort running fetch() calls, so 401 responses from
 // console-page queries (virtual-keys, orgs, etc.) can arrive after logout.
 // Without this guard, tryRefreshToken() would succeed (httpOnly cookie still valid)
-// and setUserInfo() would repopulate localStorage, silently "un-logging-out" the user.
+// and storeAuthFromToken() would repopulate localStorage, silently "un-logging-out" the user.
 let isLoggedOut = false;
 
 export function setLoggedOut() {
@@ -57,24 +77,24 @@ async function tryRefreshToken(): Promise<boolean> {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			credentials: "include",
-			body: JSON.stringify({ refresh_token: "" }),
+			body: JSON.stringify({ refresh_token: "" }), // backend checks body as JSON object for no cookie scene
 		});
 
 		if (!resp.ok) {
 			// Refresh token invalid or expired — clear auth state
-			clearUserInfo();
+			clearLoggedInfo();
 			return false;
 		}
 
 		const json = await resp.json();
 		if (json.code !== "0" || !json.data?.access_token) {
 			// Malformed response — treat as auth failure
-			clearUserInfo();
+			clearLoggedInfo();
 			return false;
 		}
 
 		// Store new access token + user info (refresh token set via httpOnly cookie by backend)
-		setUserInfo(json.data.access_token);
+		setLoggedInfo(json.data.access_token);
 		return true;
 	} catch {
 		return false;
@@ -88,19 +108,7 @@ async function tryRefreshToken(): Promise<boolean> {
  * 3. On refresh failure (e.g. refresh token expired), clears auth state
  */
 const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (args, api, extraOptions) => {
-	// Build the underlying fetchBaseQuery once; it reads getToken() from localStorage
-	let result = await fetchBaseQuery({
-		baseUrl: getApiBaseUrl(),
-		credentials: "include",
-		prepareHeaders: (headers) => {
-			headers.set("Content-Type", "application/json");
-			const token = getToken();
-			if (token) {
-				headers.set("Authorization", `Bearer ${token}`);
-			}
-			return headers;
-		},
-	})(args, api, extraOptions);
+	let result = await rawBaseQuery(args, api, extraOptions);
 
 	// 401 → try to refresh once
 	if (result.error?.status === 401) {
@@ -125,18 +133,7 @@ const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> =
 
 		if (refreshed) {
 			// Retry the original request with the new token
-			result = await fetchBaseQuery({
-				baseUrl: getApiBaseUrl(),
-				credentials: "include",
-				prepareHeaders: (headers) => {
-					headers.set("Content-Type", "application/json");
-					const token = getToken();
-					if (token) {
-						headers.set("Authorization", `Bearer ${token}`);
-					}
-					return headers;
-				},
-			})(args, api, extraOptions);
+			result = await rawBaseQuery(args, api, extraOptions);
 		} else {
 			// Refresh also failed — force logout + redirect to login page.
 			// We must call router.navigate() imperatively because baseQuery
@@ -144,9 +141,17 @@ const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> =
 			// NOTE: We cannot import platformApi here (circular dep), so we
 			// dispatch the RTK Query internal resetApiState action directly.
 			setLoggedOut();
-			clearUserInfo();
-			platformRouter?.navigate({ to: "/platform/login", replace: true });
-			platformStore?.dispatch({ type: "platformApi/resetApiState" });
+			clearLoggedInfo();
+			if (!platformRouter) {
+				console.error("[platformBaseApi] 401 refresh failed but platformRouter not injected — cannot redirect to login. Call setPlatformRouter() in main.tsx.");
+			} else {
+				platformRouter.navigate({ to: "/platform/login", replace: true });
+			}
+			if (!platformStore) {
+				console.error("[platformBaseApi] 401 refresh failed but platformStore not injected — cannot reset API state. Call setPlatformStore() in main.tsx.");
+			} else {
+				platformStore.dispatch({ type: "platformApi/resetApiState" });
+			}
 		}
 	}
 
