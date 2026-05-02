@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -123,6 +124,33 @@ func (r *memoryUserRepo) EmailExists(_ context.Context, email string) (bool, err
 		return false, nil
 	}
 	return user.Status != UserStatusDeleted, nil
+}
+
+func (r *memoryUserRepo) ListUsers(_ context.Context, offset, limit int, search string) ([]*User, int64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var total int64
+	var list []*User
+	for _, user := range r.users {
+		if user.Status == UserStatusDeleted {
+			continue
+		}
+		
+		// Apply search filter if provided
+		if search != "" && !strings.Contains(strings.ToLower(user.Email), strings.ToLower(search)) &&
+			!strings.Contains(strings.ToLower(user.DisplayName), strings.ToLower(search)) {
+			continue
+		}
+		
+		total++
+		if int64(offset) <= total-1 && (limit == 0 || int64(len(list)) < int64(limit)) {
+			// Make a copy to avoid exposing internal pointer
+			u := *user
+			list = append(list, &u)
+		}
+	}
+	return list, total, nil
 }
 
 // --- memorySessionRepo ---

@@ -20,14 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-	Dialog,
-	DialogContent,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-	DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -42,19 +35,7 @@ import {
 	AlertDialogTitle,
 	AlertDialogTrigger,
 } from "@/components/ui/alertDialog";
-import {
-	ArrowLeft,
-	UsersRound,
-	KeyRound,
-	Users,
-	Plus,
-	Trash2,
-	Loader2,
-	Shield,
-	Copy,
-	Eye,
-	EyeOff,
-} from "lucide-react";
+import { ArrowLeft, UsersRound, KeyRound, Users, Plus, Trash2, Loader2, Shield, Copy, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 export default function TeamDetailPage() {
@@ -168,11 +149,7 @@ export default function TeamDetailPage() {
 		<div className="space-y-6">
 			{/* Back + Header */}
 			<div className="flex items-center gap-4">
-				<Button
-					variant="ghost"
-					size="sm"
-					onClick={() => navigate({ to: "/platform/console/organizations" })}
-				>
+				<Button variant="ghost" size="sm" onClick={() => navigate({ to: "/platform/console/organizations" })}>
 					<ArrowLeft className="mr-1.5 h-4 w-4" />
 					Organizations
 				</Button>
@@ -301,7 +278,7 @@ export default function TeamDetailPage() {
 															<Label htmlFor="invite-role">Role</Label>
 															<select
 																id="invite-role"
-																className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+																className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 																value={inviteRole}
 																onChange={(e) => setInviteRole(e.target.value as "admin" | "member")}
 															>
@@ -311,11 +288,7 @@ export default function TeamDetailPage() {
 														</div>
 													</div>
 													<DialogFooter>
-														<Button
-															variant="outline"
-															onClick={() => setInviteOpen(false)}
-															disabled={isInviting}
-														>
+														<Button variant="outline" onClick={() => setInviteOpen(false)} disabled={isInviting}>
 															Cancel
 														</Button>
 														<Button onClick={handleInvite} disabled={isInviting || !inviteEmail.trim()}>
@@ -351,9 +324,7 @@ export default function TeamDetailPage() {
 														<TableCell className="text-sm">{member.email}</TableCell>
 														<TableCell className="font-medium">{member.username}</TableCell>
 														<TableCell>
-															<Badge variant={member.role === "admin" ? "default" : "secondary"}>
-																{member.role}
-															</Badge>
+															<Badge variant={member.role === "admin" ? "default" : "secondary"}>{member.role}</Badge>
 														</TableCell>
 														{isAdmin && (
 															<TableCell className="text-right">
@@ -363,23 +334,14 @@ export default function TeamDetailPage() {
 																		variant="ghost"
 																		size="sm"
 																		className="h-8 px-2 text-xs"
-																		onClick={() =>
-																			handleUpdateMemberRole(
-																				member.user_id,
-																				member.role === "admin" ? "member" : "admin",
-																			)
-																		}
+																		onClick={() => handleUpdateMemberRole(member.user_id, member.role === "admin" ? "member" : "admin")}
 																		title={`Make ${member.role === "admin" ? "member" : "admin"}`}
 																	>
 																		{member.role === "admin" ? "→ Member" : "→ Admin"}
 																	</Button>
 																	<AlertDialog>
 																		<AlertDialogTrigger asChild>
-																			<Button
-																				variant="ghost"
-																				size="sm"
-																				className="text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
-																			>
+																			<Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 h-8 w-8 p-0">
 																				<Trash2 className="h-4 w-4" />
 																			</Button>
 																		</AlertDialogTrigger>
@@ -387,8 +349,7 @@ export default function TeamDetailPage() {
 																			<AlertDialogHeader>
 																				<AlertDialogTitle>Remove Member</AlertDialogTitle>
 																				<AlertDialogDescription>
-																					Remove &quot;{member.email}&quot; from this team? They can be
-																					re-invited later.
+																					Remove &quot;{member.email}&quot; from this team? They can be re-invited later.
 																				</AlertDialogDescription>
 																			</AlertDialogHeader>
 																			<AlertDialogFooter>
@@ -419,9 +380,7 @@ export default function TeamDetailPage() {
 							<Card>
 								<CardHeader>
 									<CardTitle>Team Virtual Keys</CardTitle>
-									<CardDescription>
-										Virtual keys created for this team.
-									</CardDescription>
+									<CardDescription>Virtual keys created for this team.</CardDescription>
 								</CardHeader>
 								<CardContent>
 									{vksLoading ? (
@@ -429,9 +388,7 @@ export default function TeamDetailPage() {
 											<div className="border-primary h-8 w-8 animate-spin rounded-full border-4 border-t-transparent" />
 										</div>
 									) : vks?.length === 0 ? (
-										<p className="text-muted-foreground py-8 text-center text-sm">
-											No virtual keys for this team.
-										</p>
+										<p className="text-muted-foreground py-8 text-center text-sm">No virtual keys for this team.</p>
 									) : (
 										<Table>
 											<TableHeader>
@@ -454,50 +411,26 @@ export default function TeamDetailPage() {
 																	<code className="bg-muted inline-block max-w-[180px] truncate rounded px-1.5 py-0.5 font-mono text-xs">
 																		{maskKey(vk.value, isRevealed)}
 																	</code>
-																	<Button
-																		variant="ghost"
-																		size="sm"
-																		className="h-6 w-6 p-0"
-																		onClick={() => toggleKeyVisibility(vk.id)}
-																	>
-																		{isRevealed ? (
-																			<EyeOff className="h-3 w-3" />
-																		) : (
-																			<Eye className="h-3 w-3" />
-																		)}
+																	<Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => toggleKeyVisibility(vk.id)}>
+																		{isRevealed ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
 																	</Button>
-																	<Button
-																		variant="ghost"
-																		size="sm"
-																		className="h-6 w-6 p-0"
-																		onClick={() => copyToClipboard(vk.value)}
-																	>
+																	<Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => copyToClipboard(vk.value)}>
 																		<Copy className="h-3 w-3" />
 																	</Button>
 																</div>
 															</TableCell>
 															<TableCell className="text-muted-foreground text-sm">
-																{vk.budget_limit != null ? (
-																	<>${vk.budget_limit.toFixed(2)}</>
-																) : (
-																	"∞"
-																)}
+																{vk.budget_limit != null ? <>${vk.budget_limit.toFixed(2)}</> : "∞"}
 															</TableCell>
 															<TableCell className="text-muted-foreground text-sm">
-																{vk.current_usage != null ? (
-																	<>${vk.current_usage.toFixed(4)}</>
-																) : (
-																	"—"
-																)}
+																{vk.current_usage != null ? <>${vk.current_usage.toFixed(4)}</> : "—"}
 															</TableCell>
 															<TableCell>
-																<Badge variant={vk.is_active ? "default" : "secondary"}>
-																	{vk.is_active ? "Active" : "Inactive"}
-																</Badge>
-											</TableCell>
-										</TableRow>
-									);
-								})}
+																<Badge variant={vk.is_active ? "default" : "secondary"}>{vk.is_active ? "Active" : "Inactive"}</Badge>
+															</TableCell>
+														</TableRow>
+													);
+												})}
 											</TableBody>
 										</Table>
 									)}

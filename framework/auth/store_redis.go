@@ -46,6 +46,7 @@ const (
 	redisPrefixIdentity       = "auth:identity:"        // id -> JSON(identity)
 	redisPrefixIdentityLookup = "auth:identity:lookup:" // provider:provider_uid -> identity_id
 	redisPrefixIdentityUser   = "auth:identity:user:"   // user_id -> SET of identity_ids
+	redisPrefixUserIndex      = "auth:user:index"       // sorted set: user_id -> created_at timestamp
 )
 
 // --- redisUserRepo ---
@@ -65,6 +66,8 @@ func (r *redisUserRepo) Create(ctx context.Context, user *User) error {
 	pipe.Set(ctx, key, data, 0)
 	// Map email -> user_id
 	pipe.Set(ctx, redisPrefixEmail+user.EmailNormalized, user.ID, 0)
+	// Add to user index (score = created_at Unix)
+	pipe.ZAdd(ctx, redisPrefixUserIndex, redis.Z{Score: float64(user.CreatedAt.Unix()), Member: user.ID})
 	_, err = pipe.Exec(ctx)
 	return err
 }
@@ -118,7 +121,11 @@ func (r *redisUserRepo) Delete(ctx context.Context, id string) error {
 	user.DeletedAt = &now
 	user.Status = UserStatusDeleted
 	user.UpdatedAt = now
-	return r.Update(ctx, user)
+	if err := r.Update(ctx, user); err != nil {
+		return err
+	}
+	// Remove from user index
+	return r.client.ZRem(ctx, redisPrefixUserIndex, id).Err()
 }
 
 func (r *redisUserRepo) EmailExists(ctx context.Context, email string) (bool, error) {
@@ -128,6 +135,42 @@ func (r *redisUserRepo) EmailExists(ctx context.Context, email string) (bool, er
 		return false, err
 	}
 	return exists > 0, nil
+}
+
+// ListUsers returns paginated users using the user index sorted set.
+// It fetches user IDs from the index, then retrieves full user data.
+func (r *redisUserRepo) ListUsers(ctx context.Context, offset, limit int, search string) ([]*User, int64, error) {
+	// For now, we ignore search in redis implementation
+	// This is a limitation of the current redis schema
+	// TODO: Implement proper search with secondary indexes or scanning
+	
+	// Get total count (excluding deleted — we rely on index being clean)
+	total, err := r.client.ZCard(ctx, redisPrefixUserIndex).Result()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// ZRevRange: newest first
+	start := int64(offset)
+	stop := int64(offset + limit - 1)
+	if limit <= 0 {
+		stop = -1 // all
+	}
+	ids, err := r.client.ZRevRange(ctx, redisPrefixUserIndex, start, stop).Result()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	users := make([]*User, 0, len(ids))
+	for _, id := range ids {
+		user, err := r.GetByID(ctx, id)
+		if err != nil {
+			// Skip users that were deleted (index cleanup race)
+			continue
+		}
+		users = append(users, user)
+	}
+	return users, total, nil
 }
 
 // --- redisSessionRepo ---

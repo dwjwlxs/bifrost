@@ -6,6 +6,24 @@ import { getApiBaseUrl } from "@/lib/utils/port";
 import { createApi, fetchBaseQuery, BaseQueryFn } from "@reduxjs/toolkit/query/react";
 import { getToken, setUserInfo, clearUserInfo } from "./auth";
 import type { FetchArgs, FetchBaseQueryError } from "@reduxjs/toolkit/query";
+import type { Router } from "@tanstack/react-router";
+
+// ─── Global router & store refs ────────────────────────────────────────
+// Injected from main.tsx after creation. Allows baseQuery (a plain
+// async fn running outside React component context) to navigate
+// and dispatch actions on 401 + refresh-failure.
+// We cannot import store directly — that creates a circular dep:
+// store → platformApi (via reducer) → platformBaseApi → store.
+let platformRouter: Router | null = null;
+let platformStore: { dispatch: (action: { type: string }) => void } | null = null;
+
+export function setPlatformRouter(router: Router) {
+	platformRouter = router;
+}
+
+export function setPlatformStore(s: { dispatch: (action: { type: string }) => void }) {
+	platformStore = s;
+}
 
 // Shared promise ref to prevent concurrent refresh races —
 // if multiple requests get 401 simultaneously, only one triggers refresh
@@ -69,11 +87,7 @@ async function tryRefreshToken(): Promise<boolean> {
  * 2. On 401, attempts a token refresh then retries once
  * 3. On refresh failure (e.g. refresh token expired), clears auth state
  */
-const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (
-	args,
-	api,
-	extraOptions,
-) => {
+const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (args, api, extraOptions) => {
 	// Build the underlying fetchBaseQuery once; it reads getToken() from localStorage
 	let result = await fetchBaseQuery({
 		baseUrl: getApiBaseUrl(),
@@ -123,8 +137,17 @@ const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> =
 					return headers;
 				},
 			})(args, api, extraOptions);
+		} else {
+			// Refresh also failed — force logout + redirect to login page.
+			// We must call router.navigate() imperatively because baseQuery
+			// runs outside React component context — useNavigate() is invalid here.
+			// NOTE: We cannot import platformApi here (circular dep), so we
+			// dispatch the RTK Query internal resetApiState action directly.
+			setLoggedOut();
+			clearUserInfo();
+			platformRouter?.navigate({ to: "/platform/login", replace: true });
+			platformStore?.dispatch({ type: "platformApi/resetApiState" });
 		}
-		// If refresh failed, result stays as 401 — caller handles logout if needed
 	}
 
 	return result;

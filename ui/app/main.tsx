@@ -8,6 +8,8 @@ import "@/app/globals.css";
 import { routeTree } from "./routeTree.gen";
 import { ErrorComponent } from "./__error";
 import { NotFoundComponent } from "./__notFound";
+import { setPlatformRouter, setPlatformStore } from "@/lib/platform/platformBaseApi";
+import { store } from "@/lib/store";
 
 const router = createRouter({
 	routeTree,
@@ -17,6 +19,11 @@ const router = createRouter({
 	defaultNotFoundComponent: NotFoundComponent,
 	defaultErrorComponent: ErrorComponent,
 });
+
+// Inject router & store refs so RTK Query baseQuery can navigate and
+// dispatch actions on 401 + refresh-failure (outside React context).
+setPlatformRouter(router);
+setPlatformStore(store);
 
 declare module "@tanstack/react-router" {
 	interface Register {

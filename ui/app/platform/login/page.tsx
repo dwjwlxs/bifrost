@@ -37,10 +37,10 @@ export default function LoginPage() {
 			const res = await platformLogin({ email: login, password: password }).unwrap();
 			// New response format: { code, message, data: { access_token, refresh_token, expires_at } }
 			const { access_token } = res.data;
-		// Refresh token is set via httpOnly cookie by the backend — no manual storage needed
-		// Decode JWT payload to: get user info for immediate header display
-		clearLoggedOut(); // allow 401 → refresh-token flow again
-		setUserInfo(access_token);
+			// Refresh token is set via httpOnly cookie by the backend — no manual storage needed
+			// Decode JWT payload to: get user info for immediate header display
+			clearLoggedOut(); // allow 401 → refresh-token flow again
+			setUserInfo(access_token);
 
 			const redirectTo = redirect && redirect.startsWith("/") ? redirect : "/platform/console/dashboard";
 			navigate({ to: redirectTo });
@@ -111,14 +111,14 @@ export default function LoginPage() {
 				open={showVerifyDialog}
 				onOpenChange={setShowVerifyDialog}
 				email={verifyEmail}
-			onVerified={(token: string, _refreshToken: string) => {
-				// Refresh token is set via httpOnly cookie by the backend — no manual storage needed
-				// Decode JWT payload to get user info for immediate header display
-				clearLoggedOut();
-				setUserInfo(token);
-				const redirectTo = redirect && redirect.startsWith("/") ? redirect : "/platform/console/dashboard";
-				navigate({ to: redirectTo });
-			}}
+				onVerified={(token: string, _refreshToken: string) => {
+					// Refresh token is set via httpOnly cookie by the backend — no manual storage needed
+					// Decode JWT payload to get user info for immediate header display
+					clearLoggedOut();
+					setUserInfo(token);
+					const redirectTo = redirect && redirect.startsWith("/") ? redirect : "/platform/console/dashboard";
+					navigate({ to: redirectTo });
+				}}
 			/>
 		</div>
 	);

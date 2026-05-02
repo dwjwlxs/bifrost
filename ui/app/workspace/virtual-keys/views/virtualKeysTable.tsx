@@ -185,7 +185,8 @@ function VKDeleteButton({
 				<AlertDialogHeader>
 					<AlertDialogTitle>Delete Virtual Key</AlertDialogTitle>
 					<AlertDialogDescription>
-						Are you sure you want to delete &quot;{vk.name.length > 20 ? `${vk.name.slice(0, 20)}...` : vk.name}&quot;? This action cannot be undone.
+						Are you sure you want to delete &quot;{vk.name.length > 20 ? `${vk.name.slice(0, 20)}...` : vk.name}&quot;? This action cannot
+						be undone.
 					</AlertDialogDescription>
 				</AlertDialogHeader>
 				<AlertDialogFooter>

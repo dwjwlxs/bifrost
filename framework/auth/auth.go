@@ -110,6 +110,10 @@ type AuthService interface {
 	// This should be called by a scheduled job (e.g., cron).
 	// Returns the number of permanently deleted accounts.
 	CleanupExpiredDeletions(ctx context.Context) (int64, error)
+
+	// ListUsers returns all users with pagination (excludes soft-deleted).
+	// search is optional and can be used to filter by email or username.
+	ListUsers(ctx context.Context, offset, limit int, search string) ([]*User, int64, error)
 }
 
 // service is the concrete implementation of AuthService.
@@ -630,7 +634,7 @@ func (s *service) OAuthLogin(ctx context.Context, req OAuthCallbackRequest, devi
 		case UserStatusSuspended:
 			return nil, ErrUserSuspended
 		case UserStatusDeleted:
-			return nil, ErrUserDeleted
+			return nil, ErrInvalidCredentials
 		case UserStatusPendingVerification:
 			// OAuth users are automatically verified
 			user.Status = UserStatusActive
@@ -742,4 +746,8 @@ func (s *service) issueTokenPair(ctx context.Context, userID, deviceInfo, ipAddr
 	}
 
 	return tokens, nil
+}
+
+func (s *service) ListUsers(ctx context.Context, offset, limit int, search string) ([]*User, int64, error) {
+	return s.store.UserRepo().ListUsers(ctx, offset, limit, search)
 }

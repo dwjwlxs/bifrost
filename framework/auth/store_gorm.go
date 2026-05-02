@@ -271,6 +271,32 @@ func (r *gormUserRepo) EmailExists(ctx context.Context, email string) (bool, err
 	return count > 0, err
 }
 
+func (r *gormUserRepo) ListUsers(ctx context.Context, offset, limit int, search string) ([]*User, int64, error) {
+	db := r.db.WithContext(ctx).Model(&gormUser{})
+	
+	// Apply search filter if provided
+	if search != "" {
+		searchPattern := "%" + search + "%"
+		db = db.Where("email LIKE ? OR username LIKE ?", searchPattern, searchPattern)
+	}
+	
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	
+	var rows []gormUser
+	if err := db.Order("created_at DESC").Offset(offset).Limit(limit).Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	
+	users := make([]*User, len(rows))
+	for i := range rows {
+		users[i] = rows[i].toDomain()
+	}
+	return users, total, nil
+}
+
 // --- gormSessionRepo ---
 
 type gormSessionRepo struct {

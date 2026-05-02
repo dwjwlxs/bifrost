@@ -28,7 +28,7 @@ import type { PlatformUserInfo } from "./auth";
 export interface PlatformOrg {
 	id: string;
 	name: string;
-	owner_user_id?: number;
+	owner_user_id?: string;
 	budget_id?: string;
 	rate_limit_id?: string;
 	created_at?: string;
@@ -49,7 +49,7 @@ export interface PlatformTeam {
 	id: string;
 	name: string;
 	customer_id?: string;
-	owner_user_id?: number;
+	owner_user_id?: string;
 	budget_limit?: number;
 	budget_spent?: number;
 	budget_reset_at?: string;
@@ -262,17 +262,11 @@ export const platformApi = platformBaseApi.injectEndpoints({
 			query: (body) => ({ url: "/platform/verify", method: "POST", body }),
 		}),
 
-		platformResendVerification: builder.mutation<
-			{ code: string; message: string; data: { success: boolean } },
-			{ email: string }
-		>({
+		platformResendVerification: builder.mutation<{ code: string; message: string; data: { success: boolean } }, { email: string }>({
 			query: (body) => ({ url: "/auth/resend-verification", method: "POST", body }),
 		}),
 
-		platformAcceptInvitation: builder.mutation<
-			{ code: string; message: string; data?: { token: string } },
-			{ token: string }
-		>({
+		platformAcceptInvitation: builder.mutation<{ code: string; message: string; data?: { token: string } }, { token: string }>({
 			query: (body) => ({ url: `/platform/invitations/${body.token}/accept`, method: "POST" }),
 		}),
 
@@ -282,18 +276,12 @@ export const platformApi = platformBaseApi.injectEndpoints({
 			providesTags: ["CurrentUser"],
 		}),
 
-		platformUpdateProfile: builder.mutation<
-			PlatformUserInfo,
-			Partial<Pick<PlatformUserInfo, "nickname" | "email">>
-		>({
+		platformUpdateProfile: builder.mutation<PlatformUserInfo, Partial<Pick<PlatformUserInfo, "nickname" | "email">>>({
 			query: (body) => ({ url: "/platform/profile", method: "PUT", body }),
 			invalidatesTags: ["CurrentUser"],
 		}),
 
-		platformChangePassword: builder.mutation<
-			{ code: string; message: string },
-			{ old_password: string; new_password: string }
-		>({
+		platformChangePassword: builder.mutation<{ code: string; message: string }, { old_password: string; new_password: string }>({
 			query: (body) => ({ url: "/platform/profile/password", method: "POST", body }),
 		}),
 
@@ -301,19 +289,14 @@ export const platformApi = platformBaseApi.injectEndpoints({
 		/** List only the current user's VKs */
 		platformListVKs: builder.query<PlatformVirtualKey[], void>({
 			query: () => ({ url: "/platform/virtual-keys", method: "GET" }),
-			transformResponse: (response: { data?: { items?: PlatformVirtualKey[] } }) =>
-				response.data?.items ?? [],
+			transformResponse: (response: { data?: { items?: PlatformVirtualKey[] } }) => response.data?.items ?? [],
 			providesTags: ["VirtualKeys"],
 		}),
 
 		/** Create a new VK for the current user */
-		platformCreateVK: builder.mutation<
-			PlatformVirtualKey,
-			{ name: string; description?: string; team_id?: string }
-		>({
+		platformCreateVK: builder.mutation<PlatformVirtualKey, { name: string; description?: string; team_id?: string }>({
 			query: (body) => ({ url: "/platform/virtual-keys", method: "POST", body }),
-			transformResponse: (response: { data?: PlatformVirtualKey }) =>
-				response.data ?? ({} as PlatformVirtualKey),
+			transformResponse: (response: { data?: PlatformVirtualKey }) => response.data ?? ({} as PlatformVirtualKey),
 			invalidatesTags: ["VirtualKeys"],
 		}),
 
@@ -323,8 +306,7 @@ export const platformApi = platformBaseApi.injectEndpoints({
 			{ id: string; data: Partial<Pick<PlatformVirtualKey, "name" | "description" | "is_active">> }
 		>({
 			query: ({ id, data }) => ({ url: `/platform/virtual-keys/${id}`, method: "PUT", body: data }),
-			transformResponse: (response: { data?: PlatformVirtualKey }) =>
-				response.data ?? ({} as PlatformVirtualKey),
+			transformResponse: (response: { data?: PlatformVirtualKey }) => response.data ?? ({} as PlatformVirtualKey),
 			invalidatesTags: ["VirtualKeys"],
 		}),
 
@@ -338,8 +320,7 @@ export const platformApi = platformBaseApi.injectEndpoints({
 		/** List the current user's organizations */
 		platformListOrgs: builder.query<PlatformOrg[], void>({
 			query: () => ({ url: "/platform/orgs", method: "GET" }),
-			transformResponse: (response: { data?: { items?: PlatformOrg[] } }) =>
-				response.data?.items ?? [],
+			transformResponse: (response: { data?: { items?: PlatformOrg[] } }) => response.data?.items ?? [],
 			providesTags: ["Orgs"],
 		}),
 
@@ -353,8 +334,7 @@ export const platformApi = platformBaseApi.injectEndpoints({
 		/** List members of an organization (org_admin only) */
 		platformListOrgMembers: builder.query<PlatformOrgMember[], string>({
 			query: (orgId) => ({ url: `/platform/orgs/${orgId}/members`, method: "GET" }),
-			transformResponse: (response: { data?: { items?: PlatformOrgMember[] } }) =>
-				response.data?.items ?? [],
+			transformResponse: (response: { data?: { items?: PlatformOrgMember[] } }) => response.data?.items ?? [],
 			providesTags: ["Users"],
 		}),
 
@@ -362,8 +342,7 @@ export const platformApi = platformBaseApi.injectEndpoints({
 		/** List teams within an organization (org_admin only) */
 		platformListOrgTeams: builder.query<PlatformTeam[], string>({
 			query: (orgId) => ({ url: `/platform/orgs/${orgId}/teams`, method: "GET" }),
-			transformResponse: (response: { data?: { items?: PlatformTeam[] } }) =>
-				response.data?.items ?? [],
+			transformResponse: (response: { data?: { items?: PlatformTeam[] } }) => response.data?.items ?? [],
 			providesTags: ["Teams"],
 		}),
 
@@ -374,8 +353,7 @@ export const platformApi = platformBaseApi.injectEndpoints({
 				method: "POST",
 				body: { name },
 			}),
-			transformResponse: (response: { data?: PlatformTeam }) =>
-				response.data ?? ({} as PlatformTeam),
+			transformResponse: (response: { data?: PlatformTeam }) => response.data ?? ({} as PlatformTeam),
 			invalidatesTags: ["Teams"],
 		}),
 
@@ -383,8 +361,7 @@ export const platformApi = platformBaseApi.injectEndpoints({
 		/** List teams the current user belongs to */
 		platformListTeams: builder.query<PlatformTeam[], void>({
 			query: () => ({ url: "/platform/teams", method: "GET" }),
-			transformResponse: (response: { data?: { items?: PlatformTeam[] } }) =>
-				response.data?.items ?? [],
+			transformResponse: (response: { data?: { items?: PlatformTeam[] } }) => response.data?.items ?? [],
 			providesTags: ["Teams"],
 		}),
 
@@ -395,13 +372,9 @@ export const platformApi = platformBaseApi.injectEndpoints({
 		}),
 
 		/** Update team info / budget (team_admin only) */
-		platformUpdateTeam: builder.mutation<
-			PlatformTeam,
-			{ id: string; name?: string; budget_limit?: number; budget_reset_at?: string }
-		>({
+		platformUpdateTeam: builder.mutation<PlatformTeam, { id: string; name?: string; budget_limit?: number; budget_reset_at?: string }>({
 			query: ({ id, ...body }) => ({ url: `/platform/teams/${id}`, method: "PUT", body }),
-			transformResponse: (response: { data?: PlatformTeam }) =>
-				response.data ?? ({} as PlatformTeam),
+			transformResponse: (response: { data?: PlatformTeam }) => response.data ?? ({} as PlatformTeam),
 			invalidatesTags: ["Teams"],
 		}),
 
@@ -409,8 +382,7 @@ export const platformApi = platformBaseApi.injectEndpoints({
 		/** List members of a team (team_admin or team_member) */
 		platformListTeamMembers: builder.query<PlatformTeamMember[], string>({
 			query: (teamId) => ({ url: `/platform/teams/${teamId}/members`, method: "GET" }),
-			transformResponse: (response: { data?: { items?: PlatformTeamMember[] } }) =>
-				response.data?.items ?? [],
+			transformResponse: (response: { data?: { items?: PlatformTeamMember[] } }) => response.data?.items ?? [],
 			providesTags: ["Users"],
 		}),
 
@@ -428,10 +400,7 @@ export const platformApi = platformBaseApi.injectEndpoints({
 		}),
 
 		/** Remove a member from a team (team_admin only) */
-		platformRemoveTeamMember: builder.mutation<
-			{ code: string; message: string },
-			{ team_id: string; user_id: string }
-		>({
+		platformRemoveTeamMember: builder.mutation<{ code: string; message: string }, { team_id: string; user_id: string }>({
 			query: ({ team_id, user_id }) => ({
 				url: `/platform/teams/${team_id}/members/${user_id}`,
 				method: "DELETE",
@@ -456,23 +425,18 @@ export const platformApi = platformBaseApi.injectEndpoints({
 		/** List VKs within a team (team_admin only) */
 		platformListTeamVKs: builder.query<PlatformVirtualKey[], string>({
 			query: (teamId) => ({ url: `/platform/teams/${teamId}/virtual-keys`, method: "GET" }),
-			transformResponse: (response: { data?: { items?: PlatformVirtualKey[] } }) =>
-				response.data?.items ?? [],
+			transformResponse: (response: { data?: { items?: PlatformVirtualKey[] } }) => response.data?.items ?? [],
 			providesTags: ["VirtualKeys"],
 		}),
 
 		/** Update a VK budget within a team (team_admin only) */
-		platformUpdateTeamVK: builder.mutation<
-			PlatformVirtualKey,
-			{ team_id: string; vk_id: string; budget_limit?: number }
-		>({
+		platformUpdateTeamVK: builder.mutation<PlatformVirtualKey, { team_id: string; vk_id: string; budget_limit?: number }>({
 			query: ({ team_id, vk_id, ...body }) => ({
 				url: `/platform/teams/${team_id}/virtual-keys/${vk_id}`,
 				method: "PUT",
 				body,
 			}),
-			transformResponse: (response: { data?: PlatformVirtualKey }) =>
-				response.data ?? ({} as PlatformVirtualKey),
+			transformResponse: (response: { data?: PlatformVirtualKey }) => response.data ?? ({} as PlatformVirtualKey),
 			invalidatesTags: ["VirtualKeys"],
 		}),
 
@@ -499,18 +463,17 @@ export const platformApi = platformBaseApi.injectEndpoints({
 		}),
 
 		/** Create an organization (system admin only) */
-		platformAdminCreateOrg: builder.mutation<
-			{ code: string; message: string; data?: PlatformOrg },
-			{ name: string; admin_email?: string }
-		>({
-			query: (body) => ({ url: "/platform/admin/orgs", method: "POST", body }),
-			invalidatesTags: ["Orgs"],
-		}),
+		platformAdminCreateOrg: builder.mutation<{ code: string; message: string; data?: PlatformOrg }, { name: string; admin_email?: string }>(
+			{
+				query: (body) => ({ url: "/platform/admin/orgs", method: "POST", body }),
+				invalidatesTags: ["Orgs"],
+			},
+		),
 
 		/** Update an organization (system admin only) */
 		platformAdminUpdateOrg: builder.mutation<
 			{ code: string; message: string; data?: PlatformOrg },
-			{ id: string; name?: string }
+			{ id: string; name?: string; owner_user_id?: string }
 		>({
 			query: ({ id, ...body }) => ({ url: `/platform/admin/orgs/${id}`, method: "PUT", body }),
 			invalidatesTags: ["Orgs"],
@@ -543,12 +506,33 @@ export const platformApi = platformBaseApi.injectEndpoints({
 			providesTags: ["Users"],
 		}),
 
-		platformSetUserRole: builder.mutation<
-			{ code: string; message: string },
-			{ user_id: string; role: string }
-		>({
+		platformSetUserRole: builder.mutation<{ code: string; message: string }, { user_id: string; role: string }>({
 			query: ({ user_id, ...body }) => ({
 				url: `/platform/admin/users/${user_id}/role`,
+				method: "PUT",
+				body,
+			}),
+			invalidatesTags: ["Users"],
+		}),
+
+		platformSetUserAdmin: builder.mutation<
+			{ code: string; message: string; data?: { id: string; is_admin: boolean } },
+			{ user_id: string; is_admin: boolean }
+		>({
+			query: ({ user_id, ...body }) => ({
+				url: `/platform/admin/users/${user_id}/admin`,
+				method: "PUT",
+				body,
+			}),
+			invalidatesTags: ["Users"],
+		}),
+
+		platformSetUserStatus: builder.mutation<
+			{ code: string; message: string; data?: { id: string; status: string; updated_at: string } },
+			{ user_id: string; status: "active" | "suspended" | "pending_verification" }
+		>({
+			query: ({ user_id, ...body }) => ({
+				url: `/platform/admin/users/${user_id}/status`,
 				method: "PUT",
 				body,
 			}),
@@ -558,8 +542,7 @@ export const platformApi = platformBaseApi.injectEndpoints({
 		// ── RBAC ───────────────────────────────────────────────────
 		platformListRoles: builder.query<PlatformCustomRole[], void>({
 			query: () => ({ url: "/platform/admin/roles", method: "GET" }),
-			transformResponse: (response: { data?: { items?: PlatformCustomRole[] } }) =>
-				response.data?.items ?? [],
+			transformResponse: (response: { data?: { items?: PlatformCustomRole[] } }) => response.data?.items ?? [],
 			providesTags: ["Roles"],
 		}),
 
@@ -644,10 +627,7 @@ export const platformApi = platformBaseApi.injectEndpoints({
 			providesTags: ["UsageStats"],
 		}),
 
-		platformGetUsageStats: builder.query<
-			PlatformUsageStats,
-			{ start_date?: string; end_date?: string; group_by?: string } | void
-		>({
+		platformGetUsageStats: builder.query<PlatformUsageStats, { start_date?: string; end_date?: string; group_by?: string } | void>({
 			query: (params) => ({
 				url: "/usage/stats",
 				method: "GET",
@@ -669,18 +649,12 @@ export const platformApi = platformBaseApi.injectEndpoints({
 		}),
 
 		// ── Billing: Admin ─────────────────────────────────────────
-		platformAdminCreatePackage: builder.mutation<
-			{ code: string; message: string },
-			Omit<PlatformPackage, "id" | "created_at">
-		>({
+		platformAdminCreatePackage: builder.mutation<{ code: string; message: string }, Omit<PlatformPackage, "id" | "created_at">>({
 			query: (body) => ({ url: "/admin/package/create", method: "POST", body }),
 			invalidatesTags: ["Packages"],
 		}),
 
-		platformAdminUpdatePackage: builder.mutation<
-			{ code: string; message: string },
-			Partial<PlatformPackage> & { id: number }
-		>({
+		platformAdminUpdatePackage: builder.mutation<{ code: string; message: string }, Partial<PlatformPackage> & { id: number }>({
 			query: ({ id, ...body }) => ({ url: "/admin/package/update", method: "PUT", body: { id, ...body } }),
 			invalidatesTags: ["Packages"],
 		}),
@@ -807,10 +781,7 @@ export const platformApi = platformBaseApi.injectEndpoints({
 			invalidatesTags: ["ProviderKeys"],
 		}),
 
-		platformAdminDeleteProviderKey: builder.mutation<
-			{ code: string; message: string },
-			{ provider: string; key_id: string }
-		>({
+		platformAdminDeleteProviderKey: builder.mutation<{ code: string; message: string }, { provider: string; key_id: string }>({
 			query: ({ provider, key_id }) => ({ url: `/provider-keys/${provider}/${key_id}`, method: "DELETE" }),
 			invalidatesTags: ["ProviderKeys"],
 		}),
@@ -863,6 +834,8 @@ export const {
 	// Admin: Users
 	usePlatformListUsersQuery,
 	usePlatformSetUserRoleMutation,
+	usePlatformSetUserAdminMutation,
+	usePlatformSetUserStatusMutation,
 	// RBAC
 	usePlatformListRolesQuery,
 	usePlatformCreateRoleMutation,

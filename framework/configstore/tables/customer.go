@@ -6,6 +6,7 @@ import "time"
 type TableCustomer struct {
 	ID          string  `gorm:"primaryKey;type:varchar(255)" json:"id"`
 	Name        string  `gorm:"type:varchar(255);not null" json:"name"`
+	OwnerUserID *string `gorm:"type:varchar(255);index" json:"owner_user_id,omitempty"`
 	BudgetID    *string `gorm:"type:varchar(255);index" json:"budget_id,omitempty"`
 	RateLimitID *string `gorm:"type:varchar(255);index" json:"rate_limit_id,omitempty"`
 

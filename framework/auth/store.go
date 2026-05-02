@@ -36,6 +36,10 @@ type UserRepository interface {
 
 	// EmailExists checks if an email is already registered (excluding soft-deleted).
 	EmailExists(ctx context.Context, email string) (bool, error)
+
+	// ListUsers returns all users with pagination (excludes soft-deleted).
+	// search is optional and can be used to filter by email or username.
+	ListUsers(ctx context.Context, offset, limit int, search string) ([]*User, int64, error)
 }
 
 // SessionRepository abstracts session/refresh-token persistence.

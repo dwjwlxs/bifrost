@@ -45,11 +45,7 @@ export const adminNavItems: NavItem[] = [
 /**
  * Returns all visible nav items for a given user role flags.
  */
-export function getVisibleNavItems(opts: {
-	isAdmin: boolean;
-	isOwner: boolean;
-	isTeamAdmin: boolean;
-}): NavItem[] {
+export function getVisibleNavItems(opts: { isAdmin: boolean; isOwner: boolean; isTeamAdmin: boolean }): NavItem[] {
 	const isPrivileged = opts.isAdmin || opts.isOwner || opts.isTeamAdmin;
 	return [...consoleNavItems, ...adminNavItems].filter((item) => {
 		if (item.requireAdmin) return opts.isAdmin;

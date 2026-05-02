@@ -206,10 +206,12 @@ export default function VirtualKeysPage() {
 							</div>
 							{teams && teams.length > 0 && (
 								<div className="space-y-2">
-									<Label htmlFor="vk-team">Team <span className="text-muted-foreground font-normal">(optional)</span></Label>
+									<Label htmlFor="vk-team">
+										Team <span className="text-muted-foreground font-normal">(optional)</span>
+									</Label>
 									<select
 										id="vk-team"
-										className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+										className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 										value={newTeamId}
 										onChange={(e) => setNewTeamId(e.target.value)}
 										disabled={isCreating}
@@ -248,16 +250,16 @@ export default function VirtualKeysPage() {
 			) : (
 				<div className="rounded-md border">
 					<Table>
-					<TableHeader>
-						<TableRow>
-							<TableHead>Name</TableHead>
-							<TableHead>Key Value</TableHead>
-							<TableHead>Team</TableHead>
-							<TableHead>Status</TableHead>
-							<TableHead>Created</TableHead>
-							<TableHead className="text-right">Actions</TableHead>
-						</TableRow>
-					</TableHeader>
+						<TableHeader>
+							<TableRow>
+								<TableHead>Name</TableHead>
+								<TableHead>Key Value</TableHead>
+								<TableHead>Team</TableHead>
+								<TableHead>Status</TableHead>
+								<TableHead>Created</TableHead>
+								<TableHead className="text-right">Actions</TableHead>
+							</TableRow>
+						</TableHeader>
 						<TableBody>
 							{virtualKeys?.map((vk) => {
 								const isRevealed = showKeys[vk.id] ?? false;
@@ -287,18 +289,16 @@ export default function VirtualKeysPage() {
 												>
 													<Copy className="h-3.5 w-3.5" />
 												</Button>
-									</div>
-								</TableCell>
-								<TableCell>
-									<Badge variant={vk.team_id ? "outline" : "secondary"}>
-										{vk.team_id
-											? teams?.find((t) => t.id === vk.team_id)?.name ?? vk.team_id
-											: "Personal"}
-									</Badge>
-								</TableCell>
-								<TableCell>
-									<Badge variant={vk.is_active ? "default" : "secondary"}>{vk.is_active ? "Active" : "Inactive"}</Badge>
-								</TableCell>
+											</div>
+										</TableCell>
+										<TableCell>
+											<Badge variant={vk.team_id ? "outline" : "secondary"}>
+												{vk.team_id ? (teams?.find((t) => t.id === vk.team_id)?.name ?? vk.team_id) : "Personal"}
+											</Badge>
+										</TableCell>
+										<TableCell>
+											<Badge variant={vk.is_active ? "default" : "secondary"}>{vk.is_active ? "Active" : "Inactive"}</Badge>
+										</TableCell>
 										<TableCell className="text-muted-foreground text-sm">{formatDate(vk.created_at)}</TableCell>
 										<TableCell className="text-right">
 											<div className="flex items-center justify-end gap-1">

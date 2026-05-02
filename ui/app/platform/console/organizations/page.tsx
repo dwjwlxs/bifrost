@@ -22,9 +22,7 @@ export default function OrganizationsPage() {
 		<div className="space-y-6">
 			<div>
 				<h1 className="text-2xl font-bold tracking-tight">Organizations</h1>
-				<p className="text-muted-foreground">
-					Organizations and teams you belong to.
-				</p>
+				<p className="text-muted-foreground">Organizations and teams you belong to.</p>
 			</div>
 
 			{/* Organizations Grid */}
@@ -47,7 +45,7 @@ export default function OrganizationsPage() {
 						{orgs.map((org) => {
 							const isOrgAdmin = isOwner; // current user is org admin of their own orgs
 							return (
-								<Card key={org.id} className="group relative overflow-hidden transition-colors hover:border-primary/50">
+								<Card key={org.id} className="group hover:border-primary/50 relative overflow-hidden transition-colors">
 									<CardHeader className="pb-3">
 										<div className="flex items-start justify-between">
 											<div className="flex items-center gap-2">
@@ -71,12 +69,7 @@ export default function OrganizationsPage() {
 										<div className="text-muted-foreground mb-4 text-xs">
 											{org.owner_user_id && <span>Owner ID: {org.owner_user_id}</span>}
 										</div>
-										<Button
-											variant="outline"
-											size="sm"
-											className="w-full group-hover:border-primary"
-											asChild
-										>
+										<Button variant="outline" size="sm" className="group-hover:border-primary w-full" asChild>
 											<Link to="/platform/console/organizations/$orgId" params={{ orgId: org.id }}>
 												View Details
 												<ChevronRight className="ml-1 h-4 w-4" />
@@ -109,7 +102,7 @@ export default function OrganizationsPage() {
 					) : (
 						<div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
 							{teams.map((team) => (
-								<Card key={team.id} className="group relative transition-colors hover:border-primary/50">
+								<Card key={team.id} className="group hover:border-primary/50 relative transition-colors">
 									<CardHeader className="pb-2">
 										<div className="flex items-center gap-2">
 											<div className="bg-muted flex h-7 w-7 items-center justify-center rounded-md">
@@ -119,15 +112,10 @@ export default function OrganizationsPage() {
 										</div>
 									</CardHeader>
 									<CardContent className="pt-0">
-										<div className="mb-2 text-muted-foreground text-xs font-mono">
+										<div className="text-muted-foreground mb-2 font-mono text-xs">
 											{team.customer_id && <span>Org: {team.customer_id}</span>}
 										</div>
-										<Button
-											variant="outline"
-											size="sm"
-											className="w-full text-xs group-hover:border-primary"
-											asChild
-										>
+										<Button variant="outline" size="sm" className="group-hover:border-primary w-full text-xs" asChild>
 											<Link to="/platform/console/teams/$teamId" params={{ teamId: team.id }}>
 												Open
 												<ChevronRight className="ml-1 h-3.5 w-3.5" />

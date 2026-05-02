@@ -4,7 +4,7 @@
  * Independent from the enterprise tokenManager — this is for the multi-user platform.
  */
 
-const TOKEN_KEY="***";
+const TOKEN_KEY = "***";
 const USER_KEY = "platform_user";
 const REFRESH_TOKEN_KEY = "bifrost_refresh_token";
 
@@ -184,10 +184,7 @@ export function isAuthenticated(): boolean {
  * and accepts optional `path`/`domain` so cookies set with non-default scopes
  * can also be cleared.
  */
-export function clearCookie(
-	name: string,
-	options: { path?: string; domain?: string } = {},
-): void {
+export function clearCookie(name: string, options: { path?: string; domain?: string } = {}): void {
 	if (typeof window === "undefined") return;
 	const { path = "/", domain } = options;
 	const parts = [`${encodeURIComponent(name)}=`, "Max-Age=0", `Path=${path}`];

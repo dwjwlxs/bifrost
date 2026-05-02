@@ -16,8 +16,7 @@ interface ConsoleSidebarProps {
  */
 export function ConsoleSidebar(_props: ConsoleSidebarProps) {
 	const pathname = useLocation({ select: (l) => l.pathname });
-	const { isCollapsed, isMobile, isMobileMenuOpen, toggleCollapse, toggleMobileMenu, closeMobileMenu } =
-		useConsoleSidebar();
+	const { isCollapsed, isMobile, isMobileMenuOpen, toggleCollapse, toggleMobileMenu, closeMobileMenu } = useConsoleSidebar();
 	const { isAdmin, isOwner, isTeamAdmin } = useUserRole();
 
 	const navItems = getVisibleNavItems({ isAdmin, isOwner, isTeamAdmin });
