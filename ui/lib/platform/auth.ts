@@ -17,8 +17,9 @@ interface PlatformJWTPayload {
 	orgs?: Array<{ id: string; role: string }>;
 	teams?: Array<{ id: string; role: string }>;
 	auth_token?: string;
-	name?: string;
 	email?: string;
+	user_name?: string;
+	display_name?: string;
 	exp?: number;
 	iat?: number;
 	jti?: string;
@@ -78,8 +79,8 @@ export function userFromJWT(payload: PlatformJWTPayload): PlatformUserInfo {
 	return {
 		id: payload.sub,
 		email: payload.email || "",
-		username: payload.name || payload.email?.split("@")[0] || "user",
-		nickname: payload.name || "",
+		username: payload.user_name || payload.email?.split("@")[0] || "user",
+		nickname: payload.display_name || "",
 		balance: 0,
 		is_admin: payload.is_admin ?? false,
 		role,
