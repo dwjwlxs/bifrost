@@ -2,8 +2,34 @@
  * Platform role hooks — convenience utilities for role-based UI visibility.
  * All hooks read from the stored PlatformUserInfo (set on login).
  */
-import { useMemo } from "react";
-import { getUser, type PlatformOrg, type PlatformTeam } from "./auth";
+import { useMemo, useCallback } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { clearUserInfo, getUser, type PlatformOrg, type PlatformTeam } from "./auth";
+import { store } from "@/lib/store";
+import { platformApi } from "./platformApi";
+import { setLoggedOut } from "./platformBaseApi";
+
+/**
+ * Logout helper — clears the platform token/user from localStorage,
+ * resets the RTK Query cache so no stale authenticated data leaks into
+ * the next session, and redirects to the login page.
+ *
+ * Reusable across any component that needs a "sign out" action.
+ *
+ * @param redirectTo Optional path to navigate to after logout.
+ *                   Defaults to `/platform/login`.
+ */
+export function useLogout(redirectTo: string = "/platform/login") {
+	const navigate = useNavigate();
+	return useCallback(() => {
+		setLoggedOut(); // must be FIRST — blocks in-flight 401s from triggering tryRefreshToken()
+		clearUserInfo();
+
+		navigate({ to: redirectTo }); // 先跳转 → console 组件卸载，订阅取消
+		// resetApiState() 此时已经没有活跃订阅了，不会触发新请求
+		store.dispatch(platformApi.util.resetApiState());
+	}, [navigate, redirectTo]);
+}
 
 export interface UserRoleFlags {
 	/** True if user is a system admin */

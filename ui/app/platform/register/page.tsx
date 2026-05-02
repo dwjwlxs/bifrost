@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "@tanstack/react-router";
-import { getToken, setToken, decodeAndStoreUser } from "@/lib/platform/auth";
+import { getToken, setUserInfo } from "@/lib/platform/auth";
+import { clearLoggedOut } from "@/lib/platform/platformBaseApi";
 import { EmailVerificationDialog } from "@/app/platform/components/EmailVerificationDialog";
 import { usePlatformRegisterMutation } from "@/lib/platform/platformApi";
 import { Button } from "@/components/ui/button";
@@ -138,10 +139,10 @@ export default function RegisterPage() {
 				onOpenChange={setShowVerifyDialog}
 				email={verifyEmail}
 				onVerified={(token, _refreshToken) => {
-					setToken(token);
 					// Refresh token is set via httpOnly cookie by the backend — no manual storage needed
 					// Decode JWT payload to get user info for immediate header display
-					decodeAndStoreUser(token);
+					clearLoggedOut();
+					setUserInfo(token);
 					navigate({ to: "/platform/console/dashboard" });
 				}}
 			/>

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -23,19 +24,22 @@ const refreshTokenCookieName = "bifrost_refresh_token"
 
 // setRefreshTokenCookie sets an httpOnly cookie with the refresh token.
 func setRefreshTokenCookie(ctx *fasthttp.RequestCtx, token string, expiresAt time.Time) {
-	cookie := fasthttp.Cookie{}
+	cookie := fasthttp.AcquireCookie()
+	defer fasthttp.ReleaseCookie(cookie)
 	cookie.SetKey(refreshTokenCookieName)
 	cookie.SetValue(token)
 	cookie.SetExpire(expiresAt)
 	cookie.SetPath("/")
 	cookie.SetHTTPOnly(true)
-	// Note: SetSecure(true) should be used in production with HTTPS
-	ctx.Response.Header.Cookie(&cookie)
-}
-
-// clearRefreshTokenCookie removes the httpOnly cookie.
-func clearRefreshTokenCookie(ctx *fasthttp.RequestCtx) {
-	ctx.Response.Header.DelCookie(refreshTokenCookieName)
+	// SameSite=Lax: cookie sent with same-site top-level GET navigations.
+	// For cross-origin AJAX with credentials, use SameSite=None; Secure.
+	// Using Lax is safe when API and frontend share the same root domain.
+	cookie.SetSameSite(fasthttp.CookieSameSiteLaxMode)
+	// Set Secure flag when behind HTTPS proxy (production)
+	if string(ctx.Request.Header.Peek("X-Forwarded-Proto")) == "https" {
+		cookie.SetSecure(true)
+	}
+	ctx.Response.Header.SetCookie(cookie)
 }
 
 // getRefreshTokenFromCookie reads the refresh token from the httpOnly cookie.
@@ -228,6 +232,32 @@ func (h *PlatformAuthHandler) buildPlatformClaimsForUser(userID string, authToke
 	return platformClaims
 }
 
+// issuePlatformToken validates the access token, builds platform claims, signs a
+// platform JWT, and sets the refresh token cookie. Returns the platform JWT string.
+// Callers are responsible for sending the JSON response.
+func (h *PlatformAuthHandler) issuePlatformToken(ctx *fasthttp.RequestCtx, tokenPair *fauth.TokenPair) (string, error) {
+	goCtx := context.Background()
+
+	jwtClaims, err := h.authService.ValidateAccessToken(goCtx, tokenPair.AccessToken)
+	if err != nil {
+		return "", fmt.Errorf("failed to validate access token: %w", err)
+	}
+
+	userID := jwtClaims.Sub
+	if userID == "" {
+		return "", fmt.Errorf("invalid user ID in token")
+	}
+
+	platformClaims := h.buildPlatformClaimsForUser(userID, tokenPair.AccessToken, jwtClaims)
+	platformJWT, err := SignPlatformJWT(platformClaims, h.jwtKey, h.jwtExpiry)
+	if err != nil {
+		return "", fmt.Errorf("failed to sign platform token: %w", err)
+	}
+
+	setRefreshTokenCookie(ctx, tokenPair.RefreshToken, tokenPair.ExpiresAt)
+	return platformJWT, nil
+}
+
 // login handles POST /api/platform/login
 func (h *PlatformAuthHandler) login(ctx *fasthttp.RequestCtx) {
 	var req struct {
@@ -257,31 +287,12 @@ func (h *PlatformAuthHandler) login(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// 2. Extract user_id from the auth JWT
-	jwtClaims, err := h.authService.ValidateAccessToken(goCtx, tokenPair.AccessToken)
-	if err != nil {
-		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to validate access token", err.Error())
-		return
-	}
-
-	userID := jwtClaims.Sub
-	if userID == "" {
-		sendError(ctx, fasthttp.StatusInternalServerError, "Invalid user ID in token", "")
-		return
-	}
-
-	// 3. Build platform claims using shared helper
-	platformClaims := h.buildPlatformClaimsForUser(userID, tokenPair.AccessToken, jwtClaims)
-
-	// 4. Sign platform JWT
-	platformJWT, err := SignPlatformJWT(platformClaims, h.jwtKey, h.jwtExpiry)
+	// 2. Build platform JWT and set refresh cookie
+	platformJWT, err := h.issuePlatformToken(ctx, tokenPair)
 	if err != nil {
 		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to sign platform token", err.Error())
 		return
 	}
-
-	// 5. Set httpOnly cookie for refresh token, then return tokens
-	setRefreshTokenCookie(ctx, tokenPair.RefreshToken, tokenPair.ExpiresAt)
 	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
@@ -370,29 +381,12 @@ func (h *PlatformAuthHandler) verify(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// 2. Extract user_id from the auth JWT
-	jwtClaims, err := h.authService.ValidateAccessToken(goCtx, tokenPair.AccessToken)
-	if err != nil {
-		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to validate access token", err.Error())
-		return
-	}
-
-	userID := jwtClaims.Sub
-	if userID == "" {
-		sendError(ctx, fasthttp.StatusInternalServerError, "Invalid user ID in token", "")
-		return
-	}
-
-	// 3. Build platform claims and sign platform JWT
-	platformClaims := h.buildPlatformClaimsForUser(userID, tokenPair.AccessToken, jwtClaims)
-	platformJWT, err := SignPlatformJWT(platformClaims, h.jwtKey, h.jwtExpiry)
+	// 2. Build platform JWT and set refresh cookie
+	platformJWT, err := h.issuePlatformToken(ctx, tokenPair)
 	if err != nil {
 		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to sign platform token", err.Error())
 		return
 	}
-
-	// 4. Set httpOnly cookie for refresh token, then return tokens
-	setRefreshTokenCookie(ctx, tokenPair.RefreshToken, tokenPair.ExpiresAt)
 	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
@@ -435,31 +429,12 @@ func (h *PlatformAuthHandler) refreshToken(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// 2. Extract user_id from the new access token
-	jwtClaims, err := h.authService.ValidateAccessToken(goCtx, tokenPair.AccessToken)
-	if err != nil {
-		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to validate new access token", err.Error())
-		return
-	}
-
-	userID := jwtClaims.Sub
-	if userID == "" {
-		sendError(ctx, fasthttp.StatusInternalServerError, "Invalid user ID in token", "")
-		return
-	}
-
-	// 3. Build platform claims using shared helper
-	platformClaims := h.buildPlatformClaimsForUser(userID, tokenPair.AccessToken, jwtClaims)
-
-	// 4. Sign new platform JWT
-	platformJWT, err := SignPlatformJWT(platformClaims, h.jwtKey, h.jwtExpiry)
+	// 3. Build platform JWT and rotate refresh cookie
+	platformJWT, err := h.issuePlatformToken(ctx, tokenPair)
 	if err != nil {
 		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to sign platform token", err.Error())
 		return
 	}
-
-	// 5. Rotate httpOnly cookie and return new tokens
-	setRefreshTokenCookie(ctx, tokenPair.RefreshToken, tokenPair.ExpiresAt)
 	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
