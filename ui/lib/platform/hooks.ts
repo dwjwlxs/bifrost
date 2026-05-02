@@ -4,7 +4,8 @@
  */
 import { useMemo, useCallback } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { clearUserInfo, getUser, type PlatformOrg, type PlatformTeam } from "./auth";
+import { clearLoggedInfo, getUser } from "./auth";
+import type { PlatformOrg, PlatformTeam } from "./types";
 import { store } from "@/lib/store";
 import { platformApi } from "./platformApi";
 import { setLoggedOut } from "./platformBaseApi";
@@ -23,7 +24,7 @@ export function useLogout(redirectTo: string = "/platform/login") {
 	const navigate = useNavigate();
 	return useCallback(() => {
 		setLoggedOut(); // must be FIRST — blocks in-flight 401s from triggering tryRefreshToken()
-		clearUserInfo();
+		clearLoggedInfo();
 
 		navigate({ to: redirectTo }); // 先跳转 → console 组件卸载，订阅取消
 		// resetApiState() 此时已经没有活跃订阅了，不会触发新请求

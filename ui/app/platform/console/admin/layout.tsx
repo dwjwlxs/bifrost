@@ -1,9 +1,9 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { getToken, getUser } from "@/lib/platform/auth";
+import { isAuthenticated, getUser } from "@/lib/platform/auth";
 
 export const Route = createFileRoute("/platform/console/admin")({
 	beforeLoad: () => {
-		if (!getToken()) {
+		if (!isAuthenticated()) {
 			throw redirect({ to: "/platform/login", replace: true });
 		}
 		const user = getUser();

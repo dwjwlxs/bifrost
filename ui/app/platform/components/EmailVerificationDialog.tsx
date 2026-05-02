@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { usePlatformVerifyEmailMutation, usePlatformResendVerificationMutation } from "@/lib/platform/platformApi";
-import type { PlatformUserInfo } from "@/lib/platform/platformApi";
 
 const CODE_LENGTH = 6;
 const RESEND_COOLDOWN = 30;
@@ -13,7 +12,7 @@ export interface EmailVerificationDialogProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	email: string;
-	onVerified: (token: string, refreshToken: string) => void;
+	onVerified: (token: string) => void;
 }
 
 export function EmailVerificationDialog({ open, onOpenChange, email, onVerified }: EmailVerificationDialogProps) {
@@ -132,8 +131,8 @@ export function EmailVerificationDialog({ open, onOpenChange, email, onVerified 
 		try {
 			const res = await verifyEmail({ email, code }).unwrap();
 			// New response format: { code, message, data: { access_token, refresh_token, expires_at } }
-			const { access_token, refresh_token } = res.data;
-			onVerified(access_token, refresh_token);
+			const { access_token } = res.data;
+			onVerified(access_token);
 		} catch (err: any) {
 			setError(err?.data?.message || err?.message || "Verification failed. Please try again.");
 		}

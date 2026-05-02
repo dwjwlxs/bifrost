@@ -1,7 +1,7 @@
 import { useSearch } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "@tanstack/react-router";
-import { getToken, setUserInfo } from "@/lib/platform/auth";
+import { isAuthenticated, setLoggedInfo } from "@/lib/platform/auth";
 import { clearLoggedOut } from "@/lib/platform/platformBaseApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,7 @@ export default function LoginPage() {
 
 	// Redirect if already logged in
 	useEffect(() => {
-		if (getToken()) {
+		if (isAuthenticated()) {
 			navigate({ to: "/platform/console/dashboard" });
 		}
 	}, [navigate]);
@@ -40,7 +40,7 @@ export default function LoginPage() {
 			// Refresh token is set via httpOnly cookie by the backend — no manual storage needed
 			// Decode JWT payload to: get user info for immediate header display
 			clearLoggedOut(); // allow 401 → refresh-token flow again
-			setUserInfo(access_token);
+			setLoggedInfo(access_token);
 
 			const redirectTo = redirect && redirect.startsWith("/") ? redirect : "/platform/console/dashboard";
 			navigate({ to: redirectTo });
@@ -111,11 +111,10 @@ export default function LoginPage() {
 				open={showVerifyDialog}
 				onOpenChange={setShowVerifyDialog}
 				email={verifyEmail}
-				onVerified={(token: string, _refreshToken: string) => {
+				onVerified={(token: string) => {
 					// Refresh token is set via httpOnly cookie by the backend — no manual storage needed
-					// Decode JWT payload to get user info for immediate header display
 					clearLoggedOut();
-					setUserInfo(token);
+					setLoggedInfo(token);
 					const redirectTo = redirect && redirect.startsWith("/") ? redirect : "/platform/console/dashboard";
 					navigate({ to: redirectTo });
 				}}

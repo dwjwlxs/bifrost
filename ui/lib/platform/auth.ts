@@ -3,43 +3,12 @@
  * Handles JWT token storage, retrieval, and user info for the platform pages.
  * Independent from the enterprise tokenManager — this is for the multi-user platform.
  */
+import type { PlatformOrg, PlatformTeam, PlatformUserInfo } from "./types";
 
-const TOKEN_KEY = "***";
+export type { PlatformOrg, PlatformTeam, PlatformUserInfo };
+
+const TOKEN_KEY="***";
 const USER_KEY = "platform_user";
-const REFRESH_TOKEN_KEY = "bifrost_refresh_token";
-
-export interface PlatformOrg {
-	id: string;
-	role: "admin" | "member"; // role within this org
-}
-
-export interface PlatformTeam {
-	id: string;
-	role: "admin" | "member"; // role within this team
-}
-
-export interface PlatformUserInfo {
-	id: string;
-	email: string;
-	username: string;
-	nickname: string;
-	balance: number;
-	is_admin: boolean;
-	is_email_verified: boolean;
-	/** Primary role label for display (admin | customer_owner | team_admin | team_member | user) */
-	role: string;
-	/** Orgs the user belongs to */
-	orgs: PlatformOrg[];
-	/** Teams the user belongs to */
-	teams: PlatformTeam[];
-	/** Legacy: primary org id (for backward compat) */
-	customer_id?: string;
-	/** Legacy: primary team id (for backward compat) */
-	team_id?: string;
-	status: string;
-	created_at: string;
-	updated_at: string;
-}
 
 /** JWT payload from platform login endpoint (non-verifying decode for UI use). */
 interface PlatformJWTPayload {
@@ -175,7 +144,20 @@ export function clearUser(): void {
 }
 
 export function isAuthenticated(): boolean {
-	return !!getToken();
+	const token = getToken();
+	if (!token) return false;
+
+	// Check JWT expiration — reject expired tokens at the routing level
+	// so users are redirected to login immediately instead of getting a 401 later.
+	const payload = decodePlatformToken(token);
+	if (payload?.exp && payload.exp * 1000 < Date.now()) {
+		// No setLoggedOut() needed here — this runs at route guard level before
+		// any console page loads, so there are no in-flight API requests to guard against.
+		clearLoggedInfo();
+		return false;
+	}
+
+	return true;
 }
 
 /**
@@ -192,18 +174,17 @@ export function clearCookie(name: string, options: { path?: string; domain?: str
 	document.cookie = parts.join("; ");
 }
 
-// Set user info in localStorage.
-export function setUserInfo(token: string): void {
+// Store token + decoded user info from a JWT access token.
+// Convenience helper: setToken() → decodeAndStoreUser().
+export function setLoggedInfo(token: string): void {
 	if (typeof window === "undefined") return;
 	localStorage.setItem(TOKEN_KEY, token);
 
 	decodeAndStoreUser(token);
 }
 
-// Clear user info from localStorage.
-export function clearUserInfo(): void {
-	clearCookie(REFRESH_TOKEN_KEY);
-	clearCookie("token");
+// Clear token and user info from localStorage.
+export function clearLoggedInfo(): void {
 	clearToken();
 	clearUser();
 }

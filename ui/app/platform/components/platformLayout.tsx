@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dropdownMenu";
 import { ThemeProvider } from "@/components/themeProvider";
 import { ReduxProvider } from "@/lib/store";
-import { getUser, type PlatformUserInfo } from "@/lib/platform/auth";
+import { getUser } from "@/lib/platform/auth";
 import { useLogout } from "@/lib/platform/hooks";
 import { Link, useLocation } from "@tanstack/react-router";
 import { LogOut, User, ChevronDown } from "lucide-react";

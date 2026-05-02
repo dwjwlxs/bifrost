@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { usePlatformGetUsageStatsQuery, usePlatformGetTokenUsageQuery, useUserRole } from "@/lib/platform";
+import { usePlatformGetUsageStatsQuery, usePlatformGetTokenUsageQuery } from "@/lib/platform/platformApi";
+import { useUserRole } from "@/lib/platform/hooks";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
