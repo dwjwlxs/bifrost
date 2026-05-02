@@ -7,12 +7,11 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdownMenu";
 import { ThemeProvider } from "@/components/themeProvider";
-import { ReduxProvider, store } from "@/lib/store";
-import { getUser, getToken, clearToken, type PlatformUserInfo } from "@/lib/platform/auth";
-import { platformApi } from "@/lib/platform/platformApi";
-import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { ReduxProvider } from "@/lib/store";
+import { getUser, type PlatformUserInfo } from "@/lib/platform/auth";
+import { useLogout } from "@/lib/platform/hooks";
+import { Link, useLocation } from "@tanstack/react-router";
 import { LogOut, User, ChevronDown } from "lucide-react";
-import { useEffect, useState } from "react";
 import { Toaster } from "sonner";
 import { ConsoleSidebar } from "./consoleSidebar";
 import { ConsoleSidebarProvider, useConsoleSidebar } from "./consoleSidebarContext";
@@ -31,7 +30,7 @@ const publicNavItems = [
  */
 export function PlatformHeader() {
 	const pathname = useLocation({ select: (l) => l.pathname });
-	const navigate = useNavigate();
+	const logout = useLogout();
 
 	// Synchronous localStorage read — always fresh
 	const user = getUser();
@@ -115,14 +114,7 @@ export function PlatformHeader() {
 								</Link>
 							</DropdownMenuItem>
 							<DropdownMenuSeparator />
-						<DropdownMenuItem
-							onClick={() => {
-								clearToken();
-								store.dispatch(platformApi.util.resetApiState());
-								navigate({ to: "/platform/login" });
-							}}
-							className="text-red-600"
-						>
+							<DropdownMenuItem onClick={logout} className="text-red-600">
 								<LogOut className="mr-2 h-4 w-4" />
 								Log out
 							</DropdownMenuItem>
@@ -204,14 +196,10 @@ function ConsoleLayout({ children }: { children: React.ReactNode }) {
  */
 export function PlatformProviders({ children }: { children: React.ReactNode }) {
 	const pathname = useLocation({ select: (l) => l.pathname });
-	// Track token to re-render on auth state changes (login/logout)
-	const [token, setToken] = useState<string | null>(null);
 
-	useEffect(() => {
-		setToken(getToken());
-	}, []);
-
-	const user = token ? getUser() : null;
+	// Direct synchronous read — always fresh after login/logout/navigation.
+	// getUser() reads localStorage synchronously so this is always current.
+	const user = getUser();
 	const isConsole = pathname.startsWith("/platform/console");
 
 	return (

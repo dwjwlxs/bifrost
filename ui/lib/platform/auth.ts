@@ -6,6 +6,7 @@
 
 const TOKEN_KEY="***";
 const USER_KEY = "platform_user";
+const REFRESH_TOKEN_KEY = "bifrost_refresh_token";
 
 export interface PlatformOrg {
 	id: string;
@@ -138,7 +139,6 @@ export function setToken(token: string): void {
 export function clearToken(): void {
 	if (typeof window === "undefined") return;
 	localStorage.removeItem(TOKEN_KEY);
-	localStorage.removeItem(USER_KEY);
 }
 
 /**
@@ -169,6 +169,44 @@ export function setUser(user: PlatformUserInfo): void {
 	localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
+export function clearUser(): void {
+	if (typeof window === "undefined") return;
+	localStorage.removeItem(USER_KEY);
+}
+
 export function isAuthenticated(): boolean {
 	return !!getToken();
+}
+
+/**
+ * Clear a cookie by name.
+ * Uses `Max-Age=0` (immune to client clock skew, unlike a fixed past `expires`),
+ * and accepts optional `path`/`domain` so cookies set with non-default scopes
+ * can also be cleared.
+ */
+export function clearCookie(
+	name: string,
+	options: { path?: string; domain?: string } = {},
+): void {
+	if (typeof window === "undefined") return;
+	const { path = "/", domain } = options;
+	const parts = [`${encodeURIComponent(name)}=`, "Max-Age=0", `Path=${path}`];
+	if (domain) parts.push(`Domain=${domain}`);
+	document.cookie = parts.join("; ");
+}
+
+// Set user info in localStorage.
+export function setUserInfo(token: string): void {
+	if (typeof window === "undefined") return;
+	localStorage.setItem(TOKEN_KEY, token);
+
+	decodeAndStoreUser(token);
+}
+
+// Clear user info from localStorage.
+export function clearUserInfo(): void {
+	clearCookie(REFRESH_TOKEN_KEY);
+	clearCookie("token");
+	clearToken();
+	clearUser();
 }

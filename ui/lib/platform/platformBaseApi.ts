@@ -4,12 +4,27 @@
  */
 import { getApiBaseUrl } from "@/lib/utils/port";
 import { createApi, fetchBaseQuery, BaseQueryFn } from "@reduxjs/toolkit/query/react";
-import { getToken, setToken, clearToken } from "./auth";
+import { getToken, setUserInfo, clearUserInfo } from "./auth";
 import type { FetchArgs, FetchBaseQueryError } from "@reduxjs/toolkit/query";
 
 // Shared promise ref to prevent concurrent refresh races —
 // if multiple requests get 401 simultaneously, only one triggers refresh
 let refreshPromise: Promise<boolean> | null = null;
+
+// Module-level flag — set during logout to block any in-flight refresh attempts.
+// resetApiState() does NOT abort running fetch() calls, so 401 responses from
+// console-page queries (virtual-keys, orgs, etc.) can arrive after logout.
+// Without this guard, tryRefreshToken() would succeed (httpOnly cookie still valid)
+// and setUserInfo() would repopulate localStorage, silently "un-logging-out" the user.
+let isLoggedOut = false;
+
+export function setLoggedOut() {
+	isLoggedOut = true;
+}
+
+export function clearLoggedOut() {
+	isLoggedOut = false;
+}
 
 /**
  * Attempt to refresh the access token using the httpOnly refresh token cookie.
@@ -28,19 +43,20 @@ async function tryRefreshToken(): Promise<boolean> {
 		});
 
 		if (!resp.ok) {
-			// Refresh token invalid or expired — clear everything and return false
-			clearToken();
+			// Refresh token invalid or expired — clear auth state
+			clearUserInfo();
 			return false;
 		}
 
 		const json = await resp.json();
 		if (json.code !== "0" || !json.data?.access_token) {
-			clearToken();
+			// Malformed response — treat as auth failure
+			clearUserInfo();
 			return false;
 		}
 
-		// Store new access token (refresh token is set via httpOnly cookie by the backend)
-		setToken(json.data.access_token);
+		// Store new access token + user info (refresh token set via httpOnly cookie by backend)
+		setUserInfo(json.data.access_token);
 		return true;
 	} catch {
 		return false;
@@ -74,6 +90,13 @@ const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> =
 
 	// 401 → try to refresh once
 	if (result.error?.status === 401) {
+		// If the user has already logged out, skip refresh entirely.
+		// The httpOnly cookie is still valid, but clearUserInfo() has already run —
+		// letting tryRefreshToken() succeed would repopulate localStorage and undo the logout.
+		if (isLoggedOut) {
+			return result;
+		}
+
 		// If a refresh is already in flight, wait for it instead of starting another
 		let refreshed = false;
 		if (!refreshPromise) {
