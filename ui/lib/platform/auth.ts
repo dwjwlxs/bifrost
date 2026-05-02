@@ -7,6 +7,16 @@
 const TOKEN_KEY = "platform_token";
 const USER_KEY = "platform_user";
 
+export interface PlatformOrg {
+	id: string;
+	role: "admin" | "member"; // role within this org
+}
+
+export interface PlatformTeam {
+	id: string;
+	role: "admin" | "member"; // role within this team
+}
+
 export interface PlatformUserInfo {
 	id: string;
 	email: string;
@@ -15,8 +25,15 @@ export interface PlatformUserInfo {
 	balance: number;
 	is_admin: boolean;
 	is_email_verified: boolean;
+	/** Primary role label for display (admin | customer_owner | team_admin | team_member | user) */
 	role: string;
+	/** Orgs the user belongs to */
+	orgs: PlatformOrg[];
+	/** Teams the user belongs to */
+	teams: PlatformTeam[];
+	/** Legacy: primary org id (for backward compat) */
 	customer_id?: string;
+	/** Legacy: primary team id (for backward compat) */
 	team_id?: string;
 	status: string;
 	created_at: string;
@@ -64,14 +81,29 @@ export function decodePlatformToken(token: string): PlatformJWTPayload | null {
 export function userFromJWT(payload: PlatformJWTPayload): PlatformUserInfo {
 	const now = new Date().toISOString();
 
-	// Derive role: org_admin > team_admin > team_member > "user"
+	// Build orgs array
+	const orgs: PlatformOrg[] = (payload.orgs ?? []).map((o) => ({
+		id: o.id,
+		role: (o.role as "admin" | "member") ?? "member",
+	}));
+
+	// Build teams array
+	const teams: PlatformTeam[] = (payload.teams ?? []).map((t) => ({
+		id: t.id,
+		role: (t.role as "admin" | "member") ?? "member",
+	}));
+
+	// Derive display role: admin > org_admin > team_admin > team_member > user
 	let role = "user";
-	if (payload.orgs?.length) {
-		role = payload.orgs[0].role || "user";
-	} else if (payload.teams?.length) {
-		role = payload.teams[0].role || "user";
+	if (payload.is_admin) {
+		role = "admin";
+	} else if (orgs.some((o) => o.role === "admin")) {
+		role = "customer_owner";
+	} else if (teams.some((t) => t.role === "admin")) {
+		role = "team_admin";
+	} else if (orgs.length > 0 || teams.length > 0) {
+		role = "team_member";
 	}
-	if (payload.is_admin) role = "admin";
 
 	return {
 		id: payload.sub,
@@ -81,8 +113,11 @@ export function userFromJWT(payload: PlatformJWTPayload): PlatformUserInfo {
 		balance: 0,
 		is_admin: payload.is_admin ?? false,
 		role,
-		customer_id: payload.orgs?.[0]?.id,
-		team_id: payload.teams?.[0]?.id,
+		orgs,
+		teams,
+		// Legacy fields: primary org/team for backward compat
+		customer_id: orgs[0]?.id,
+		team_id: teams[0]?.id,
 		status: "active",
 		is_email_verified: true,
 		created_at: now,

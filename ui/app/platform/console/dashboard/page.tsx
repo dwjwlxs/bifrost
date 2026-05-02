@@ -1,18 +1,36 @@
 import { Link } from "@tanstack/react-router";
-import { usePlatformGetProfileQuery, usePlatformListVKsQuery, usePlatformListCustomersQuery } from "@/lib/platform/platformApi";
+import {
+	usePlatformGetProfileQuery,
+	usePlatformListVKsQuery,
+	usePlatformListOrgsQuery,
+	usePlatformListTeamsQuery,
+} from "@/lib/platform/platformApi";
 import { getUser } from "@/lib/platform/auth";
 import { useUserRole } from "@/lib/platform/hooks";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { KeyRound, Building2, Wallet, Activity, ArrowRight, Package, Server, Users, DollarSign } from "lucide-react";
+import {
+	KeyRound,
+	Building2,
+	Wallet,
+	Activity,
+	ArrowRight,
+	Package,
+	Server,
+	Users,
+	DollarSign,
+	UsersRound,
+} from "lucide-react";
 
 export default function DashboardPage() {
 	const { data: profile, isLoading: profileLoading } = usePlatformGetProfileQuery();
 	const { data: vks, isLoading: vksLoading } = usePlatformListVKsQuery();
-	const { data: customers, isLoading: customersLoading } = usePlatformListCustomersQuery();
+	const { data: orgs, isLoading: orgsLoading } = usePlatformListOrgsQuery();
+	const { data: teams, isLoading: teamsLoading } = usePlatformListTeamsQuery();
 	const user = profile ?? getUser();
-	const { isAdmin } = useUserRole();
+	const { isAdmin, isOwner, isTeamAdmin } = useUserRole();
+	const isPrivileged = isAdmin || isOwner || isTeamAdmin;
 
 	if (profileLoading && !user) {
 		return (
@@ -31,14 +49,16 @@ export default function DashboardPage() {
 			</div>
 
 			{/* Stats Grid */}
-			<div className="grid gap-4 md:grid-cols-3">
+			<div className="grid gap-4 md:grid-cols-4">
 				<Card>
 					<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
 						<CardTitle className="text-sm font-medium">Balance</CardTitle>
 						<Wallet className="text-muted-foreground h-4 w-4" />
 					</CardHeader>
 					<CardContent>
-						<div className="text-2xl font-bold">${(user?.balance ?? 0).toFixed(2)}</div>
+						<div className="text-2xl font-bold">
+							${(user?.balance ?? 0).toFixed(2)}
+						</div>
 					</CardContent>
 				</Card>
 				<Card>
@@ -47,7 +67,7 @@ export default function DashboardPage() {
 						<KeyRound className="text-muted-foreground h-4 w-4" />
 					</CardHeader>
 					<CardContent>
-						<div className="text-2xl font-bold">{vksLoading ? "..." : (vks?.length ?? 0)}</div>
+						<div className="text-2xl font-bold">{vksLoading ? "..." : vks?.length ?? 0}</div>
 					</CardContent>
 				</Card>
 				<Card>
@@ -56,13 +76,24 @@ export default function DashboardPage() {
 						<Building2 className="text-muted-foreground h-4 w-4" />
 					</CardHeader>
 					<CardContent>
-						<div className="text-2xl font-bold">{customersLoading ? "..." : (customers?.length ?? 0)}</div>
+						<div className="text-2xl font-bold">{orgsLoading ? "..." : orgs?.length ?? 0}</div>
 					</CardContent>
 				</Card>
+				{isPrivileged && (
+					<Card>
+						<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+							<CardTitle className="text-sm font-medium">Teams</CardTitle>
+							<UsersRound className="text-muted-foreground h-4 w-4" />
+						</CardHeader>
+						<CardContent>
+							<div className="text-2xl font-bold">{teamsLoading ? "..." : teams?.length ?? 0}</div>
+						</CardContent>
+					</Card>
+				)}
 			</div>
 
 			{/* Profile & Quick Actions */}
-			<div className={`grid gap-4 ${isAdmin ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+			<div className={`grid gap-4 ${isPrivileged ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
 				{/* Profile Card */}
 				<Card>
 					<CardHeader>
@@ -126,8 +157,8 @@ export default function DashboardPage() {
 					</CardContent>
 				</Card>
 
-				{/* Admin Quick Actions Card */}
-				{isAdmin && (
+			{/* Admin Quick Actions Card */}
+			{isPrivileged && (
 					<Card>
 						<CardHeader>
 							<CardTitle>Admin Actions</CardTitle>

@@ -3,7 +3,19 @@
  * Used by the console sidebar to render nav items based on user role.
  */
 
-import { LayoutDashboard, KeyRound, Building2, ShieldCheck, Wallet, Activity, Package, Server, Users, DollarSign } from "lucide-react";
+import {
+	LayoutDashboard,
+	KeyRound,
+	Building2,
+	ShieldCheck,
+	Wallet,
+	Activity,
+	Package,
+	Server,
+	Users,
+	DollarSign,
+	UsersRound,
+} from "lucide-react";
 
 export interface NavItem {
 	label: string;
@@ -11,15 +23,16 @@ export interface NavItem {
 	icon: typeof LayoutDashboard;
 	/** If true, only visible when user.is_admin === true */
 	requireAdmin?: boolean;
+	/** If true, visible when user is org_admin or team_admin */
+	requireOrgOrTeamAdmin?: boolean;
 }
 
 export const consoleNavItems: NavItem[] = [
 	{ label: "Dashboard", to: "/platform/console/dashboard", icon: LayoutDashboard },
-	{ label: "Wallet", to: "/platform/console/wallet", icon: Wallet },
 	{ label: "Virtual Keys", to: "/platform/console/virtual-keys", icon: KeyRound },
 	{ label: "Organizations", to: "/platform/console/organizations", icon: Building2 },
 	{ label: "Usage", to: "/platform/console/usage", icon: Activity },
-	{ label: "RBAC", to: "/platform/console/rbac", icon: ShieldCheck },
+	{ label: "RBAC", to: "/platform/console/rbac", icon: ShieldCheck, requireOrgOrTeamAdmin: true },
 ];
 
 export const adminNavItems: NavItem[] = [
@@ -30,8 +43,17 @@ export const adminNavItems: NavItem[] = [
 ];
 
 /**
- * Returns all visible nav items for a given is_admin flag.
+ * Returns all visible nav items for a given user role flags.
  */
-export function getVisibleNavItems(isAdmin: boolean): NavItem[] {
-	return [...consoleNavItems, ...adminNavItems].filter((item) => !item.requireAdmin || isAdmin);
+export function getVisibleNavItems(opts: {
+	isAdmin: boolean;
+	isOwner: boolean;
+	isTeamAdmin: boolean;
+}): NavItem[] {
+	const isPrivileged = opts.isAdmin || opts.isOwner || opts.isTeamAdmin;
+	return [...consoleNavItems, ...adminNavItems].filter((item) => {
+		if (item.requireAdmin) return opts.isAdmin;
+		if (item.requireOrgOrTeamAdmin) return isPrivileged;
+		return true;
+	});
 }

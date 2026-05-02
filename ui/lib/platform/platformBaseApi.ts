@@ -25,7 +25,7 @@ export const platformBaseApi = createApi({
 	tagTypes: [
 		"CurrentUser",
 		"VirtualKeys",
-		"Customers",
+		"Orgs",
 		"Teams",
 		"Users",
 		"Roles",
