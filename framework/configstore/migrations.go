@@ -637,6 +637,9 @@ func triggerMigrations(ctx context.Context, db *gorm.DB) error {
 	if err := migrationFixPricingOverrideScopeIndexColumns(ctx, db); err != nil {
 		return err
 	}
+	if err := migrationAddOwnerUserIDColumn(ctx, db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -7254,6 +7257,37 @@ func migrationFixPricingOverrideScopeIndexColumns(ctx context.Context, db *gorm.
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error running fix_pricing_override_scope_index_columns migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddOwnerUserIDColumn adds the owner_user_id column to the governance_customers table.
+func migrationAddOwnerUserIDColumn(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "add_owner_user_id_column",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasColumn(&tables.TableCustomer{}, "owner_user_id") {
+				if err := migrator.AddColumn(&tables.TableCustomer{}, "owner_user_id"); err != nil {
+					return fmt.Errorf("failed to add owner_user_id column: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if migrator.HasColumn(&tables.TableCustomer{}, "owner_user_id") {
+				if err := migrator.DropColumn(&tables.TableCustomer{}, "owner_user_id"); err != nil {
+					return fmt.Errorf("failed to drop owner_user_id column: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_owner_user_id_column migration: %s", err.Error())
 	}
 	return nil
 }

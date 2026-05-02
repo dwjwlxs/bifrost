@@ -1129,7 +1129,7 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 		return fmt.Errorf("failed to migrate platform tables: %v", err)
 	}
 	platformAuthHandler := platform_handlers.NewPlatformAuthHandler(db, s.Config.ConsumerAuthService, s.Config.ConfigStore)
-	platformAdminHandler := platform_handlers.NewPlatformAdminHandler(db, s.Config.ConfigStore)
+	platformAdminHandler := platform_handlers.NewPlatformAdminHandler(db, s.Config.ConfigStore, s.Config.ConsumerAuthService)
 	platformOrgHandler := platform_handlers.NewPlatformOrgHandler(db, s.Config.ConfigStore)
 	platformTeamHandler := platform_handlers.NewPlatformTeamHandler(db, s.Config.ConfigStore)
 	platformVKHandler := platform_handlers.NewPlatformVKHandler(db, s.Config.ConfigStore)

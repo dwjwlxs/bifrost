@@ -18,14 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-	Dialog,
-	DialogContent,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-	DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -40,17 +33,7 @@ import {
 	AlertDialogTitle,
 	AlertDialogTrigger,
 } from "@/components/ui/alertDialog";
-import {
-	ArrowLeft,
-	Building2,
-	Users,
-	UsersRound,
-	Plus,
-	Trash2,
-	Loader2,
-	ShieldCheck,
-	Shield,
-} from "lucide-react";
+import { ArrowLeft, Building2, Users, UsersRound, Plus, Trash2, Loader2, ShieldCheck, Shield } from "lucide-react";
 import { toast } from "sonner";
 
 export default function OrganizationDetailPage() {
@@ -161,8 +144,7 @@ export default function OrganizationDetailPage() {
 								<CardHeader>
 									<CardTitle>Organization Members</CardTitle>
 									<CardDescription>
-										Members belong to this organization. To invite new members, create a team and invite
-										through the team.
+										Members belong to this organization. To invite new members, create a team and invite through the team.
 									</CardDescription>
 								</CardHeader>
 								<CardContent>
@@ -171,9 +153,7 @@ export default function OrganizationDetailPage() {
 											<div className="border-primary h-8 w-8 animate-spin rounded-full border-4 border-t-transparent" />
 										</div>
 									) : members?.length === 0 ? (
-										<p className="text-muted-foreground py-8 text-center text-sm">
-											No members found.
-										</p>
+										<p className="text-muted-foreground py-8 text-center text-sm">No members found.</p>
 									) : (
 										<Table>
 											<TableHeader>
@@ -190,14 +170,10 @@ export default function OrganizationDetailPage() {
 														<TableCell className="text-sm">{member.email}</TableCell>
 														<TableCell className="font-medium">{member.username}</TableCell>
 														<TableCell>
-															<Badge variant={member.role === "admin" ? "default" : "secondary"}>
-																{member.role}
-															</Badge>
+															<Badge variant={member.role === "admin" ? "default" : "secondary"}>{member.role}</Badge>
 														</TableCell>
 														<TableCell className="text-muted-foreground text-sm">
-															{member.joined_at
-																? new Date(member.joined_at).toLocaleDateString()
-																: "—"}
+															{member.joined_at ? new Date(member.joined_at).toLocaleDateString() : "—"}
 														</TableCell>
 													</TableRow>
 												))}
@@ -244,17 +220,10 @@ export default function OrganizationDetailPage() {
 														</div>
 													</div>
 													<DialogFooter>
-														<Button
-															variant="outline"
-															onClick={() => setCreateTeamOpen(false)}
-															disabled={isCreating}
-														>
+														<Button variant="outline" onClick={() => setCreateTeamOpen(false)} disabled={isCreating}>
 															Cancel
 														</Button>
-														<Button
-															onClick={handleCreateTeam}
-															disabled={isCreating || !newTeamName.trim()}
-														>
+														<Button onClick={handleCreateTeam} disabled={isCreating || !newTeamName.trim()}>
 															{isCreating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
 															Create
 														</Button>
@@ -270,9 +239,7 @@ export default function OrganizationDetailPage() {
 											<div className="border-primary h-8 w-8 animate-spin rounded-full border-4 border-t-transparent" />
 										</div>
 									) : teams?.length === 0 ? (
-										<p className="text-muted-foreground py-8 text-center text-sm">
-											No teams in this organization.
-										</p>
+										<p className="text-muted-foreground py-8 text-center text-sm">No teams in this organization.</p>
 									) : (
 										<Table>
 											<TableHeader>
@@ -288,34 +255,26 @@ export default function OrganizationDetailPage() {
 												{teams?.map((team) => (
 													<TableRow key={team.id}>
 														<TableCell
-															className="font-medium cursor-pointer hover:underline"
+															className="cursor-pointer font-medium hover:underline"
 															onClick={() =>
-																		navigate({
-																			to: "/platform/console/teams/$teamId",
-																			params: { teamId: team.id },
-																		})
-																	}
+																navigate({
+																	to: "/platform/console/teams/$teamId",
+																	params: { teamId: team.id },
+																})
+															}
 														>
 															{team.name}
 														</TableCell>
 														<TableCell className="font-mono text-sm">{team.id}</TableCell>
+														<TableCell className="text-muted-foreground text-sm">{team.owner_user_id ?? "—"}</TableCell>
 														<TableCell className="text-muted-foreground text-sm">
-															{team.owner_user_id ?? "—"}
-														</TableCell>
-														<TableCell className="text-muted-foreground text-sm">
-															{team.budget_limit != null
-																? `$${team.budget_limit.toFixed(2)}`
-																: "—"}
+															{team.budget_limit != null ? `$${team.budget_limit.toFixed(2)}` : "—"}
 														</TableCell>
 														{isAdmin && (
 															<TableCell className="text-right">
 																<AlertDialog>
 																	<AlertDialogTrigger asChild>
-																		<Button
-																			variant="ghost"
-																			size="sm"
-																			className="text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
-																		>
+																		<Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 h-8 w-8 p-0">
 																			<Trash2 className="h-4 w-4" />
 																		</Button>
 																	</AlertDialogTrigger>
@@ -323,15 +282,12 @@ export default function OrganizationDetailPage() {
 																		<AlertDialogHeader>
 																			<AlertDialogTitle>Delete Team</AlertDialogTitle>
 																			<AlertDialogDescription>
-																				Are you sure you want to delete &quot;{team.name}&quot;? This
-																				action cannot be undone.
+																				Are you sure you want to delete &quot;{team.name}&quot;? This action cannot be undone.
 																			</AlertDialogDescription>
 																		</AlertDialogHeader>
 																		<AlertDialogFooter>
 																			<AlertDialogCancel>Cancel</AlertDialogCancel>
-																			<AlertDialogAction className="bg-destructive hover:bg-destructive/90">
-																				Delete
-																			</AlertDialogAction>
+																			<AlertDialogAction className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
 																		</AlertDialogFooter>
 																	</AlertDialogContent>
 																</AlertDialog>

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import {
 	usePlatformListUsersQuery,
-	usePlatformSetUserRoleMutation,
+	usePlatformSetUserAdminMutation,
+	usePlatformSetUserStatusMutation,
 	usePlatformAdminListOrgsQuery,
 	usePlatformAdminCreateOrgMutation,
 	usePlatformAdminUpdateOrgMutation,
@@ -14,16 +15,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-	DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -37,10 +31,10 @@ import {
 	AlertDialogTitle,
 	AlertDialogTrigger,
 } from "@/components/ui/alertDialog";
-import { Users, Building2, Search, Pencil, Plus, Trash2, Loader2 } from "lucide-react";
+import { Users, Building2, Search, Pencil, Plus, Trash2, Loader2, Shield } from "lucide-react";
 import { toast } from "sonner";
 
-const ROLES = ["user", "admin"] as const;
+const STATUS_OPTIONS = ["active", "suspended", "pending_verification"] as const;
 
 const PAGE_SIZE = 20;
 
@@ -79,31 +73,69 @@ export default function AdminUsersPage() {
 function UsersTab() {
 	const [search, setSearch] = useState("");
 	const [page, setPage] = useState(0);
-	const [roleDialogOpen, setRoleDialogOpen] = useState(false);
+	const [editDialogOpen, setEditDialogOpen] = useState(false);
 	const [editingUser, setEditingUser] = useState<PlatformUserInfo | null>(null);
-	const [selectedRole, setSelectedRole] = useState<string>("");
+	const [editStatus, setEditStatus] = useState<string>("active");
+	const [editAdmin, setEditAdmin] = useState(false);
 
 	const { data, isLoading } = usePlatformListUsersQuery({
 		search: search || undefined,
 		limit: PAGE_SIZE,
 		offset: page * PAGE_SIZE,
 	});
-	const [setUserRole, { isLoading: isSettingRole }] = usePlatformSetUserRoleMutation();
+	const [setUserAdmin, { isLoading: isSettingAdmin }] = usePlatformSetUserAdminMutation();
+	const [setUserStatus, { isLoading: isSettingStatus }] = usePlatformSetUserStatusMutation();
 
-	const openRoleDialog = (user: PlatformUserInfo) => {
+	const openEditDialog = (user: PlatformUserInfo) => {
 		setEditingUser(user);
-		setSelectedRole(user.role ?? "user");
-		setRoleDialogOpen(true);
+		setEditStatus(user.status ?? "active");
+		setEditAdmin(user.is_admin ?? false);
+		setEditDialogOpen(true);
 	};
 
-	const handleSetRole = async () => {
-		if (!editingUser || !selectedRole) return;
-		try {
-			await setUserRole({ user_id: editingUser.id, role: selectedRole }).unwrap();
-			toast.success(`Role updated for ${editingUser.username}`);
-			setRoleDialogOpen(false);
-		} catch (err) {
-			toast.error("Failed to update user role");
+	const isSaving = isSettingAdmin || isSettingStatus;
+
+	const handleSave = async () => {
+		if (!editingUser) return;
+		let hasError = false;
+
+		// Update admin status if changed
+		if (editAdmin !== (editingUser.is_admin ?? false)) {
+			try {
+				await setUserAdmin({ user_id: editingUser.id, is_admin: editAdmin }).unwrap();
+			} catch {
+				toast.error("Failed to update admin status");
+				hasError = true;
+			}
+		}
+
+		// Update status if changed
+		if (editStatus !== (editingUser.status ?? "active")) {
+			try {
+				await setUserStatus({
+					user_id: editingUser.id,
+					status: editStatus as "active" | "suspended" | "pending_verification",
+				}).unwrap();
+			} catch {
+				toast.error("Failed to update user status");
+				hasError = true;
+			}
+		}
+
+		if (!hasError) {
+			toast.success(`User ${editingUser.username} updated`);
+			setEditDialogOpen(false);
+		}
+	};
+
+	const statusVariant = (status: string) => {
+		switch (status) {
+			case "active":
+				return "default" as const;
+			case "suspended":
+				return "destructive" as const;
+			default:
+				return "secondary" as const;
 		}
 	};
 
@@ -146,9 +178,9 @@ function UsersTab() {
 										<TableHead>ID</TableHead>
 										<TableHead>Username</TableHead>
 										<TableHead>Email</TableHead>
+										<TableHead>Admin</TableHead>
 										<TableHead>Role</TableHead>
 										<TableHead>Status</TableHead>
-										<TableHead>Verified</TableHead>
 										<TableHead>Joined</TableHead>
 										<TableHead className="text-right">Actions</TableHead>
 									</TableRow>
@@ -156,45 +188,38 @@ function UsersTab() {
 								<TableBody>
 									{data?.items.length === 0 && (
 										<TableRow>
-											<TableCell colSpan={8} className="text-muted-foreground text-center">
+											<TableCell colSpan={9} className="text-muted-foreground text-center">
 												No users found.
 											</TableCell>
 										</TableRow>
 									)}
 									{data?.items.map((user) => (
 										<TableRow key={user.id}>
-											<TableCell className="font-mono text-sm">{user.id}</TableCell>
+											<TableCell className="font-mono text-sm">
+												<span className="flex items-center gap-1">
+													<span>{user.id}</span>
+													<CopyButton text={user.id} />
+												</span>
+											</TableCell>
 											<TableCell className="font-medium">{user.username}</TableCell>
 											<TableCell className="text-sm">{user.email}</TableCell>
 											<TableCell>
-												<Badge
-													variant={
-														user.is_admin
-															? "default"
-															: user.role === "customer_owner"
-																? "secondary"
-																: "outline"
-													}
-												>
-													{user.role ?? "user"}
-												</Badge>
+												{user.is_admin && (
+													<Badge variant="default" className="gap-1">
+														<Shield className="h-3 w-3" />
+														Admin
+													</Badge>
+												)}
 											</TableCell>
 											<TableCell>
-												<Badge variant={user.status === "active" ? "default" : "destructive"}>
-													{user.status}
-												</Badge>
+												<Badge variant={user.role === "customer_owner" ? "secondary" : "outline"}>{user.role ?? "user"}</Badge>
 											</TableCell>
-											<TableCell>{user.is_email_verified ? "Yes" : "No"}</TableCell>
-											<TableCell className="text-muted-foreground text-sm">
-												{new Date(user.created_at).toLocaleDateString()}
+											<TableCell>
+												<Badge variant={statusVariant(user.status ?? "active")}>{user.status ?? "active"}</Badge>
 											</TableCell>
+											<TableCell className="text-muted-foreground text-sm">{new Date(user.created_at).toLocaleDateString()}</TableCell>
 											<TableCell className="text-right">
-												<Button
-													variant="ghost"
-													size="sm"
-													onClick={() => openRoleDialog(user)}
-													data-testid={`admin-users-edit-role-${user.id}`}
-												>
+												<Button variant="ghost" size="sm" onClick={() => openEditDialog(user)} data-testid={`admin-users-edit-${user.id}`}>
 													<Pencil className="h-4 w-4" />
 												</Button>
 											</TableCell>
@@ -206,16 +231,10 @@ function UsersTab() {
 							{(data?.total ?? 0) > PAGE_SIZE && (
 								<div className="flex items-center justify-between pt-4">
 									<p className="text-muted-foreground text-sm">
-										Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, data?.total ?? 0)} of{" "}
-										{data?.total}
+										Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, data?.total ?? 0)} of {data?.total}
 									</p>
 									<div className="flex gap-2">
-										<Button
-											variant="outline"
-											size="sm"
-											disabled={page === 0}
-											onClick={() => setPage(page - 1)}
-										>
+										<Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>
 											Previous
 										</Button>
 										<Button
@@ -234,40 +253,68 @@ function UsersTab() {
 				</CardContent>
 			</Card>
 
-			{/* Role Edit Dialog */}
-			<Dialog open={roleDialogOpen} onOpenChange={setRoleDialogOpen}>
+			{/* Edit User Dialog */}
+			<Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>Change User Role</DialogTitle>
+						<DialogTitle>Edit User</DialogTitle>
 						<DialogDescription>
-							Update role for <span className="font-medium">{editingUser?.username}</span> (
-							{editingUser?.email})
+							Update settings for <span className="font-medium">{editingUser?.username}</span> ({editingUser?.email})
 						</DialogDescription>
 					</DialogHeader>
 					<div className="grid gap-4 py-4">
-						<div className="grid gap-2">
-							<Label>Role</Label>
-							<select
-								className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-								value={selectedRole}
-								onChange={(e) => setSelectedRole(e.target.value)}
-								data-testid="admin-users-role-select"
+						{/* Admin toggle */}
+						<div className="flex items-center justify-between rounded-lg border p-3">
+							<div className="space-y-0.5">
+								<Label className="flex items-center gap-2">
+									<Shield className="h-4 w-4" />
+									Platform Admin
+								</Label>
+								<p className="text-muted-foreground text-xs">Grant full platform administration access</p>
+							</div>
+							<button
+								type="button"
+								role="switch"
+								aria-checked={editAdmin}
+								onClick={() => setEditAdmin(!editAdmin)}
+								className={`focus-visible:ring-ring relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none ${
+									editAdmin ? "bg-primary" : "bg-input"
+								}`}
+								data-testid="admin-users-admin-toggle"
 							>
-								{ROLES.map((role) => (
-									<option key={role} value={role}>
-										{role}
+								<span
+									className={`bg-background pointer-events-none block h-5 w-5 rounded-full shadow-lg ring-0 transition-transform ${
+										editAdmin ? "translate-x-5" : "translate-x-0"
+									}`}
+								/>
+							</button>
+						</div>
+
+						{/* Status select */}
+						<div className="grid gap-2">
+							<Label>Status</Label>
+							<select
+								className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+								value={editStatus}
+								onChange={(e) => setEditStatus(e.target.value)}
+								data-testid="admin-users-status-select"
+							>
+								{STATUS_OPTIONS.map((s) => (
+									<option key={s} value={s}>
+										{s}
 									</option>
 								))}
 							</select>
+							<p className="text-muted-foreground text-xs">suspended = user cannot login; pending_verification = skip email check</p>
 						</div>
 					</div>
 					<DialogFooter>
-						<Button variant="outline" onClick={() => setRoleDialogOpen(false)} disabled={isSettingRole}>
+						<Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={isSaving}>
 							Cancel
 						</Button>
-						<Button onClick={handleSetRole} disabled={isSettingRole} data-testid="admin-users-role-submit">
-							{isSettingRole && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-							Update Role
+						<Button onClick={handleSave} disabled={isSaving} data-testid="admin-users-edit-submit">
+							{isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+							Save Changes
 						</Button>
 					</DialogFooter>
 				</DialogContent>
@@ -285,6 +332,7 @@ function OrganizationsTab() {
 	const [newOrgName, setNewOrgName] = useState("");
 	const [editingOrg, setEditingOrg] = useState<PlatformOrg | null>(null);
 	const [editOrgName, setEditOrgName] = useState("");
+	const [editOwnerId, setEditOwnerId] = useState("");
 
 	const { data: orgsData, isLoading } = usePlatformAdminListOrgsQuery({
 		search: search || undefined,
@@ -317,7 +365,14 @@ function OrganizationsTab() {
 	const handleUpdate = async () => {
 		if (!editingOrg || !editOrgName.trim()) return;
 		try {
-			await updateOrg({ id: editingOrg.id, name: editOrgName.trim() }).unwrap();
+			const payload: { id: string; name: string; owner_user_id?: string } = {
+				id: editingOrg.id,
+				name: editOrgName.trim(),
+			};
+			if (editOwnerId.trim()) {
+				payload.owner_user_id = editOwnerId.trim();
+			}
+			await updateOrg(payload).unwrap();
 			toast.success("Organization updated");
 			setEditingOrg(null);
 		} catch (err) {
@@ -371,12 +426,7 @@ function OrganizationsTab() {
 						<div className="grid gap-4 py-4">
 							<div className="grid gap-2">
 								<Label htmlFor="org-name">Organization Name</Label>
-								<Input
-									id="org-name"
-									placeholder="Acme Corp"
-									value={newOrgName}
-									onChange={(e) => setNewOrgName(e.target.value)}
-								/>
+								<Input id="org-name" placeholder="Acme Corp" value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} />
 							</div>
 						</div>
 						<DialogFooter>
@@ -426,11 +476,14 @@ function OrganizationsTab() {
 									)}
 									{orgsData?.items.map((org) => (
 										<TableRow key={org.id}>
-											<TableCell className="font-mono text-sm">{org.id}</TableCell>
-											<TableCell className="font-medium">{org.name}</TableCell>
-											<TableCell className="text-muted-foreground text-sm">
-												{org.owner_user_id ?? "—"}
+											<TableCell className="font-mono text-sm">
+												<span className="flex items-center gap-1">
+													<span>{org.id}</span>
+													<CopyButton text={org.id} />
+												</span>
 											</TableCell>
+											<TableCell className="font-medium">{org.name}</TableCell>
+											<TableCell className="text-muted-foreground text-sm">{org.owner_user_id ?? "—"}</TableCell>
 											<TableCell className="text-right">
 												<div className="flex items-center justify-end gap-1">
 													<Button
@@ -439,17 +492,14 @@ function OrganizationsTab() {
 														onClick={() => {
 															setEditingOrg(org);
 															setEditOrgName(org.name);
+															setEditOwnerId(org.owner_user_id?.toString() ?? "");
 														}}
 													>
 														<Pencil className="h-4 w-4" />
 													</Button>
 													<AlertDialog>
 														<AlertDialogTrigger asChild>
-															<Button
-																variant="ghost"
-																size="sm"
-																className="text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
-															>
+															<Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 h-8 w-8 p-0">
 																<Trash2 className="h-4 w-4" />
 															</Button>
 														</AlertDialogTrigger>
@@ -457,16 +507,12 @@ function OrganizationsTab() {
 															<AlertDialogHeader>
 																<AlertDialogTitle>Delete Organization</AlertDialogTitle>
 																<AlertDialogDescription>
-																	Are you sure you want to delete &quot;{org.name}&quot;? This action cannot be
-																	undone.
+																	Are you sure you want to delete &quot;{org.name}&quot;? This action cannot be undone.
 																</AlertDialogDescription>
 															</AlertDialogHeader>
 															<AlertDialogFooter>
 																<AlertDialogCancel>Cancel</AlertDialogCancel>
-																<AlertDialogAction
-																	onClick={() => handleDelete(org.id)}
-																	className="bg-destructive hover:bg-destructive/90"
-																>
+																<AlertDialogAction onClick={() => handleDelete(org.id)} className="bg-destructive hover:bg-destructive/90">
 																	Delete
 																</AlertDialogAction>
 															</AlertDialogFooter>
@@ -482,16 +528,10 @@ function OrganizationsTab() {
 							{(orgsData?.total ?? 0) > PAGE_SIZE && (
 								<div className="flex items-center justify-between pt-4">
 									<p className="text-muted-foreground text-sm">
-										Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, orgsData?.total ?? 0)}{" "}
-										of {orgsData?.total}
+										Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, orgsData?.total ?? 0)} of {orgsData?.total}
 									</p>
 									<div className="flex gap-2">
-										<Button
-											variant="outline"
-											size="sm"
-											disabled={page === 0}
-											onClick={() => setPage(page - 1)}
-										>
+										<Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>
 											Previous
 										</Button>
 										<Button
@@ -524,19 +564,22 @@ function OrganizationsTab() {
 					<div className="grid gap-4 py-4">
 						<div className="grid gap-2">
 							<Label htmlFor="edit-org-name">Organization Name</Label>
+							<Input id="edit-org-name" value={editOrgName} onChange={(e) => setEditOrgName(e.target.value)} />
+						</div>
+						<div className="grid gap-2">
+							<Label htmlFor="edit-org-owner">Owner User ID</Label>
 							<Input
-								id="edit-org-name"
-								value={editOrgName}
-								onChange={(e) => setEditOrgName(e.target.value)}
+								id="edit-org-owner"
+								type="text"
+								placeholder="Enter user ID"
+								value={editOwnerId}
+								onChange={(e) => setEditOwnerId(e.target.value)}
 							/>
+							<p className="text-muted-foreground text-xs">Set the owner of this organization by user ID</p>
 						</div>
 					</div>
 					<DialogFooter>
-						<Button
-							variant="outline"
-							onClick={() => setEditingOrg(null)}
-							disabled={isUpdating}
-						>
+						<Button variant="outline" onClick={() => setEditingOrg(null)} disabled={isUpdating}>
 							Cancel
 						</Button>
 						<Button onClick={handleUpdate} disabled={isUpdating || !editOrgName.trim()}>

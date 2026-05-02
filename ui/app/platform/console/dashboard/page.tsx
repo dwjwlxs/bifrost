@@ -10,18 +10,7 @@ import { useUserRole } from "@/lib/platform/hooks";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-	KeyRound,
-	Building2,
-	Wallet,
-	Activity,
-	ArrowRight,
-	Package,
-	Server,
-	Users,
-	DollarSign,
-	UsersRound,
-} from "lucide-react";
+import { KeyRound, Building2, Wallet, Activity, ArrowRight, Package, Server, Users, DollarSign, UsersRound } from "lucide-react";
 
 export default function DashboardPage() {
 	const { data: profile, isLoading: profileLoading } = usePlatformGetProfileQuery();
@@ -56,9 +45,7 @@ export default function DashboardPage() {
 						<Wallet className="text-muted-foreground h-4 w-4" />
 					</CardHeader>
 					<CardContent>
-						<div className="text-2xl font-bold">
-							${(user?.balance ?? 0).toFixed(2)}
-						</div>
+						<div className="text-2xl font-bold">${(user?.balance ?? 0).toFixed(2)}</div>
 					</CardContent>
 				</Card>
 				<Card>
@@ -67,7 +54,7 @@ export default function DashboardPage() {
 						<KeyRound className="text-muted-foreground h-4 w-4" />
 					</CardHeader>
 					<CardContent>
-						<div className="text-2xl font-bold">{vksLoading ? "..." : vks?.length ?? 0}</div>
+						<div className="text-2xl font-bold">{vksLoading ? "..." : (vks?.length ?? 0)}</div>
 					</CardContent>
 				</Card>
 				<Card>
@@ -76,7 +63,7 @@ export default function DashboardPage() {
 						<Building2 className="text-muted-foreground h-4 w-4" />
 					</CardHeader>
 					<CardContent>
-						<div className="text-2xl font-bold">{orgsLoading ? "..." : orgs?.length ?? 0}</div>
+						<div className="text-2xl font-bold">{orgsLoading ? "..." : (orgs?.length ?? 0)}</div>
 					</CardContent>
 				</Card>
 				{isPrivileged && (
@@ -86,7 +73,7 @@ export default function DashboardPage() {
 							<UsersRound className="text-muted-foreground h-4 w-4" />
 						</CardHeader>
 						<CardContent>
-							<div className="text-2xl font-bold">{teamsLoading ? "..." : teams?.length ?? 0}</div>
+							<div className="text-2xl font-bold">{teamsLoading ? "..." : (teams?.length ?? 0)}</div>
 						</CardContent>
 					</Card>
 				)}
@@ -157,8 +144,8 @@ export default function DashboardPage() {
 					</CardContent>
 				</Card>
 
-			{/* Admin Quick Actions Card */}
-			{isPrivileged && (
+				{/* Admin Quick Actions Card */}
+				{isPrivileged && (
 					<Card>
 						<CardHeader>
 							<CardTitle>Admin Actions</CardTitle>

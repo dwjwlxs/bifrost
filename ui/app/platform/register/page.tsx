@@ -51,7 +51,6 @@ export default function RegisterPage() {
 			setShowVerifyDialog(true);
 		} catch (err: any) {
 			const errData = err?.data;
-;
 			const errCode = errData?.code;
 			const errMsg: string = errData?.message || err?.message || "Registration failed";
 

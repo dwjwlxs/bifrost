@@ -36,10 +36,7 @@ export function PlatformHeader() {
 	const user = getUser();
 
 	const isConsole = pathname.startsWith("/platform/console");
-	const isLoginOrRegister =
-		pathname === "/platform/login" ||
-		pathname === "/platform/register" ||
-		pathname === "/platform/verify-email";
+	const isLoginOrRegister = pathname === "/platform/login" || pathname === "/platform/register" || pathname === "/platform/verify-email";
 
 	// On login/register pages, show a minimal header
 	if (isLoginOrRegister) {
@@ -209,11 +206,7 @@ export function PlatformProviders({ children }: { children: React.ReactNode }) {
 				<ConsoleSidebarProvider>
 					<div className="bg-background flex min-h-screen flex-col">
 						<PlatformHeader />
-						{isConsole && user ? (
-							<ConsoleLayout>{children}</ConsoleLayout>
-						) : (
-							<main className="flex-1">{children}</main>
-						)}
+						{isConsole && user ? <ConsoleLayout>{children}</ConsoleLayout> : <main className="flex-1">{children}</main>}
 					</div>
 				</ConsoleSidebarProvider>
 			</ReduxProvider>
