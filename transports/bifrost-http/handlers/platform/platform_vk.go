@@ -33,15 +33,17 @@ func NewPlatformVKHandler(db *gorm.DB, configStore configstore.ConfigStore) *Pla
 // RegisterRoutes registers all platform virtual key routes.
 func (h *PlatformVKHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.BifrostHTTPMiddleware) {
 	// User VK routes (filtered by authenticated user's user_id)
-	vkGroup := r.Group("/api/platform/virtual-keys")
-	vkGroup.GET("/", lib.ChainMiddlewares(h.listMyVKs, middlewares...))
-	vkGroup.POST("/", lib.ChainMiddlewares(h.createVK, middlewares...))
-	vkGroup.GET("/{vkId}", lib.ChainMiddlewares(h.getVK, middlewares...))
-	vkGroup.PUT("/{vkId}", lib.ChainMiddlewares(h.updateVK, middlewares...))
-	vkGroup.DELETE("/{vkId}", lib.ChainMiddlewares(h.deleteVK, middlewares...))
+	// Registered directly on the router (not via group) to avoid trailing-slash issues.
+	r.GET("/api/platform/virtual-keys", lib.ChainMiddlewares(h.listMyVKs, middlewares...))
+	r.POST("/api/platform/virtual-keys", lib.ChainMiddlewares(h.createVK, middlewares...))
+	r.GET("/api/platform/virtual-keys/{vkId}", lib.ChainMiddlewares(h.getVK, middlewares...))
+	r.PUT("/api/platform/virtual-keys/{vkId}", lib.ChainMiddlewares(h.updateVK, middlewares...))
+	r.DELETE("/api/platform/virtual-keys/{vkId}", lib.ChainMiddlewares(h.deleteVK, middlewares...))
 
 	// Team VK routes (RequireTeamAdmin)
-	teamAdminMw := append([]schemas.BifrostHTTPMiddleware{RequireTeamAdmin(h.db)}, middlewares...)
+	teamAdminMw := make([]schemas.BifrostHTTPMiddleware, len(middlewares), len(middlewares)+1)
+	copy(teamAdminMw, middlewares)
+	teamAdminMw = append(teamAdminMw, RequireTeamAdmin(h.db))
 	r.GET("/api/platform/teams/{teamId}/virtual-keys", lib.ChainMiddlewares(h.listTeamVKs, teamAdminMw...))
 	r.PUT("/api/platform/teams/{teamId}/virtual-keys/{vkId}", lib.ChainMiddlewares(h.updateTeamVK, teamAdminMw...))
 }

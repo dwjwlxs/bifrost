@@ -33,7 +33,9 @@ func NewPlatformAdminHandler(db *gorm.DB, configStore configstore.ConfigStore) *
 // RegisterRoutes registers all platform admin routes.
 func (h *PlatformAdminHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.BifrostHTTPMiddleware) {
 	group := r.Group("/api/platform/admin")
-	adminMw := append([]schemas.BifrostHTTPMiddleware{RequireAdmin}, middlewares...)
+	adminMw := make([]schemas.BifrostHTTPMiddleware, len(middlewares), len(middlewares)+1)
+	copy(adminMw, middlewares)
+	adminMw = append(adminMw, RequireAdmin)
 
 	group.GET("/orgs", lib.ChainMiddlewares(h.listOrgs, adminMw...))
 	group.POST("/orgs", lib.ChainMiddlewares(h.createOrg, adminMw...))
