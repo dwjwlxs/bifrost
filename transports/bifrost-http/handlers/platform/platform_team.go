@@ -31,17 +31,22 @@ func NewPlatformTeamHandler(db *gorm.DB, configStore configstore.ConfigStore) *P
 
 // RegisterRoutes registers all platform team routes.
 func (h *PlatformTeamHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.BifrostHTTPMiddleware) {
-	group := r.Group("/api/platform/teams")
-	teamMemberMw := append([]schemas.BifrostHTTPMiddleware{RequireTeamMember}, middlewares...)
-	teamAdminMw := append([]schemas.BifrostHTTPMiddleware{RequireTeamAdmin(h.db)}, middlewares...)
+	// Registered directly on the router to avoid trailing-slash issues with group.GET("/").
+	teamMemberMw := make([]schemas.BifrostHTTPMiddleware, len(middlewares), len(middlewares)+1)
+	copy(teamMemberMw, middlewares)
+	teamMemberMw = append(teamMemberMw, RequireTeamMember)
 
-	group.GET("/", lib.ChainMiddlewares(h.listMyTeams, middlewares...))
-	group.GET("/{teamId}", lib.ChainMiddlewares(h.getTeam, teamMemberMw...))
-	group.PUT("/{teamId}", lib.ChainMiddlewares(h.updateTeam, teamAdminMw...))
-	group.GET("/{teamId}/members", lib.ChainMiddlewares(h.listTeamMembers, teamMemberMw...))
-	group.POST("/{teamId}/members", lib.ChainMiddlewares(h.inviteMember, teamAdminMw...))
-	group.DELETE("/{teamId}/members/{uid}", lib.ChainMiddlewares(h.removeMember, teamAdminMw...))
-	group.PUT("/{teamId}/members/{uid}", lib.ChainMiddlewares(h.updateMemberRole, teamAdminMw...))
+	teamAdminMw := make([]schemas.BifrostHTTPMiddleware, len(middlewares), len(middlewares)+1)
+	copy(teamAdminMw, middlewares)
+	teamAdminMw = append(teamAdminMw, RequireTeamAdmin(h.db))
+
+	r.GET("/api/platform/teams", lib.ChainMiddlewares(h.listMyTeams, middlewares...))
+	r.GET("/api/platform/teams/{teamId}", lib.ChainMiddlewares(h.getTeam, teamMemberMw...))
+	r.PUT("/api/platform/teams/{teamId}", lib.ChainMiddlewares(h.updateTeam, teamAdminMw...))
+	r.GET("/api/platform/teams/{teamId}/members", lib.ChainMiddlewares(h.listTeamMembers, teamMemberMw...))
+	r.POST("/api/platform/teams/{teamId}/members", lib.ChainMiddlewares(h.inviteMember, teamAdminMw...))
+	r.DELETE("/api/platform/teams/{teamId}/members/{uid}", lib.ChainMiddlewares(h.removeMember, teamAdminMw...))
+	r.PUT("/api/platform/teams/{teamId}/members/{uid}", lib.ChainMiddlewares(h.updateMemberRole, teamAdminMw...))
 }
 
 // listMyTeams handles GET /api/platform/teams — list teams the current user belongs to.

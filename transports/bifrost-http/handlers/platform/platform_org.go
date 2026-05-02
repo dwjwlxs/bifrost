@@ -26,14 +26,19 @@ func NewPlatformOrgHandler(db *gorm.DB, configStore configstore.ConfigStore) *Pl
 
 // RegisterRoutes registers all platform org routes.
 func (h *PlatformOrgHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.BifrostHTTPMiddleware) {
-	group := r.Group("/api/platform/orgs")
-	orgAdminMw := append([]schemas.BifrostHTTPMiddleware{RequireOrgAdmin}, middlewares...)
-	orgMemberMw := append([]schemas.BifrostHTTPMiddleware{RequireOrgMember}, middlewares...)
+	// Registered directly on the router to avoid trailing-slash issues with group.GET("/").
+	orgAdminMw := make([]schemas.BifrostHTTPMiddleware, len(middlewares), len(middlewares)+1)
+	copy(orgAdminMw, middlewares)
+	orgAdminMw = append(orgAdminMw, RequireOrgAdmin)
 
-	group.GET("/", lib.ChainMiddlewares(h.listMyOrgs, middlewares...))
-	group.GET("/{orgId}", lib.ChainMiddlewares(h.getOrg, orgMemberMw...))
-	group.GET("/{orgId}/teams", lib.ChainMiddlewares(h.listOrgTeams, orgAdminMw...))
-	group.GET("/{orgId}/members", lib.ChainMiddlewares(h.listOrgMembers, orgAdminMw...))
+	orgMemberMw := make([]schemas.BifrostHTTPMiddleware, len(middlewares), len(middlewares)+1)
+	copy(orgMemberMw, middlewares)
+	orgMemberMw = append(orgMemberMw, RequireOrgMember)
+
+	r.GET("/api/platform/orgs", lib.ChainMiddlewares(h.listMyOrgs, middlewares...))
+	r.GET("/api/platform/orgs/{orgId}", lib.ChainMiddlewares(h.getOrg, orgMemberMw...))
+	r.GET("/api/platform/orgs/{orgId}/teams", lib.ChainMiddlewares(h.listOrgTeams, orgAdminMw...))
+	r.GET("/api/platform/orgs/{orgId}/members", lib.ChainMiddlewares(h.listOrgMembers, orgAdminMw...))
 }
 
 // listMyOrgs handles GET /api/platform/orgs — list organizations the current user belongs to.

@@ -1134,9 +1134,9 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	platformTeamHandler := platform_handlers.NewPlatformTeamHandler(db, s.Config.ConfigStore)
 	platformVKHandler := platform_handlers.NewPlatformVKHandler(db, s.Config.ConfigStore)
 	// Platform protected routes need PlatformAuthMiddleware
-	platformProtectedMw := append([]schemas.BifrostHTTPMiddleware{
-		platform_handlers.PlatformAuthMiddleware(db, s.Config.ConsumerAuthService),
-	}, middlewares...)
+	var platformProtectedMw = make([]schemas.BifrostHTTPMiddleware, len(middlewares), len(middlewares)+1)
+	copy(platformProtectedMw, middlewares)
+	platformProtectedMw = append(platformProtectedMw, platform_handlers.PlatformAuthMiddleware(db, s.Config.ConsumerAuthService))
 
 	// Platform multi-tenant routes
 	platformAuthHandler.RegisterRoutes(s.Router, middlewares...)          // login/register are public
@@ -1429,10 +1429,7 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	s.Config.SetBifrostClient(s.Client)
 	// Initialize routes — disable automatic 301 redirects for trailing slashes/fixed paths
 	// to avoid confusing RTK Query's cache key and ensure clean /predictable routing behavior
-	r := router.New()
-	r.RedirectTrailingSlash = false
-	r.RedirectFixedPath = false
-	s.Router = r
+	s.Router = router.New()
 	commonMiddlewares := s.PrepareCommonMiddlewares()
 	apiMiddlewares := commonMiddlewares
 	inferenceMiddlewares := commonMiddlewares
