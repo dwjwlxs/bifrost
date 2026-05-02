@@ -4,7 +4,7 @@
  * Independent from the enterprise tokenManager — this is for the multi-user platform.
  */
 
-const TOKEN_KEY = "platform_token";
+const TOKEN_KEY="***";
 const USER_KEY = "platform_user";
 
 export interface PlatformOrg {

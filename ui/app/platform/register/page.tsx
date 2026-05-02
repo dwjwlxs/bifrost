@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "@tanstack/react-router";
-import { setToken, decodeAndStoreUser } from "@/lib/platform/auth";
+import { getToken, setToken, decodeAndStoreUser } from "@/lib/platform/auth";
 import { EmailVerificationDialog } from "@/app/platform/components/EmailVerificationDialog";
 import { usePlatformRegisterMutation } from "@/lib/platform/platformApi";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,13 @@ export default function RegisterPage() {
 	const [verifyEmail, setVerifyEmail] = useState("");
 
 	const [platformRegister, { isLoading: loading }] = usePlatformRegisterMutation();
+
+	// Redirect if already logged in
+	useEffect(() => {
+		if (getToken()) {
+			navigate({ to: "/platform/console/dashboard" });
+		}
+	}, [navigate]);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -130,10 +137,9 @@ export default function RegisterPage() {
 				open={showVerifyDialog}
 				onOpenChange={setShowVerifyDialog}
 				email={verifyEmail}
-				onVerified={(token, refreshToken) => {
+				onVerified={(token, _refreshToken) => {
 					setToken(token);
-					// @ts-ignore - internal usage
-					window.__bifrost_refresh_token = refreshToken;
+					// Refresh token is set via httpOnly cookie by the backend — no manual storage needed
 					// Decode JWT payload to get user info for immediate header display
 					decodeAndStoreUser(token);
 					navigate({ to: "/platform/console/dashboard" });

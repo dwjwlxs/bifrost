@@ -242,7 +242,7 @@ export const platformApi = platformBaseApi.injectEndpoints({
 	endpoints: (builder) => ({
 		// ── Auth (public) ───────────────────────────────────────────
 		platformLogin: builder.mutation<
-			{ code: string; message: string; data: { access_token: string; expires_at: string } },
+			{ code: string; message: string; data: { access_token: string; refresh_token: string; expires_at: string } },
 			{ email: string; password: string }
 		>({
 			query: (body) => ({ url: "/platform/login", method: "POST", body }),
@@ -256,7 +256,7 @@ export const platformApi = platformBaseApi.injectEndpoints({
 		}),
 
 		platformVerifyEmail: builder.mutation<
-			{ code: string; message: string; data: { access_token: string; expires_at: string } },
+			{ code: string; message: string; data: { access_token: string; refresh_token: string; expires_at: string } },
 			{ email: string; code: string }
 		>({
 			query: (body) => ({ url: "/platform/verify", method: "POST", body }),

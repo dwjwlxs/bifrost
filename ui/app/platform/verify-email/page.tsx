@@ -122,11 +122,9 @@ export default function VerifyEmailPage() {
 		try {
 			const res = await verifyEmail({ email, code }).unwrap();
 			// New response format: { code, message, data: { access_token, refresh_token, expires_at } }
-			const { access_token, refresh_token } = res.data;
+			const { access_token } = res.data;
 			setToken(access_token);
-			// Store refresh token for later use
-			// @ts-ignore - internal usage
-			window.__bifrost_refresh_token = refresh_token;
+			// Refresh token is set via httpOnly cookie by the backend — no manual storage needed
 			navigate({ to: "/platform/console/dashboard" });
 		} catch (err: any) {
 			setError(err?.data?.message || err?.message || "Verification failed. Please try again.");
