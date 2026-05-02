@@ -57,9 +57,8 @@ type PlatformClaims struct {
 	Orgs      []OrgClaim  `json:"orgs"`
 	Teams     []TeamClaim `json:"teams"`
 	AuthToken string      `json:"auth_token"`
-	UserName  string      `json:"user_name,omitempty"`
-	Name      string      `json:"name"`
 	Email     string      `json:"email"`
+	UserName  string      `json:"user_name"`
 	Exp       int64       `json:"exp"`
 	Iat       int64       `json:"iat"`
 	Jti       string      `json:"jti"`
@@ -113,7 +112,7 @@ func SignPlatformJWT(claims *PlatformClaims, key []byte, expiry time.Duration) (
 		"orgs":       claims.Orgs,
 		"teams":      claims.Teams,
 		"auth_token": claims.AuthToken,
-		"name":       claims.Name,
+		"user_name":  claims.UserName,
 		"email":      claims.Email,
 		"exp":        claims.Exp,
 		"iat":        claims.Iat,

@@ -35,17 +35,17 @@ type JWKS struct {
 
 // JWTClaims holds the claims in an access token.
 type JWTClaims struct {
-	Sub       string `json:"sub"`
-	Iss       string `json:"iss"`
-	Aud       string `json:"aud"`
-	Exp       int64  `json:"exp"`
-	Iat       int64  `json:"iat"`
-	KID       string `json:"kid"`
-	Email     string `json:"email"`
-	UserName  string `json:"user_name,omitempty"`
-	Name      string `json:"name"`
-	Scope     string `json:"scope,omitempty"`
-	SessionID string `json:"session_id,omitempty"`
+	Sub         string `json:"sub"`
+	Iss         string `json:"iss"`
+	Aud         string `json:"aud"`
+	Exp         int64  `json:"exp"`
+	Iat         int64  `json:"iat"`
+	KID         string `json:"kid"`
+	Email       string `json:"email"`
+	UserName    string `json:"user_name"`
+	DisplayName string `json:"display_name,omitempty"`
+	Scope       string `json:"scope,omitempty"`
+	SessionID   string `json:"session_id,omitempty"`
 }
 
 // --- Abstract interface ---
@@ -136,17 +136,17 @@ func (m *ES256JWTManager) Sign(user *User, sessionID string, ttl time.Duration) 
 
 	builder := jwt.Signed(m.getSigner()).
 		Claims(&JWTClaims{
-			Sub:       user.ID,
-			Iss:       m.issuer,
-			Aud:       m.audience,
-			Exp:       expiresAt.Unix(),
-			Iat:       now.Unix(),
-			KID:       m.kid,
-			Email:     user.Email,
-			UserName:  user.UserName,
-			Name:      user.DisplayName,
-			Scope:     "",
-			SessionID: sessionID,
+			Sub:         user.ID,
+			Iss:         m.issuer,
+			Aud:         m.audience,
+			Exp:         expiresAt.Unix(),
+			Iat:         now.Unix(),
+			KID:         m.kid,
+			Email:       user.Email,
+			UserName:    user.UserName,
+			DisplayName: user.DisplayName,
+			Scope:       "",
+			SessionID:   sessionID,
 		})
 
 	token, err := builder.Serialize()
@@ -187,16 +187,17 @@ func (m *ES256JWTManager) Verify(tokenString string) (*JWTClaims, error) {
 	}
 
 	return &JWTClaims{
-		Sub:       stdClaims.Subject,
-		Iss:       stdClaims.Issuer,
-		Aud:       aud,
-		Exp:       stdClaims.Expiry.Time().Unix(),
-		Iat:       stdClaims.IssuedAt.Time().Unix(),
-		KID:       custom.KID,
-		Email:     custom.Email,
-		Name:      custom.Name,
-		Scope:     custom.Scope,
-		SessionID: custom.SessionID,
+		Sub:         stdClaims.Subject,
+		Iss:         stdClaims.Issuer,
+		Aud:         aud,
+		Exp:         stdClaims.Expiry.Time().Unix(),
+		Iat:         stdClaims.IssuedAt.Time().Unix(),
+		KID:         custom.KID,
+		Email:       custom.Email,
+		UserName:    custom.UserName,
+		DisplayName: custom.DisplayName,
+		Scope:       custom.Scope,
+		SessionID:   custom.SessionID,
 	}, nil
 }
 
