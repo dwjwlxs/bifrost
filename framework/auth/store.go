@@ -17,6 +17,9 @@ type UserRepository interface {
 	// GetByEmail retrieves a user by their normalized email.
 	GetByEmail(ctx context.Context, email string) (*User, error)
 
+	// GetByUserName retrieves a user by their username.
+	GetByUserName(ctx context.Context, userName string) (*User, error)
+
 	// Update updates an existing user record.
 	Update(ctx context.Context, user *User) error
 

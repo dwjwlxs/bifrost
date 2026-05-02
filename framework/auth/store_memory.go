@@ -19,7 +19,7 @@ type MemoryStoreFactory struct {
 // NewMemoryStoreFactory creates a new in-memory store factory.
 func NewMemoryStoreFactory() StoreFactory {
 	f := &MemoryStoreFactory{}
-	f.userRepo = &memoryUserRepo{users: make(map[string]*User), byEmail: make(map[string]*User)}
+	f.userRepo = &memoryUserRepo{users: make(map[string]*User), byEmail: make(map[string]*User), byName: make(map[string]*User)}
 	f.sessionRepo = &memorySessionRepo{sessions: make(map[string]*Session), byHash: make(map[string]*Session)}
 	f.codeRepo = &memoryVerificationCodeRepo{codes: make(map[string]*VerificationCode)}
 	f.identityRepo = &memoryIdentityRepo{identities: make(map[string]*Identity), byLookup: make(map[string]*Identity)}
@@ -37,6 +37,7 @@ type memoryUserRepo struct {
 	mu      sync.RWMutex
 	users   map[string]*User // id -> user
 	byEmail map[string]*User // normalized email -> user
+	byName  map[string]*User // user_name -> user
 }
 
 func (r *memoryUserRepo) Create(_ context.Context, user *User) error {
@@ -50,6 +51,9 @@ func (r *memoryUserRepo) Create(_ context.Context, user *User) error {
 	cp := *user
 	r.users[user.ID] = &cp
 	r.byEmail[user.EmailNormalized] = &cp
+	if user.UserName != "" {
+		r.byName[user.UserName] = &cp
+	}
 	return nil
 }
 
@@ -58,6 +62,18 @@ func (r *memoryUserRepo) GetByID(_ context.Context, id string) (*User, error) {
 	defer r.mu.RUnlock()
 
 	user, ok := r.users[id]
+	if !ok || user.Status == UserStatusDeleted {
+		return nil, ErrUserNotFound
+	}
+	cp := *user
+	return &cp, nil
+}
+
+func (r *memoryUserRepo) GetByUserName(_ context.Context, userName string) (*User, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	user, ok := r.byName[userName]
 	if !ok || user.Status == UserStatusDeleted {
 		return nil, ErrUserNotFound
 	}

@@ -8,6 +8,7 @@ var (
 	ErrUserIDAllocation   = errors.New("auth: failed to allocate user ID")
 	ErrUserNotFound       = errors.New("auth: user not found")
 	ErrUserAlreadyExists  = errors.New("auth: user already exists with this email")
+	ErrUserNameTaken      = errors.New("auth: username is already taken")
 	ErrInvalidCredentials = errors.New("auth: invalid email or password")
 	ErrUserNotVerified    = errors.New("auth: user email not verified")
 	ErrUserSuspended      = errors.New("auth: user account suspended")

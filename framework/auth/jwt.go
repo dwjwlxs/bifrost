@@ -42,6 +42,7 @@ type JWTClaims struct {
 	Iat       int64  `json:"iat"`
 	KID       string `json:"kid"`
 	Email     string `json:"email"`
+	UserName  string `json:"user_name,omitempty"`
 	Name      string `json:"name"`
 	Scope     string `json:"scope,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
@@ -142,6 +143,7 @@ func (m *ES256JWTManager) Sign(user *User, sessionID string, ttl time.Duration) 
 			Iat:       now.Unix(),
 			KID:       m.kid,
 			Email:     user.Email,
+			UserName:  user.UserName,
 			Name:      user.DisplayName,
 			Scope:     "",
 			SessionID: sessionID,

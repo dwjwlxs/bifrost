@@ -57,6 +57,7 @@ type PlatformClaims struct {
 	Orgs      []OrgClaim  `json:"orgs"`
 	Teams     []TeamClaim `json:"teams"`
 	AuthToken string      `json:"auth_token"`
+	UserName  string      `json:"user_name,omitempty"`
 	Name      string      `json:"name"`
 	Email     string      `json:"email"`
 	Exp       int64       `json:"exp"`

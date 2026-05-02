@@ -61,5 +61,55 @@ func Migrate(ctx context.Context, db *gorm.DB) error {
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("auth migration failed: %w", err)
 	}
+
+	// Run incremental migrations
+	if err := migrationAddUserNameColumn(ctx, db); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// migrationAddUserNameColumn adds the user_name column to the auth_users table.
+func migrationAddUserNameColumn(ctx context.Context, db *gorm.DB) error {
+	opts := *migrator.DefaultOptions
+	opts.UseTransaction = true
+	m := migrator.New(db, &opts, []*migrator.Migration{{
+		ID: "auth_add_user_name_column",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mig := tx.Migrator()
+			if !mig.HasColumn(&gormUser{}, "user_name") {
+				if err := mig.AddColumn(&gormUser{}, "user_name"); err != nil {
+					return fmt.Errorf("add user_name column: %w", err)
+				}
+			}
+			if !mig.HasIndex(&gormUser{}, "idx_auth_users_user_name") {
+				if err := mig.CreateIndex(&gormUser{}, "idx_auth_users_user_name"); err != nil {
+					return fmt.Errorf("create user_name index: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mig := tx.Migrator()
+			if mig.HasIndex(&gormUser{}, "idx_auth_users_user_name") {
+				if err := mig.DropIndex(&gormUser{}, "idx_auth_users_user_name"); err != nil {
+					return err
+				}
+			}
+			if mig.HasColumn(&gormUser{}, "user_name") {
+				if err := mig.DropColumn(&gormUser{}, "user_name"); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}})
+
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("migration add user_name column: %w", err)
+	}
 	return nil
 }
