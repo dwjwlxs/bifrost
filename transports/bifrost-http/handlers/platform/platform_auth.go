@@ -107,6 +107,10 @@ func platformHandleServiceError(ctx *fasthttp.RequestCtx, err error) {
 		errMsg = err.Error()
 	}
 	switch {
+	case errors.Is(err, fauth.ErrUserNameTaken):
+		sendError(ctx, fasthttp.StatusConflict, "username already taken", errMsg)
+	case errors.Is(err, fauth.ErrUserAlreadyExists):
+		sendError(ctx, fasthttp.StatusConflict, "user already exists", errMsg)
 	case errors.Is(err, fauth.ErrVerificationCodeInvalid):
 		sendError(ctx, fasthttp.StatusBadRequest, "invalid verification code", errMsg)
 	case errors.Is(err, fauth.ErrVerificationCodeExpired):
@@ -221,6 +225,7 @@ func (h *PlatformAuthHandler) buildPlatformClaimsForUser(userID string, authToke
 		Orgs:      orgs,
 		Teams:     teams,
 		AuthToken: authToken,
+		UserName:  jwtClaims.UserName,
 		Name:      jwtClaims.Name,
 		Email:     jwtClaims.Email,
 		Exp:       jwtClaims.Exp,
@@ -308,6 +313,7 @@ func (h *PlatformAuthHandler) login(ctx *fasthttp.RequestCtx) {
 func (h *PlatformAuthHandler) register(ctx *fasthttp.RequestCtx) {
 	var req struct {
 		Email    string `json:"email"`
+		Username string `json:"username"`
 		Password string `json:"password"`
 	}
 
@@ -318,6 +324,11 @@ func (h *PlatformAuthHandler) register(ctx *fasthttp.RequestCtx) {
 
 	if req.Email == "" || req.Password == "" {
 		sendError(ctx, fasthttp.StatusBadRequest, "Email and password are required", "")
+		return
+	}
+
+	if req.Username == "" {
+		sendError(ctx, fasthttp.StatusBadRequest, "Username is required", "")
 		return
 	}
 
@@ -335,9 +346,14 @@ func (h *PlatformAuthHandler) register(ctx *fasthttp.RequestCtx) {
 
 	user, err := h.authService.Register(goCtx, fauth.RegisterRequest{
 		Email:    req.Email,
+		UserName: req.Username,
 		Password: req.Password,
 	})
 	if err != nil {
+		if errors.Is(err, fauth.ErrUserNameTaken) {
+			sendError(ctx, fasthttp.StatusConflict, "Username is already taken", err.Error())
+			return
+		}
 		sendError(ctx, fasthttp.StatusConflict, "Registration failed", err.Error())
 		return
 	}
@@ -346,8 +362,9 @@ func (h *PlatformAuthHandler) register(ctx *fasthttp.RequestCtx) {
 		"code":    "0",
 		"message": "success",
 		"data": map[string]any{
-			"user_id": user.ID,
-			"email":   user.Email,
+			"user_id":  user.ID,
+			"email":    user.Email,
+			"username": user.UserName,
 		},
 	})
 }
@@ -460,6 +477,7 @@ func (h *PlatformAuthHandler) getProfile(ctx *fasthttp.RequestCtx) {
 		"data": map[string]any{
 			"user_id":  platformClaims.UserID,
 			"email":    platformClaims.Email,
+			"username": platformClaims.UserName,
 			"is_admin": platformClaims.IsAdmin,
 			"orgs":     platformClaims.Orgs,
 			"teams":    platformClaims.Teams,

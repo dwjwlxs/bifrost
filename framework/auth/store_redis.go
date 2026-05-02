@@ -38,6 +38,7 @@ func (f *RedisStoreFactory) IdentityRepo() IdentityRepository {
 const (
 	redisPrefixUser           = "auth:user:"
 	redisPrefixEmail          = "auth:email:" // email_normalized -> user_id
+	redisPrefixUserName       = "auth:username:" // user_name -> user_id
 	redisPrefixSession        = "auth:session:"
 	redisPrefixSessionHash    = "auth:session:hash:"    // rt_hash -> session_id
 	redisPrefixSessionUser    = "auth:session:user:"    // user_id -> set of session_ids
@@ -66,6 +67,10 @@ func (r *redisUserRepo) Create(ctx context.Context, user *User) error {
 	pipe.Set(ctx, key, data, 0)
 	// Map email -> user_id
 	pipe.Set(ctx, redisPrefixEmail+user.EmailNormalized, user.ID, 0)
+	// Map user_name -> user_id
+	if user.UserName != "" {
+		pipe.Set(ctx, redisPrefixUserName+user.UserName, user.ID, 0)
+	}
 	// Add to user index (score = created_at Unix)
 	pipe.ZAdd(ctx, redisPrefixUserIndex, redis.Z{Score: float64(user.CreatedAt.Unix()), Member: user.ID})
 	_, err = pipe.Exec(ctx)
@@ -94,6 +99,17 @@ func (r *redisUserRepo) GetByID(ctx context.Context, id string) (*User, error) {
 func (r *redisUserRepo) GetByEmail(ctx context.Context, email string) (*User, error) {
 	normalized := normalizeEmail(email)
 	userID, err := r.client.Get(ctx, redisPrefixEmail+normalized).Result()
+	if err == redis.Nil {
+		return nil, ErrUserNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByID(ctx, userID)
+}
+
+func (r *redisUserRepo) GetByUserName(ctx context.Context, userName string) (*User, error) {
+	userID, err := r.client.Get(ctx, redisPrefixUserName+userName).Result()
 	if err == redis.Nil {
 		return nil, ErrUserNotFound
 	}

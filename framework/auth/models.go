@@ -19,6 +19,7 @@ type User struct {
 	ID              string      `json:"id"`
 	Email           string      `json:"email"`
 	EmailNormalized string      `json:"email_normalized"`
+	UserName        string      `json:"user_name,omitempty"`
 	DisplayName     string      `json:"display_name,omitempty"`
 	Phone           string      `json:"phone,omitempty"`
 	PasswordHash    string      `json:"-"`
@@ -119,6 +120,7 @@ type TokenPair struct {
 // RegisterRequest holds the input for user registration.
 type RegisterRequest struct {
 	Email    string `json:"email"`
+	UserName string `json:"username"`
 	Password string `json:"password"`
 }
 

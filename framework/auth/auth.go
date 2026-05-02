@@ -204,6 +204,19 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (*User, err
 		return nil, ErrUserAlreadyExists
 	}
 
+	// Validate and check username uniqueness
+	userName := strings.TrimSpace(req.UserName)
+	if userName == "" {
+		return nil, fmt.Errorf("auth: username is required")
+	}
+	existingByUserName, err := s.store.UserRepo().GetByUserName(ctx, userName)
+	if err != nil && err != ErrUserNotFound {
+		return nil, fmt.Errorf("auth: failed to check username: %w", err)
+	}
+	if existingByUserName != nil {
+		return nil, ErrUserNameTaken
+	}
+
 	// Hash password
 	hash, err := s.hasher.Hash(req.Password)
 	if err != nil {
@@ -220,6 +233,7 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (*User, err
 		ID:              userID,
 		Email:           req.Email,
 		EmailNormalized: email,
+		UserName:        userName,
 		PasswordHash:    hash,
 		Status:          UserStatusPendingVerification,
 		CreatedAt:       now,

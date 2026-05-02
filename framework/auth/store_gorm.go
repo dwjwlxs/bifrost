@@ -39,6 +39,7 @@ type gormUser struct {
 	ID              string         `gorm:"column:id;primaryKey;type:varchar(36)"`
 	Email           string         `gorm:"column:email;type:varchar(255);not null"`
 	EmailNormalized string         `gorm:"column:email_normalized;type:varchar(255);uniqueIndex;not null"`
+	UserName        string         `gorm:"column:user_name;type:varchar(50);uniqueIndex;not null"`
 	DisplayName     string         `gorm:"column:display_name;type:varchar(255)"`
 	Phone           string         `gorm:"column:phone;type:varchar(20)"`
 	PasswordHash    string         `gorm:"column:password_hash;type:varchar(255)"`
@@ -55,6 +56,7 @@ func (m *gormUser) toDomain() *User {
 		ID:              m.ID,
 		Email:           m.Email,
 		EmailNormalized: m.EmailNormalized,
+		UserName:        m.UserName,
 		DisplayName:     m.DisplayName,
 		Phone:           m.Phone,
 		PasswordHash:    m.PasswordHash,
@@ -73,6 +75,7 @@ func fromDomainUser(u *User) *gormUser {
 		ID:              u.ID,
 		Email:           u.Email,
 		EmailNormalized: u.EmailNormalized,
+		UserName:        u.UserName,
 		DisplayName:     u.DisplayName,
 		Phone:           u.Phone,
 		PasswordHash:    u.PasswordHash,
@@ -246,6 +249,14 @@ func (r *gormUserRepo) GetByEmail(ctx context.Context, email string) (*User, err
 	normalized := normalizeEmail(email)
 	var m gormUser
 	if err := r.db.WithContext(ctx).Where("email_normalized = ?", normalized).First(&m).Error; err != nil {
+		return nil, ErrUserNotFound
+	}
+	return m.toDomain(), nil
+}
+
+func (r *gormUserRepo) GetByUserName(ctx context.Context, userName string) (*User, error) {
+	var m gormUser
+	if err := r.db.WithContext(ctx).Where("user_name = ?", userName).First(&m).Error; err != nil {
 		return nil, ErrUserNotFound
 	}
 	return m.toDomain(), nil
