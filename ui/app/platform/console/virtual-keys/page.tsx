@@ -4,6 +4,7 @@ import {
 	usePlatformCreateVKMutation,
 	usePlatformUpdateVKMutation,
 	usePlatformDeleteVKMutation,
+	usePlatformListTeamsQuery,
 } from "@/lib/platform/platformApi";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,12 +24,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Copy, Trash2, Eye, EyeOff, Pencil, Power } from "lucide-react";
+import { Plus, Copy, Trash2, Eye, EyeOff, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import type { PlatformVirtualKey } from "@/lib/platform/platformApi";
 
 export default function VirtualKeysPage() {
 	const { data: virtualKeys, isLoading } = usePlatformListVKsQuery();
+	const { data: teams } = usePlatformListTeamsQuery();
 	const [createVK, { isLoading: isCreating }] = usePlatformCreateVKMutation();
 	const [updateVK, { isLoading: isUpdating }] = usePlatformUpdateVKMutation();
 	const [deleteVK, { isLoading: isDeleting }] = usePlatformDeleteVKMutation();
@@ -40,6 +42,7 @@ export default function VirtualKeysPage() {
 	// Create form state
 	const [newName, setNewName] = useState("");
 	const [newDesc, setNewDesc] = useState("");
+	const [newTeamId, setNewTeamId] = useState<string>("");
 
 	// Edit form state
 	const [editingVK, setEditingVK] = useState<PlatformVirtualKey | null>(null);
@@ -84,11 +87,13 @@ export default function VirtualKeysPage() {
 			await createVK({
 				name: newName.trim(),
 				description: newDesc.trim() || undefined,
+				team_id: newTeamId || undefined,
 			}).unwrap();
 			toast.success("Virtual key created successfully");
 			setCreateOpen(false);
 			setNewName("");
 			setNewDesc("");
+			setNewTeamId("");
 		} catch (error: unknown) {
 			const message =
 				error instanceof Error
@@ -199,6 +204,25 @@ export default function VirtualKeysPage() {
 									disabled={isCreating}
 								/>
 							</div>
+							{teams && teams.length > 0 && (
+								<div className="space-y-2">
+									<Label htmlFor="vk-team">Team <span className="text-muted-foreground font-normal">(optional)</span></Label>
+									<select
+										id="vk-team"
+										className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+										value={newTeamId}
+										onChange={(e) => setNewTeamId(e.target.value)}
+										disabled={isCreating}
+									>
+										<option value="">Personal (no team)</option>
+										{teams.map((team) => (
+											<option key={team.id} value={team.id}>
+												{team.name}
+											</option>
+										))}
+									</select>
+								</div>
+							)}
 						</div>
 						<div className="flex justify-end gap-2">
 							<Button variant="outline" onClick={() => setCreateOpen(false)} disabled={isCreating}>
@@ -224,15 +248,16 @@ export default function VirtualKeysPage() {
 			) : (
 				<div className="rounded-md border">
 					<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead>Name</TableHead>
-								<TableHead>Key Value</TableHead>
-								<TableHead>Status</TableHead>
-								<TableHead>Created</TableHead>
-								<TableHead className="text-right">Actions</TableHead>
-							</TableRow>
-						</TableHeader>
+					<TableHeader>
+						<TableRow>
+							<TableHead>Name</TableHead>
+							<TableHead>Key Value</TableHead>
+							<TableHead>Team</TableHead>
+							<TableHead>Status</TableHead>
+							<TableHead>Created</TableHead>
+							<TableHead className="text-right">Actions</TableHead>
+						</TableRow>
+					</TableHeader>
 						<TableBody>
 							{virtualKeys?.map((vk) => {
 								const isRevealed = showKeys[vk.id] ?? false;
@@ -262,11 +287,18 @@ export default function VirtualKeysPage() {
 												>
 													<Copy className="h-3.5 w-3.5" />
 												</Button>
-											</div>
-										</TableCell>
-										<TableCell>
-											<Badge variant={vk.is_active ? "default" : "secondary"}>{vk.is_active ? "Active" : "Inactive"}</Badge>
-										</TableCell>
+									</div>
+								</TableCell>
+								<TableCell>
+									<Badge variant={vk.team_id ? "outline" : "secondary"}>
+										{vk.team_id
+											? teams?.find((t) => t.id === vk.team_id)?.name ?? vk.team_id
+											: "Personal"}
+									</Badge>
+								</TableCell>
+								<TableCell>
+									<Badge variant={vk.is_active ? "default" : "secondary"}>{vk.is_active ? "Active" : "Inactive"}</Badge>
+								</TableCell>
 										<TableCell className="text-muted-foreground text-sm">{formatDate(vk.created_at)}</TableCell>
 										<TableCell className="text-right">
 											<div className="flex items-center justify-end gap-1">

@@ -2,8 +2,10 @@ import { Link, useLocation } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import { useConsoleSidebar } from "./consoleSidebarContext";
 import { getVisibleNavItems } from "@/lib/platform/config";
+import { useUserRole } from "@/lib/platform/hooks";
 
 interface ConsoleSidebarProps {
+	// isAdmin is ignored — role is now derived from JWT claims via useUserRole()
 	isAdmin?: boolean;
 }
 
@@ -12,11 +14,13 @@ interface ConsoleSidebarProps {
  * Left side panel with expandable/collapsible menu items.
  * Navigation items are role-based via lib/platform/config.ts.
  */
-export function ConsoleSidebar({ isAdmin = false }: ConsoleSidebarProps) {
+export function ConsoleSidebar(_props: ConsoleSidebarProps) {
 	const pathname = useLocation({ select: (l) => l.pathname });
-	const { isCollapsed, isMobile, isMobileMenuOpen, toggleCollapse, toggleMobileMenu, closeMobileMenu } = useConsoleSidebar();
+	const { isCollapsed, isMobile, isMobileMenuOpen, toggleCollapse, toggleMobileMenu, closeMobileMenu } =
+		useConsoleSidebar();
+	const { isAdmin, isOwner, isTeamAdmin } = useUserRole();
 
-	const navItems = getVisibleNavItems(isAdmin);
+	const navItems = getVisibleNavItems({ isAdmin, isOwner, isTeamAdmin });
 
 	const handleNavClick = () => {
 		if (isMobile) {

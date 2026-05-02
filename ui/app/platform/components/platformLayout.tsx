@@ -7,8 +7,9 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdownMenu";
 import { ThemeProvider } from "@/components/themeProvider";
-import { ReduxProvider } from "@/lib/store";
+import { ReduxProvider, store } from "@/lib/store";
 import { getUser, getToken, clearToken, type PlatformUserInfo } from "@/lib/platform/auth";
+import { platformApi } from "@/lib/platform/platformApi";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { LogOut, User, ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -114,13 +115,14 @@ export function PlatformHeader() {
 								</Link>
 							</DropdownMenuItem>
 							<DropdownMenuSeparator />
-							<DropdownMenuItem
-								onClick={() => {
-									clearToken();
-									navigate({ to: "/platform/login" });
-								}}
-								className="text-red-600"
-							>
+						<DropdownMenuItem
+							onClick={() => {
+								clearToken();
+								store.dispatch(platformApi.util.resetApiState());
+								navigate({ to: "/platform/login" });
+							}}
+							className="text-red-600"
+						>
 								<LogOut className="mr-2 h-4 w-4" />
 								Log out
 							</DropdownMenuItem>
@@ -177,7 +179,7 @@ export function PlatformFooter() {
 /**
  * Console layout wrapper with sidebar.
  */
-function ConsoleLayout({ children, isAdmin }: { children: React.ReactNode; isAdmin: boolean }) {
+function ConsoleLayout({ children }: { children: React.ReactNode }) {
 	const { isCollapsed, isMobile } = useConsoleSidebar();
 
 	// Calculate margin based on sidebar state
@@ -185,8 +187,8 @@ function ConsoleLayout({ children, isAdmin }: { children: React.ReactNode; isAdm
 
 	return (
 		<div className="flex min-h-0 flex-1">
-			{/* Console sidebar */}
-			<ConsoleSidebar isAdmin={isAdmin} />
+			{/* Console sidebar — role derived internally via useUserRole() */}
+			<ConsoleSidebar />
 			{/* Main content area - margin adjusts based on sidebar state */}
 			<main className={`flex-1 transition-all duration-300 ${mainMarginClass}`}>{children}</main>
 		</div>
@@ -220,7 +222,7 @@ export function PlatformProviders({ children }: { children: React.ReactNode }) {
 					<div className="bg-background flex min-h-screen flex-col">
 						<PlatformHeader />
 						{isConsole && user ? (
-							<ConsoleLayout isAdmin={user.is_admin}>{children}</ConsoleLayout>
+							<ConsoleLayout>{children}</ConsoleLayout>
 						) : (
 							<main className="flex-1">{children}</main>
 						)}

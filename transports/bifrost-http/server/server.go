@@ -1427,8 +1427,12 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 
 	logger.Info("models added to catalog")
 	s.Config.SetBifrostClient(s.Client)
-	// Initialize routes
-	s.Router = router.New()
+	// Initialize routes — disable automatic 301 redirects for trailing slashes/fixed paths
+	// to avoid confusing RTK Query's cache key and ensure clean /predictable routing behavior
+	r := router.New()
+	r.RedirectTrailingSlash = false
+	r.RedirectFixedPath = false
+	s.Router = r
 	commonMiddlewares := s.PrepareCommonMiddlewares()
 	apiMiddlewares := commonMiddlewares
 	inferenceMiddlewares := commonMiddlewares
