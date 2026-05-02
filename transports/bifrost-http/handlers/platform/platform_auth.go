@@ -18,6 +18,31 @@ import (
 	"gorm.io/gorm"
 )
 
+// Cookie name for refresh token (httpOnly, sent automatically on refresh requests)
+const refreshTokenCookieName = "bifrost_refresh_token"
+
+// setRefreshTokenCookie sets an httpOnly cookie with the refresh token.
+func setRefreshTokenCookie(ctx *fasthttp.RequestCtx, token string, expiresAt time.Time) {
+	cookie := fasthttp.Cookie{}
+	cookie.SetKey(refreshTokenCookieName)
+	cookie.SetValue(token)
+	cookie.SetExpire(expiresAt)
+	cookie.SetPath("/")
+	cookie.SetHTTPOnly(true)
+	// Note: SetSecure(true) should be used in production with HTTPS
+	ctx.Response.Header.Cookie(&cookie)
+}
+
+// clearRefreshTokenCookie removes the httpOnly cookie.
+func clearRefreshTokenCookie(ctx *fasthttp.RequestCtx) {
+	ctx.Response.Header.DelCookie(refreshTokenCookieName)
+}
+
+// getRefreshTokenFromCookie reads the refresh token from the httpOnly cookie.
+func getRefreshTokenFromCookie(ctx *fasthttp.RequestCtx) string {
+	return string(ctx.Request.Header.Cookie(refreshTokenCookieName))
+}
+
 // Context key types for platform auth (prevents key collisions).
 type platformUserIDKey struct{}
 type platformClaimsKey struct{}
@@ -255,7 +280,8 @@ func (h *PlatformAuthHandler) login(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// 5. Return tokens
+	// 5. Set httpOnly cookie for refresh token, then return tokens
+	setRefreshTokenCookie(ctx, tokenPair.RefreshToken, tokenPair.ExpiresAt)
 	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
@@ -365,7 +391,8 @@ func (h *PlatformAuthHandler) verify(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// 4. Return tokens
+	// 4. Set httpOnly cookie for refresh token, then return tokens
+	setRefreshTokenCookie(ctx, tokenPair.RefreshToken, tokenPair.ExpiresAt)
 	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
@@ -379,25 +406,29 @@ func (h *PlatformAuthHandler) verify(ctx *fasthttp.RequestCtx) {
 
 // refreshToken handles POST /api/platform/refresh-token
 func (h *PlatformAuthHandler) refreshToken(ctx *fasthttp.RequestCtx) {
-	var req struct {
-		RefreshToken string `json:"refresh_token"`
+	// 1. Read refresh token from httpOnly cookie (preferred) or body (fallback for legacy clients)
+	refreshToken := getRefreshTokenFromCookie(ctx)
+	if refreshToken == "" {
+		var req struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
+			sendError(ctx, fasthttp.StatusBadRequest, "Invalid request format", err.Error())
+			return
+		}
+		refreshToken = req.RefreshToken
 	}
 
-	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
-		sendError(ctx, fasthttp.StatusBadRequest, "Invalid request format", err.Error())
-		return
-	}
-
-	if req.RefreshToken == "" {
+	if refreshToken == "" {
 		sendError(ctx, fasthttp.StatusBadRequest, "Refresh token is required", "")
 		return
 	}
 
 	goCtx := context.Background()
 
-	// 1. Exchange refresh token for a new token pair
+	// 2. Exchange refresh token for a new token pair
 	tokenPair, err := h.authService.RefreshToken(goCtx, fauth.RefreshTokenRequest{
-		RefreshToken: req.RefreshToken,
+		RefreshToken: refreshToken,
 	})
 	if err != nil {
 		sendError(ctx, fasthttp.StatusUnauthorized, "Invalid refresh token", err.Error())
@@ -427,7 +458,8 @@ func (h *PlatformAuthHandler) refreshToken(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// 5. Return new tokens
+	// 5. Rotate httpOnly cookie and return new tokens
+	setRefreshTokenCookie(ctx, tokenPair.RefreshToken, tokenPair.ExpiresAt)
 	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",

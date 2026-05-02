@@ -1,7 +1,7 @@
 import { useSearch } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "@tanstack/react-router";
-import { setToken, decodeAndStoreUser } from "@/lib/platform/auth";
+import { getToken, setToken, decodeAndStoreUser } from "@/lib/platform/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +21,13 @@ export default function LoginPage() {
 
 	const [platformLogin, { isLoading: loading }] = usePlatformLoginMutation();
 
+	// Redirect if already logged in
+	useEffect(() => {
+		if (getToken()) {
+			navigate({ to: "/platform/console/dashboard" });
+		}
+	}, [navigate]);
+
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setError("");
@@ -28,11 +35,9 @@ export default function LoginPage() {
 		try {
 			const res = await platformLogin({ email: login, password: password }).unwrap();
 			// New response format: { code, message, data: { access_token, refresh_token, expires_at } }
-			const { access_token, refresh_token } = res.data;
+			const { access_token } = res.data;
 			setToken(access_token);
-			// Store refresh token in memory (not localStorage for security)
-			// @ts-ignore - internal usage
-			window.__bifrost_refresh_token = refresh_token;
+			// Refresh token is set via httpOnly cookie by the backend — no manual storage needed
 
 			// Decode JWT payload to: get user info for immediate header display
 			decodeAndStoreUser(access_token);
@@ -106,16 +111,14 @@ export default function LoginPage() {
 				open={showVerifyDialog}
 				onOpenChange={setShowVerifyDialog}
 				email={verifyEmail}
-				onVerified={(token: string, refreshToken: string) => {
-					setToken(token);
-					// Store refresh token for later use
-					// @ts-ignore - internal usage
-					window.__bifrost_refresh_token = refreshToken;
-					// Decode JWT payload to get user info for immediate header display
-					decodeAndStoreUser(token);
-					const redirectTo = redirect && redirect.startsWith("/") ? redirect : "/platform/console/dashboard";
-					navigate({ to: redirectTo });
-				}}
+			onVerified={(token: string, _refreshToken: string) => {
+				setToken(token);
+				// Refresh token is set via httpOnly cookie by the backend — no manual storage needed
+				// Decode JWT payload to get user info for immediate header display
+				decodeAndStoreUser(token);
+				const redirectTo = redirect && redirect.startsWith("/") ? redirect : "/platform/console/dashboard";
+				navigate({ to: redirectTo });
+			}}
 			/>
 		</div>
 	);
