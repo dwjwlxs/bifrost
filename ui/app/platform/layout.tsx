@@ -28,7 +28,7 @@ export const Route = createFileRoute("/platform")({
 		}
 
 		// Allow invite routes (token-based, no session needed)
-		if (pathname.startsWith("/platform/invite/")) {
+		if (pathname.startsWith("/platform/invitation/")) {
 			return;
 		}
 

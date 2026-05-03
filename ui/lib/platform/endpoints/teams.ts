@@ -67,6 +67,12 @@ const teamsApi = platformBaseApi.injectEndpoints({
 			}),
 			invalidatesTags: ["Users"],
 		}),
+
+		/** Delete a team (org_admin only) */
+		platformDeleteTeam: builder.mutation<{ code: string; message: string }, string>({
+			query: (teamId) => ({ url: `/platform/teams/${teamId}`, method: "DELETE" }),
+			invalidatesTags: ["Teams"],
+		}),
 	}),
 });
 
@@ -74,6 +80,7 @@ export const {
 	usePlatformListTeamsQuery,
 	usePlatformGetTeamQuery,
 	usePlatformUpdateTeamMutation,
+	usePlatformDeleteTeamMutation,
 	usePlatformListTeamMembersQuery,
 	usePlatformInviteTeamMemberMutation,
 	usePlatformRemoveTeamMemberMutation,

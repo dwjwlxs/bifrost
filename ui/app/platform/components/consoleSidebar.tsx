@@ -61,26 +61,34 @@ export function ConsoleSidebar(_props: ConsoleSidebarProps) {
 					</div>
 				)}
 
-				{/* Navigation items */}
-				<nav className="flex-1 space-y-1 overflow-y-auto px-2 py-2">
-					{navItems.map((item) => {
-						const isActive = pathname.startsWith(item.to);
+			{/* Navigation items */}
+			<nav className="flex-1 space-y-1 overflow-y-auto px-2 py-2">
+				{navItems.map((item) => {
+					const isActive = pathname.startsWith(item.to);
+					if (item.separator) {
 						return (
-							<Link
-								key={item.to}
-								to={item.to}
-								onClick={handleNavClick}
-								className={`group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
-									isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-								}`}
-								title={isCollapsed && !isMobile ? item.label : undefined}
-							>
-								<item.icon className="h-5 w-5 flex-shrink-0" />
-								{(!isCollapsed || isMobile) && <span className="truncate">{item.label}</span>}
-							</Link>
+							<div
+								key="admin-separator"
+								className="my-2 border-t border-border"
+							/>
 						);
-					})}
-				</nav>
+					}
+					return (
+						<Link
+							key={item.to}
+							to={item.to}
+							onClick={handleNavClick}
+							className={`group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+								isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+							}`}
+							title={isCollapsed && !isMobile ? item.label : undefined}
+						>
+							<item.icon className="h-5 w-5 flex-shrink-0" />
+							{(!isCollapsed || isMobile) && <span className="truncate">{item.label}</span>}
+						</Link>
+					);
+				})}
+			</nav>
 			</aside>
 
 			{/* Mobile overlay */}

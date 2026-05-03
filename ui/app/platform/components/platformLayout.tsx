@@ -198,6 +198,7 @@ export function PlatformProviders({ children }: { children: React.ReactNode }) {
 	// getUser() reads localStorage synchronously so this is always current.
 	const user = getUser();
 	const isConsole = pathname.startsWith("/platform/console");
+	const isInvitation = pathname.startsWith("/platform/invitation/");
 
 	return (
 		<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
@@ -205,7 +206,7 @@ export function PlatformProviders({ children }: { children: React.ReactNode }) {
 			<ReduxProvider>
 				<ConsoleSidebarProvider>
 					<div className="bg-background flex min-h-screen flex-col">
-						<PlatformHeader />
+						{!isInvitation && <PlatformHeader />}
 						{isConsole && user ? <ConsoleLayout>{children}</ConsoleLayout> : <main className="flex-1">{children}</main>}
 					</div>
 				</ConsoleSidebarProvider>

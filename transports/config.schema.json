@@ -1663,6 +1663,10 @@
     "email_config": {
       "$ref": "#/$defs/email_config"
     },
+    "platform_url": {
+      "type": "string",
+      "description": "Public-facing base URL of this Bifrost deployment (e.g. \"https://bifrost.example.com\"). Used for generating invitation accept links. Falls back to the host/port from the HTTP listener."
+    },
     "consumer_auth_config": {
       "$ref": "#/$defs/consumer_auth_config"
     }

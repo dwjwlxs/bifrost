@@ -14,6 +14,7 @@ import (
 	fauth "github.com/maximhq/bifrost/framework/auth"
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
+	"github.com/maximhq/bifrost/framework/platform"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
 	"gorm.io/gorm"
@@ -64,9 +65,9 @@ func GetPlatformUserIDFromContext(ctx *fasthttp.RequestCtx) string {
 
 // GetPlatformClaimsFromContext extracts the full PlatformClaims from the
 // request context. Returns nil if not set.
-func GetPlatformClaimsFromContext(ctx *fasthttp.RequestCtx) *PlatformClaims {
+func GetPlatformClaimsFromContext(ctx *fasthttp.RequestCtx) *platform.PlatformClaims {
 	if v := ctx.UserValue(platformClaimsKey{}); v != nil {
-		if c, ok := v.(*PlatformClaims); ok {
+		if c, ok := v.(*platform.PlatformClaims); ok {
 			return c
 		}
 	}
@@ -95,8 +96,8 @@ func NewPlatformAuthHandler(db *gorm.DB, authService fauth.AuthService, configSt
 		db:          db,
 		authService: authService,
 		configStore: configStore,
-		jwtKey:      PlatformJWTKey,
-		jwtExpiry:   PlatformJWTExpiry,
+		jwtKey:      platform.PlatformJWTKey,
+		jwtExpiry:   platform.PlatformJWTExpiry,
 	}
 }
 
@@ -144,7 +145,7 @@ func PlatformAuthMiddleware(db *gorm.DB, authService fauth.AuthService) schemas.
 	if db == nil || authService == nil {
 		panic("PlatformAuthMiddleware: db and authService must not be nil")
 	}
-	jwtKey := PlatformJWTKey
+	jwtKey := platform.PlatformJWTKey
 	if len(jwtKey) == 0 {
 		panic("PlatformAuthMiddleware: jwtKey must not be empty")
 	}
@@ -159,7 +160,7 @@ func PlatformAuthMiddleware(db *gorm.DB, authService fauth.AuthService) schemas.
 			}
 
 			// 2. Verify platform JWT
-			platformClaims, err := VerifyPlatformJWT(token, jwtKey)
+			platformClaims, err := platform.VerifyPlatformJWT(token, jwtKey)
 			if err != nil {
 				sendError(ctx, fasthttp.StatusUnauthorized, "Invalid platform token", err.Error())
 				return
@@ -196,7 +197,7 @@ var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-
 
 // buildPlatformClaimsForUser queries the membership tables for the given user
 // and constructs PlatformClaims. It does NOT set AuthToken — callers must do that.
-func (h *PlatformAuthHandler) buildPlatformClaimsForUser(userID string, authToken string, jwtClaims *fauth.JWTClaims) *PlatformClaims {
+func (h *PlatformAuthHandler) buildPlatformClaimsForUser(userID string, authToken string, jwtClaims *fauth.JWTClaims) *platform.PlatformClaims {
 	var admin tables.TablePlatformAdmin
 	isAdmin := false
 	if err := h.db.Where("user_id = ?", userID).First(&admin).Error; err == nil {
@@ -204,22 +205,22 @@ func (h *PlatformAuthHandler) buildPlatformClaimsForUser(userID string, authToke
 	}
 
 	var orgMembers []tables.TablePlatformOrgMember
-	orgs := make([]OrgClaim, 0)
+	orgs := make([]platform.OrgClaim, 0)
 	if err := h.db.Where("user_id = ?", userID).Find(&orgMembers).Error; err == nil {
 		for _, m := range orgMembers {
-			orgs = append(orgs, OrgClaim{ID: m.OrgID, Role: m.Role})
+			orgs = append(orgs, platform.OrgClaim{ID: m.OrgID, Role: m.Role})
 		}
 	}
 
 	var teamMembers []tables.TablePlatformTeamMember
-	teams := make([]TeamClaim, 0)
+	teams := make([]platform.TeamClaim, 0)
 	if err := h.db.Where("user_id = ?", userID).Find(&teamMembers).Error; err == nil {
 		for _, m := range teamMembers {
-			teams = append(teams, TeamClaim{ID: m.TeamID, Role: m.Role})
+			teams = append(teams, platform.TeamClaim{ID: m.TeamID, Role: m.Role})
 		}
 	}
 
-	platformClaims := &PlatformClaims{
+	platformClaims := &platform.PlatformClaims{
 		UserID:    userID,
 		IsAdmin:   isAdmin,
 		Orgs:      orgs,
@@ -253,7 +254,7 @@ func (h *PlatformAuthHandler) issuePlatformToken(ctx *fasthttp.RequestCtx, token
 	}
 
 	platformClaims := h.buildPlatformClaimsForUser(userID, tokenPair.AccessToken, jwtClaims)
-	platformJWT, err := SignPlatformJWT(platformClaims, h.jwtKey, h.jwtExpiry)
+	platformJWT, err := platform.SignPlatformJWT(platformClaims, h.jwtKey, h.jwtExpiry)
 	if err != nil {
 		return "", fmt.Errorf("failed to sign platform token: %w", err)
 	}

@@ -6,10 +6,12 @@ import (
 	"time"
 
 	"github.com/fasthttp/router"
-	"github.com/google/uuid"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
+	"github.com/maximhq/bifrost/framework/messenger"
+	"github.com/maximhq/bifrost/framework/model"
+	"github.com/maximhq/bifrost/framework/platform"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
 	"gorm.io/gorm"
@@ -17,15 +19,20 @@ import (
 
 // PlatformTeamHandler handles team management API operations.
 type PlatformTeamHandler struct {
-	db          *gorm.DB
-	configStore configstore.ConfigStore
+	db            *gorm.DB
+	configStore   configstore.ConfigStore
+	invitationSvc platform.InvitationService
 }
 
 // NewPlatformTeamHandler creates a new PlatformTeamHandler.
-func NewPlatformTeamHandler(db *gorm.DB, configStore configstore.ConfigStore) *PlatformTeamHandler {
+func NewPlatformTeamHandler(db *gorm.DB, configStore configstore.ConfigStore, logger schemas.Logger,
+	messenger messenger.Sender, platformURL string,
+) *PlatformTeamHandler {
+	invitationSvc := platform.NewInvitationService(db, messenger, platformURL, logger)
 	return &PlatformTeamHandler{
-		db:          db,
-		configStore: configStore,
+		db:            db,
+		configStore:   configStore,
+		invitationSvc: invitationSvc,
 	}
 }
 
@@ -47,9 +54,11 @@ func (h *PlatformTeamHandler) RegisterRoutes(r *router.Router, middlewares ...sc
 	r.POST("/api/platform/teams/{teamId}/members", lib.ChainMiddlewares(h.inviteMember, teamAdminMw...))
 	r.DELETE("/api/platform/teams/{teamId}/members/{uid}", lib.ChainMiddlewares(h.removeMember, teamAdminMw...))
 	r.PUT("/api/platform/teams/{teamId}/members/{uid}", lib.ChainMiddlewares(h.updateMemberRole, teamAdminMw...))
+	r.DELETE("/api/platform/teams/{teamId}", lib.ChainMiddlewares(h.deleteTeam, teamAdminMw...))
 }
 
 // listMyTeams handles GET /api/platform/teams — list teams the current user belongs to.
+// For system admins (is_admin=true), returns all teams.
 func (h *PlatformTeamHandler) listMyTeams(ctx *fasthttp.RequestCtx) {
 	claims := GetPlatformClaimsFromContext(ctx)
 	if claims == nil {
@@ -57,6 +66,36 @@ func (h *PlatformTeamHandler) listMyTeams(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	// System admins see all teams
+	if claims.IsAdmin {
+		var teams []tables.TableTeam
+		if err := h.db.Find(&teams).Error; err != nil {
+			sendError(ctx, fasthttp.StatusInternalServerError, "Failed to list teams", err.Error())
+			return
+		}
+		items := make([]map[string]any, len(teams))
+		for i, t := range teams {
+			items[i] = map[string]any{
+				"id":          t.ID,
+				"name":        t.Name,
+				"customer_id": t.CustomerID,
+				"role":        model.TeamRoleAdmin,
+				"created_at":  t.CreatedAt,
+				"updated_at":  t.UpdatedAt,
+			}
+		}
+		sendJSON(ctx, map[string]any{
+			"code":    "0",
+			"message": "success",
+			"data": map[string]any{
+				"items": items,
+				"total": len(items),
+			},
+		})
+		return
+	}
+
+	// Non-admin users: list teams from their JWT claims (populated from platform_team_members)
 	teamIDs := make([]string, 0, len(claims.Teams))
 	for _, team := range claims.Teams {
 		teamIDs = append(teamIDs, team.ID)
@@ -208,14 +247,43 @@ func (h *PlatformTeamHandler) listTeamMembers(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	// Collect user IDs to batch-query email/username from auth_users
+	userIDs := make([]string, len(members))
+	for i, m := range members {
+		userIDs[i] = m.UserID
+	}
+
+	type authUserInfo struct {
+		ID       string `gorm:"column:id"`
+		Email    string `gorm:"column:email"`
+		Username string `gorm:"column:username"`
+	}
+	var userInfos []authUserInfo
+	if len(userIDs) > 0 {
+		if err := h.db.Table("auth_users").Select("id, email, username").Where("id IN ? AND deleted_at IS NULL", userIDs).Find(&userInfos).Error; err != nil {
+			// Non-fatal: proceed without user info
+			log.Printf("WARN: failed to query auth_users for team members: %v", err)
+		}
+	}
+
+	userInfoMap := make(map[string]authUserInfo, len(userInfos))
+	for _, u := range userInfos {
+		userInfoMap[u.ID] = u
+	}
+
 	items := make([]map[string]any, len(members))
 	for i, m := range members {
-		items[i] = map[string]any{
+		item := map[string]any{
 			"team_id":   m.TeamID,
 			"user_id":   m.UserID,
 			"role":      m.Role,
 			"joined_at": m.JoinedAt,
 		}
+		if info, ok := userInfoMap[m.UserID]; ok {
+			item["email"] = info.Email
+			item["username"] = info.Username
+		}
+		items[i] = item
 	}
 
 	sendJSON(ctx, map[string]any{
@@ -251,13 +319,13 @@ func (h *PlatformTeamHandler) inviteMember(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// Default role to "member"
+	// Default role to TeamRoleMember
 	if req.Role == "" {
-		req.Role = "member"
+		req.Role = model.TeamRoleMember
 	}
 
-	if !isValidRole(req.Role) {
-		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Invalid role: must be member, admin, or owner")
+	if !model.IsValidTeamRole(req.Role) {
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Invalid role: must be member or admin")
 		return
 	}
 
@@ -274,10 +342,21 @@ func (h *PlatformTeamHandler) inviteMember(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// If email is provided, create an invitation
-	// The old user table lookup was removed — user IDs now come from the auth system (UUID strings)
+	// If email is provided, create an invitation via InvitationService
 	if req.Email != "" {
-		h.createInvitation(ctx, teamID, &req.Email, req.Role, team.CustomerID)
+		claims := GetPlatformClaimsFromContext(ctx)
+		inviterName := ""
+		if claims != nil {
+			inviterName = claims.UserName
+		}
+		if err := h.invitationSvc.CreateInvitation(teamID, team.CustomerID, req.Email, req.Role, inviterName, team.Name, ""); err != nil {
+			sendError(ctx, fasthttp.StatusInternalServerError, "Failed to create invitation", err.Error())
+			return
+		}
+		sendJSON(ctx, map[string]any{
+			"code":    "0",
+			"message": "Invitation created successfully",
+		})
 		return
 	}
 }
@@ -319,7 +398,7 @@ func (h *PlatformTeamHandler) addMemberDirectly(ctx *fasthttp.RequestCtx, teamID
 			orgMember := tables.TablePlatformOrgMember{
 				OrgID:    *customerID,
 				UserID:   userID,
-				Role:     "member",
+				Role:     model.OrgRoleMember,
 				JoinedAt: now,
 			}
 			if err := tx.Create(&orgMember).Error; err != nil {
@@ -343,36 +422,6 @@ func (h *PlatformTeamHandler) addMemberDirectly(ctx *fasthttp.RequestCtx, teamID
 			"user_id": userID,
 			"team_id": teamID,
 			"role":    role,
-		},
-	})
-}
-
-// createInvitation creates a pending invitation for a user to join a team.
-func (h *PlatformTeamHandler) createInvitation(ctx *fasthttp.RequestCtx, teamID string, email *string, role string, customerID *string) {
-	invitation := tables.TablePlatformInvitation{
-		ID:        uuid.NewString(),
-		TeamID:    &teamID,
-		OrgID:     customerID,
-		Email:     *email,
-		Role:      role,
-		Token:     uuid.NewString(),
-		ExpiresAt: time.Now().Add(7 * 24 * time.Hour), // 7 days
-		Accepted:  false,
-	}
-
-	if err := h.db.Create(&invitation).Error; err != nil {
-		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to create invitation", err.Error())
-		return
-	}
-
-	sendJSON(ctx, map[string]any{
-		"code":    "0",
-		"message": "Invitation created successfully",
-		"data": map[string]any{
-			"id":         invitation.ID,
-			"email":      invitation.Email,
-			"role":       invitation.Role,
-			"expires_at": invitation.ExpiresAt,
 		},
 	})
 }
@@ -424,8 +473,8 @@ func (h *PlatformTeamHandler) updateMemberRole(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	if !isValidRole(req.Role) {
-		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Invalid role: must be member, admin, or owner")
+	if !model.IsValidTeamRole(req.Role) {
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Invalid role: must be member or admin")
 		return
 	}
 
@@ -452,12 +501,51 @@ func (h *PlatformTeamHandler) updateMemberRole(ctx *fasthttp.RequestCtx) {
 	})
 }
 
-// isValidRole checks whether the given role string is one of the allowed roles.
-func isValidRole(role string) bool {
-	switch role {
-	case "member", "admin", "owner":
-		return true
-	default:
-		return false
+// deleteTeam handles DELETE /api/platform/teams/{teamId} — delete a team.
+// Only team admins (or org admins / system admins) can delete a team.
+func (h *PlatformTeamHandler) deleteTeam(ctx *fasthttp.RequestCtx) {
+	teamID, _ := ctx.UserValue("teamId").(string)
+	if teamID == "" {
+		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Team ID is required")
+		return
 	}
+
+	tx := h.db.Begin()
+	if tx.Error != nil {
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to start transaction", tx.Error.Error())
+		return
+	}
+
+	// Check team exists
+	var team tables.TableTeam
+	if err := tx.Where("id = ?", teamID).First(&team).Error; err != nil {
+		tx.Rollback()
+		sendError(ctx, fasthttp.StatusNotFound, "NOT_FOUND", "Team not found")
+		return
+	}
+
+	// Remove team members first
+	if err := tx.Where("team_id = ?", teamID).Delete(&tables.TablePlatformTeamMember{}).Error; err != nil {
+		tx.Rollback()
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to remove team members", err.Error())
+		return
+	}
+
+	// Delete the team
+	if err := tx.Delete(&team).Error; err != nil {
+		tx.Rollback()
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to delete team", err.Error())
+		return
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		log.Printf("ERROR: failed to commit transaction in deleteTeam: %v", err)
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to delete team", err.Error())
+		return
+	}
+
+	sendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "Team deleted successfully",
+	})
 }

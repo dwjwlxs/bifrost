@@ -28,12 +28,12 @@ import (
 	fauth "github.com/maximhq/bifrost/framework/auth"
 	"github.com/maximhq/bifrost/framework/configstore"
 	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
-	femail "github.com/maximhq/bifrost/framework/email"
 	"github.com/maximhq/bifrost/framework/encrypt"
 	"github.com/maximhq/bifrost/framework/envutils"
 	"github.com/maximhq/bifrost/framework/kvstore"
 	"github.com/maximhq/bifrost/framework/logstore"
 	"github.com/maximhq/bifrost/framework/mcpcatalog"
+	"github.com/maximhq/bifrost/framework/messenger"
 	"github.com/maximhq/bifrost/framework/modelcatalog"
 	"github.com/maximhq/bifrost/framework/oauth2"
 	plugins "github.com/maximhq/bifrost/framework/plugins"
@@ -133,18 +133,21 @@ type ConfigData struct {
 	Client        *configstore.ClientConfig `json:"client"`
 	EncryptionKey *schemas.EnvVar           `json:"encryption_key"`
 	// Deprecated: Use GovernanceConfig.AuthConfig instead
-	AuthConfig         *configstore.AuthConfig               `json:"auth_config,omitempty"`
-	Providers          map[string]configstore.ProviderConfig `json:"providers"`
-	FrameworkConfig    *framework.FrameworkConfig            `json:"framework,omitempty"`
-	MCP                *schemas.MCPConfig                    `json:"mcp,omitempty"`
-	Governance         *configstore.GovernanceConfig         `json:"governance,omitempty"`
-	VectorStoreConfig  *vectorstore.Config                   `json:"vector_store,omitempty"`
-	ConfigStoreConfig  *configstore.Config                   `json:"config_store,omitempty"`
-	LogsStoreConfig    *logstore.Config                      `json:"logs_store,omitempty"`
-	Plugins            []*schemas.PluginConfig               `json:"plugins,omitempty"`
-	WebSocket          *schemas.WebSocketConfig              `json:"websocket,omitempty"`
-	EmailConfig        *EmailConfigData                      `json:"email_config,omitempty"`
-	ConsumerAuthConfig *ConsumerAuthConfigData               `json:"consumer_auth_config,omitempty"`
+	AuthConfig        *configstore.AuthConfig               `json:"auth_config,omitempty"`
+	Providers         map[string]configstore.ProviderConfig `json:"providers"`
+	FrameworkConfig   *framework.FrameworkConfig            `json:"framework,omitempty"`
+	MCP               *schemas.MCPConfig                    `json:"mcp,omitempty"`
+	Governance        *configstore.GovernanceConfig         `json:"governance,omitempty"`
+	VectorStoreConfig *vectorstore.Config                   `json:"vector_store,omitempty"`
+	ConfigStoreConfig *configstore.Config                   `json:"config_store,omitempty"`
+	LogsStoreConfig   *logstore.Config                      `json:"logs_store,omitempty"`
+	Plugins           []*schemas.PluginConfig               `json:"plugins,omitempty"`
+	WebSocket         *schemas.WebSocketConfig              `json:"websocket,omitempty"`
+	EmailConfig       *EmailConfigData                      `json:"email_config,omitempty"`
+	// PlatformURL is the public-facing base URL of this Bifrost deployment (e.g. "https://bifrost.example.com").
+	// Used for generating invitation accept links. Falls back to the host/port from the HTTP listener.
+	PlatformURL        string                  `json:"platform_url,omitempty"`
+	ConsumerAuthConfig *ConsumerAuthConfigData `json:"consumer_auth_config,omitempty"`
 }
 
 // UnmarshalJSON unmarshals the ConfigData from JSON using internal unmarshallers
@@ -312,6 +315,15 @@ type Config struct {
 	// Consumer Authentication Service (C-end user account system).
 	// If non-nil, /api/auth/* routes are registered.
 	ConsumerAuthService fauth.AuthService
+
+	// MessageSender is the shared email/SMS sender used by consumer auth and platform
+	// invitation features. Initialized during loadConsumerAuthConfig.
+	Messenger messenger.Sender
+
+	// PlatformURL is the public-facing base URL of this Bifrost deployment, used for
+	// generating absolute callback/invitation links. Set from config.json
+	// "platform_url" or derived from HTTP listener host/port during initialization.
+	PlatformURL string
 
 	// PlatformAuth holds configuration for platform multi-tenant authentication.
 	// If ConsumerAuthService is nil, platform auth is disabled.
@@ -550,10 +562,17 @@ func LoadConfig(ctx context.Context, configDirPath string) (*Config, error) {
 	loadGovernanceConfig(ctx, config, &configData)
 	// 8. Auth config
 	loadAuthConfig(ctx, config, &configData)
+
+	// 8a. Messenger
+	loadMessenger(ctx, config, &configData)
+	// Set PlatformURL on the shared config
+	config.PlatformURL = configData.PlatformURL
+
 	// 8b. Consumer auth service (C-end user accounts)
 	if err := loadConsumerAuthConfig(ctx, config, &configData); err != nil {
 		return nil, fmt.Errorf("failed to load consumer auth config: %w", err)
 	}
+
 	// 9. Plugins
 	loadPlugins(ctx, config, &configData)
 	// 10. Framework config and pricing manager
@@ -1901,6 +1920,27 @@ type EmailConfigData struct {
 	AppURL   string `json:"app_url,omitempty"`
 }
 
+func loadMessenger(ctx context.Context, cfg *Config, configData *ConfigData) error {
+	// Build message sender (uses top-level email config)
+	var emailCfg messenger.Config
+	if configData.EmailConfig != nil {
+		emailCfg = messenger.Config{
+			Host:     configData.EmailConfig.Host,
+			Port:     configData.EmailConfig.Port,
+			Username: configData.EmailConfig.Username,
+			Password: configData.EmailConfig.Password,
+			From:     configData.EmailConfig.From,
+			UseTLS:   configData.EmailConfig.UseTLS,
+			UseSSL:   configData.EmailConfig.UseSSL,
+
+			Logger: logger,
+		}
+	}
+
+	cfg.Messenger = messenger.NewSender(emailCfg)
+	return nil
+}
+
 // loadConsumerAuthConfig initializes the consumer auth service from config.
 // Returns nil (no error) if consumer_auth_config is absent or is_enabled=false;
 // in that case ConsumerAuthService remains nil and platform auth routes are skipped.
@@ -2013,21 +2053,6 @@ func loadConsumerAuthConfig(ctx context.Context, cfg *Config, configData *Config
 		}
 	}
 
-	// Build message sender (uses top-level email config, also used by consumer auth)
-	var emailCfg femail.Config
-	if configData.EmailConfig != nil && configData.EmailConfig.Host != "" {
-		emailCfg = femail.Config{
-			Host:     configData.EmailConfig.Host,
-			Port:     configData.EmailConfig.Port,
-			Username: configData.EmailConfig.Username,
-			Password: configData.EmailConfig.Password,
-			From:     configData.EmailConfig.From,
-			UseTLS:   configData.EmailConfig.UseTLS,
-			UseSSL:   configData.EmailConfig.UseSSL,
-			AppURL:   configData.EmailConfig.AppURL,
-		}
-	}
-
 	// Load OAuth from env (overrides config file values)
 	authCfg.LoadOAuthConfigFromEnv()
 
@@ -2039,14 +2064,11 @@ func loadConsumerAuthConfig(ctx context.Context, cfg *Config, configData *Config
 	// Build store factory
 	storeFactory := fauth.NewGormStoreFactory(cfg.AuthDB)
 
-	// Build message sender
-	codeSender := fauth.NewMessageSender(emailCfg, logger)
-
 	// Rate limiter (in-memory noop for now; redis-backed can be added later)
 	rateLimiter := &fauth.NoopRateLimiter{}
 
 	// Create auth service
-	authService, err := fauth.NewAuthService(authCfg, storeFactory, codeSender, rateLimiter)
+	authService, err := fauth.NewAuthService(authCfg, storeFactory, cfg.Messenger, rateLimiter, logger)
 	if err != nil {
 		return fmt.Errorf("failed to create consumer auth service: %w", err)
 	}

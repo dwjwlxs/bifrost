@@ -13,8 +13,18 @@ const virtualKeysApi = platformBaseApi.injectEndpoints({
 			providesTags: ["VirtualKeys"],
 		}),
 
-		/** Create a new VK for the current user */
-		platformCreateVK: builder.mutation<PlatformVirtualKey, { name: string; description?: string; team_id?: string }>({
+		/** Create a new VK for the current user (or a team member if team_admin). */
+		platformCreateVK: builder.mutation<
+			PlatformVirtualKey,
+			{
+				name: string;
+				description?: string;
+				user_id?: string;
+				team_id?: string;
+				budget_limit?: number;
+				budget_reset_duration?: string;
+			}
+		>({
 			query: (body) => ({ url: "/platform/virtual-keys", method: "POST", body }),
 			transformResponse: (response: { data?: PlatformVirtualKey }) => response.data ?? ({} as PlatformVirtualKey),
 			invalidatesTags: ["VirtualKeys"],
@@ -23,7 +33,16 @@ const virtualKeysApi = platformBaseApi.injectEndpoints({
 		/** Update one of the current user's VKs */
 		platformUpdateVK: builder.mutation<
 			PlatformVirtualKey,
-			{ id: string; data: Partial<Pick<PlatformVirtualKey, "name" | "description" | "is_active">> }
+			{
+				id: string;
+				data: {
+					name?: string;
+					description?: string;
+					is_active?: boolean;
+					budget_limit?: number;
+					budget_reset_duration?: string;
+				};
+			}
 		>({
 			query: ({ id, data }) => ({ url: `/platform/virtual-keys/${id}`, method: "PUT", body: data }),
 			transformResponse: (response: { data?: PlatformVirtualKey }) => response.data ?? ({} as PlatformVirtualKey),
@@ -44,7 +63,18 @@ const virtualKeysApi = platformBaseApi.injectEndpoints({
 		}),
 
 		/** Update a VK budget within a team (team_admin only) */
-		platformUpdateTeamVK: builder.mutation<PlatformVirtualKey, { team_id: string; vk_id: string; budget_limit?: number }>({
+		platformUpdateTeamVK: builder.mutation<
+			PlatformVirtualKey,
+			{
+				team_id: string;
+				vk_id: string;
+				budget_limit?: number;
+				budget_reset_duration?: string;
+				name?: string;
+				description?: string;
+				is_active?: boolean;
+			}
+		>({
 			query: ({ team_id, vk_id, ...body }) => ({
 				url: `/platform/teams/${team_id}/virtual-keys/${vk_id}`,
 				method: "PUT",

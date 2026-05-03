@@ -4,12 +4,14 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/fasthttp/router"
 	"github.com/google/uuid"
 	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
@@ -19,11 +21,11 @@ import (
 // PlatformVKHandler handles platform virtual key CRUD operations.
 type PlatformVKHandler struct {
 	db          *gorm.DB
-	configStore configstore.ConfigStore
+	configStore interface{} // unused but kept for future extensibility
 }
 
 // NewPlatformVKHandler creates a new PlatformVKHandler.
-func NewPlatformVKHandler(db *gorm.DB, configStore configstore.ConfigStore) *PlatformVKHandler {
+func NewPlatformVKHandler(db *gorm.DB, configStore interface{}) *PlatformVKHandler {
 	return &PlatformVKHandler{
 		db:          db,
 		configStore: configStore,
@@ -73,6 +75,7 @@ func (h *PlatformVKHandler) listMyVKs(ctx *fasthttp.RequestCtx) {
 		Order("created_at DESC").
 		Offset(int(offset)).
 		Limit(int(limit)).
+		Preload("Budgets").
 		Find(&vks).Error; err != nil {
 		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to list virtual keys", err.Error())
 		return
@@ -93,20 +96,25 @@ func (h *PlatformVKHandler) listMyVKs(ctx *fasthttp.RequestCtx) {
 	})
 }
 
-// createVK handles POST /api/platform/virtual-keys — create a virtual key for the authenticated user.
+// createVKRequest represents the POST /api/platform/virtual-keys request body.
+type createVKRequest struct {
+	Name               string   `json:"name"`
+	Description        string   `json:"description"`
+	UserID             *string  `json:"user_id,omitempty"`               // optional: specify VK owner (team_admin only)
+	TeamID             *string  `json:"team_id,omitempty"`                // optional: team association
+	BudgetLimit        *float64 `json:"budget_limit,omitempty"`          // optional: max budget in dollars
+	BudgetResetDuration *string  `json:"budget_reset_duration,omitempty"` // optional: e.g. "1d", "1w", "1M"
+}
+
+// createVK handles POST /api/platform/virtual-keys — create a virtual key.
 func (h *PlatformVKHandler) createVK(ctx *fasthttp.RequestCtx) {
-	userID := GetPlatformUserIDFromContext(ctx)
-	if userID == "" {
+	claims := GetPlatformClaimsFromContext(ctx)
+	if claims == nil {
 		sendError(ctx, fasthttp.StatusUnauthorized, "UNAUTHORIZED", "user_id is required")
 		return
 	}
 
-	var req struct {
-		Name        string  `json:"name"`
-		Description string  `json:"description"`
-		TeamID      *string `json:"team_id,omitempty"`
-	}
-
+	var req createVKRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Invalid request format")
 		return
@@ -115,6 +123,31 @@ func (h *PlatformVKHandler) createVK(ctx *fasthttp.RequestCtx) {
 	if req.Name == "" {
 		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Virtual key name is required")
 		return
+	}
+
+	// Determine the VK owner:
+	// - If user_id is not specified, the VK belongs to the authenticated user.
+	// - If user_id is specified and matches the authenticated user, use the authenticated user.
+	// - If user_id is specified and differs from the authenticated user, require team admin or org admin.
+	vkOwnerID := claims.UserID
+	if req.UserID != nil && *req.UserID != "" {
+		if *req.UserID != claims.UserID {
+			// Cross-user VK creation: require team admin of the target team (if team_id provided)
+			// or org admin of the target org (if team belongs to an org).
+			if req.TeamID != nil && *req.TeamID != "" {
+				if !claims.IsTeamAdmin(*req.TeamID) {
+					sendError(ctx, fasthttp.StatusForbidden, "FORBIDDEN", "Team admin access required to create VK for another user")
+					return
+				}
+			} else {
+				// No team_id specified — require the user to be system admin.
+				if !claims.IsAdmin {
+					sendError(ctx, fasthttp.StatusForbidden, "FORBIDDEN", "Admin access required to create VK for another user without a team")
+					return
+				}
+			}
+			}
+		vkOwnerID = *req.UserID
 	}
 
 	vkID := uuid.NewString()
@@ -126,14 +159,55 @@ func (h *PlatformVKHandler) createVK(ctx *fasthttp.RequestCtx) {
 		Description: req.Description,
 		Value:       vkValue,
 		IsActive:    true,
-		UserID:      &userID,
+		UserID:      &vkOwnerID,
 		TeamID:      req.TeamID,
 	}
 
-	if err := h.db.Create(&vk).Error; err != nil {
-		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to create virtual key", err.Error())
+	// Use transaction to ensure atomicity of VK and budget creation
+	err := h.db.Transaction(func(tx *gorm.DB) error {
+		// Create VK
+		if err := tx.Create(&vk).Error; err != nil {
+			return err
+		}
+		
+		// Create budget record if budget_limit is specified.
+		if req.BudgetLimit != nil {
+			budgetID := uuid.NewString()
+			resetDuration := "1M" // default monthly reset
+			if req.BudgetResetDuration != nil && *req.BudgetResetDuration != "" {
+				resetDuration = *req.BudgetResetDuration
+			}
+			// Validate reset duration format
+			if _, err := tables.ParseDuration(resetDuration); err != nil {
+				return fmt.Errorf("invalid budget_reset_duration format: %w", err)
+			}
+			budget := tables.TableBudget{
+				ID:              budgetID,
+				MaxLimit:        *req.BudgetLimit,
+				ResetDuration:   resetDuration,
+				LastReset:       time.Now(),
+				VirtualKeyID:    &vkID,
+				CalendarAligned: false, // Default to false
+			}
+			if err := tx.Create(&budget).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	
+	if err != nil {
+		// Check if error is a validation error
+		if strings.Contains(err.Error(), "invalid budget_reset_duration format") {
+			sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", err.Error())
+		} else {
+			sendError(ctx, fasthttp.StatusInternalServerError, "Failed to create virtual key", err.Error())
+		}
 		return
 	}
+
+	// Reload VK with budgets.
+	h.db.Preload("Budgets").First(&vk, "id = ?", vkID)
 
 	sendJSON(ctx, map[string]any{
 		"code":    "0",
@@ -157,7 +231,7 @@ func (h *PlatformVKHandler) getVK(ctx *fasthttp.RequestCtx) {
 	}
 
 	var vk tables.TableVirtualKey
-	if err := h.db.Where("id = ? AND user_id = ?", vkID, userID).First(&vk).Error; err != nil {
+	if err := h.db.Preload("Budgets").Where("id = ? AND user_id = ?", vkID, userID).First(&vk).Error; err != nil {
 		sendError(ctx, fasthttp.StatusNotFound, "NOT_FOUND", "Virtual key not found")
 		return
 	}
@@ -167,6 +241,16 @@ func (h *PlatformVKHandler) getVK(ctx *fasthttp.RequestCtx) {
 		"message": "success",
 		"data":    marshalVK(&vk),
 	})
+}
+
+// updateVKRequest represents the PUT /api/platform/virtual-keys/{vkId} request body.
+type updateVKRequest struct {
+	Name                *string          `json:"name"`
+	Description         *string          `json:"description"`
+	IsActive            *bool            `json:"is_active"`
+	ProviderConfigs     *json.RawMessage `json:"provider_configs"`
+	BudgetLimit         *float64         `json:"budget_limit,omitempty"`
+	BudgetResetDuration *string          `json:"budget_reset_duration,omitempty"`
 }
 
 // updateVK handles PUT /api/platform/virtual-keys/{vkId} — update a virtual key owned by the user.
@@ -183,13 +267,7 @@ func (h *PlatformVKHandler) updateVK(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	var req struct {
-		Name            *string          `json:"name"`
-		Description     *string          `json:"description"`
-		IsActive        *bool            `json:"is_active"`
-		ProviderConfigs *json.RawMessage `json:"provider_configs"`
-	}
-
+	var req updateVKRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Invalid request format")
 		return
@@ -221,6 +299,23 @@ func (h *PlatformVKHandler) updateVK(ctx *fasthttp.RequestCtx) {
 		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to update virtual key", err.Error())
 		return
 	}
+
+	// Upsert budget record.
+	if req.BudgetLimit != nil {
+		resetDuration := ptrStr(req.BudgetResetDuration, "1M")
+		// Validate reset duration format
+		if _, err := tables.ParseDuration(resetDuration); err != nil {
+			sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", fmt.Sprintf("Invalid budget_reset_duration format: %s", err.Error()))
+			return
+		}
+		if err := h.upsertVKBudget(vkID, *req.BudgetLimit, resetDuration); err != nil {
+			sendError(ctx, fasthttp.StatusInternalServerError, "Failed to update budget", err.Error())
+			return
+		}
+	}
+
+	// Reload VK with budgets.
+	h.db.Preload("Budgets").First(&vk, "id = ?", vkID)
 
 	sendJSON(ctx, map[string]any{
 		"code":    "0",
@@ -284,6 +379,7 @@ func (h *PlatformVKHandler) listTeamVKs(ctx *fasthttp.RequestCtx) {
 		Order("created_at DESC").
 		Offset(int(offset)).
 		Limit(int(limit)).
+		Preload("Budgets").
 		Find(&vks).Error; err != nil {
 		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to list team virtual keys", err.Error())
 		return
@@ -304,6 +400,15 @@ func (h *PlatformVKHandler) listTeamVKs(ctx *fasthttp.RequestCtx) {
 	})
 }
 
+// updateTeamVKRequest represents the PUT /api/platform/teams/{teamId}/virtual-keys/{vkId} request body.
+type updateTeamVKRequest struct {
+	Name                *string `json:"name"`
+	Description         *string `json:"description"`
+	IsActive            *bool   `json:"is_active"`
+	BudgetLimit         *float64 `json:"budget_limit,omitempty"`
+	BudgetResetDuration *string  `json:"budget_reset_duration,omitempty"`
+}
+
 // updateTeamVK handles PUT /api/platform/teams/{teamId}/virtual-keys/{vkId} — update a team virtual key.
 func (h *PlatformVKHandler) updateTeamVK(ctx *fasthttp.RequestCtx) {
 	teamID, _ := ctx.UserValue("teamId").(string)
@@ -317,12 +422,7 @@ func (h *PlatformVKHandler) updateTeamVK(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	var req struct {
-		Name        *string `json:"name"`
-		Description *string `json:"description"`
-		IsActive    *bool   `json:"is_active"`
-	}
-
+	var req updateTeamVKRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Invalid request format")
 		return
@@ -349,11 +449,55 @@ func (h *PlatformVKHandler) updateTeamVK(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	// Upsert budget record.
+	if req.BudgetLimit != nil {
+		resetDuration := ptrStr(req.BudgetResetDuration, "1M")
+		// Validate reset duration format
+		if _, err := tables.ParseDuration(resetDuration); err != nil {
+			sendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", fmt.Sprintf("Invalid budget_reset_duration format: %s", err.Error()))
+			return
+		}
+		if err := h.upsertVKBudget(vkID, *req.BudgetLimit, resetDuration); err != nil {
+			sendError(ctx, fasthttp.StatusInternalServerError, "Failed to update budget", err.Error())
+			return
+		}
+	}
+
+	// Reload VK with budgets.
+	h.db.Preload("Budgets").First(&vk, "id = ?", vkID)
+
 	sendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
 		"data":    marshalVK(&vk),
 	})
+}
+
+// upsertVKBudget creates or replaces the first budget record for a VK.
+func (h *PlatformVKHandler) upsertVKBudget(vkID string, budgetLimit float64, resetDuration string) error {
+	// Delete existing budgets for this VK.
+	if err := h.db.Where("virtual_key_id = ?", vkID).Delete(&tables.TableBudget{}).Error; err != nil {
+		return err
+	}
+	// Create new budget.
+	budgetID := uuid.NewString()
+	budget := tables.TableBudget{
+		ID:              budgetID,
+		MaxLimit:        budgetLimit,
+		ResetDuration:   resetDuration,
+		LastReset:       time.Now(),
+		VirtualKeyID:    &vkID,
+		CalendarAligned: false, // Default to false
+	}
+	return h.db.Create(&budget).Error
+}
+
+// ptrStr returns the string value if non-nil, otherwise returns the default.
+func ptrStr(s *string, defaultVal string) string {
+	if s != nil && *s != "" {
+		return *s
+	}
+	return defaultVal
 }
 
 // generatePlatformVKValue generates a virtual key value with "sk-bf-" prefix followed by a random hex string.
@@ -380,6 +524,13 @@ func marshalVK(vk *tables.TableVirtualKey) map[string]any {
 	}
 	if vk.CustomerID != nil {
 		item["customer_id"] = vk.CustomerID
+	}
+	// Flatten first budget record for convenience.
+	if len(vk.Budgets) > 0 {
+		b := vk.Budgets[0]
+		item["budget_limit"] = b.MaxLimit
+		item["budget_reset_duration"] = b.ResetDuration
+		item["current_usage"] = b.CurrentUsage
 	}
 	return item
 }

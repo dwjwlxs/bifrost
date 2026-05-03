@@ -5,99 +5,13 @@ import (
 	"context"
 	"fmt"
 	"text/template"
-
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/email"
 )
 
-// MessageSender abstracts the delivery of verification codes (email, SMS, etc.).
-// Implementations should be non-blocking and idempotent.
-type MessageSender interface {
-	// SendVerificationCode delivers a verification code to the recipient.
-	// The code is plaintext; the caller should format it for the user.
-	SendVerificationCode(ctx context.Context, recipient string, codeType VerificationCodeType, code string) error
-
-	SendInvite(recipient, subject string, data InviteData) error
+func (s *service) send(recipient, subject, body string) error {
+	return s.codeSender.Send(recipient, subject, body)
 }
 
-// InviteData holds data for invite email template.
-type InviteData struct {
-	InviterName string // Name of the person who sent the invite
-	OrgName     string // Organization name
-	TeamName    string // Team name (optional)
-	Role        string // Role the invitee will have
-	AcceptURL   string // URL to accept the invite
-	ExpiresIn   string // When the invite expires
-}
-
-// NoopMessageSender is a no-op sender that discards codes (for testing).
-type NoopMessageSender struct {
-	Codes  map[string]string
-	logger schemas.Logger
-}
-
-func NewNoopMessageSender(logger schemas.Logger) *NoopMessageSender {
-	return &NoopMessageSender{
-		Codes:  make(map[string]string),
-		logger: logger,
-	}
-}
-
-var _ MessageSender = (*NoopMessageSender)(nil)
-
-func (n *NoopMessageSender) SendVerificationCode(_ context.Context, to string, _ VerificationCodeType, code string) error {
-	if n.Codes != nil {
-		n.Codes[to] = code
-	}
-	n.logger.Info("Sending verification code %s to %s", code, to)
-	return nil
-}
-
-func (n *NoopMessageSender) SendInvite(_, _ string, _ InviteData) error {
-	return nil
-}
-
-// NewMessageSender creates a new email sender with the given config.
-func NewMessageSender(config email.Config, logger schemas.Logger) MessageSender {
-	if config.Host == "" || config.Password == "" {
-		return NewNoopMessageSender(logger)
-	}
-	return newEmailMessageSender(config, logger)
-}
-
-// NewDefaultSender creates a real email sender with localhost:25 defaults.
-// Suitable when no explicit SMTP configuration is available.
-// Emails will be attempted via a local SMTP relay; failures are non-fatal at the call site.
-func NewDefaultSender() MessageSender {
-	return newEmailMessageSender(email.Config{
-		Host: "localhost",
-		Port: 25,
-		From: "noreply@localhost",
-	}, bifrost.NewNoOpLogger())
-}
-
-type EmailMessageSender struct {
-	config email.Config
-	sender email.Sender
-	logger schemas.Logger
-}
-
-func newEmailMessageSender(conf email.Config, logger schemas.Logger) MessageSender {
-	return &EmailMessageSender{
-		config: conf,
-		sender: email.NewSender(conf),
-		logger: logger,
-	}
-}
-
-// Send sends email via SMTP.
-func (s *EmailMessageSender) Send(recipient, subject, body string) error {
-	return s.sender.Send(recipient, subject, body)
-}
-
-// SendVerificationCode sends a verification code email via SendGrid.
-func (s *EmailMessageSender) SendVerificationCode(ctx context.Context, recipient string, codeType VerificationCodeType, code string) error {
+func (s *service) sendVerificationCode(ctx context.Context, recipient string, codeType VerificationCodeType, code string) error {
 	body, err := s.renderVerificationCodeTemplate(recipient, codeType, code)
 	if err != nil {
 		return err
@@ -114,11 +28,11 @@ func (s *EmailMessageSender) SendVerificationCode(ctx context.Context, recipient
 		return fmt.Errorf("unknown code type: %s", codeType)
 	}
 
-	return s.Send(recipient, subject, body)
+	return s.send(recipient, subject, body)
 }
 
 // renderVerificationCodeTemplate renders the verification code email as HTML.
-func (s *EmailMessageSender) renderVerificationCodeTemplate(recipient string, codeType VerificationCodeType, code string) (string, error) {
+func (s *service) renderVerificationCodeTemplate(recipient string, codeType VerificationCodeType, code string) (string, error) {
 	const tmpl = `<!DOCTYPE html>
 <html>
 <head>
@@ -168,30 +82,5 @@ func (s *EmailMessageSender) renderVerificationCodeTemplate(recipient string, co
 		return "", err
 	}
 
-	return buf.String(), nil
-}
-
-// SendInvite sends an invite email via SendGrid.
-func (s *EmailMessageSender) SendInvite(recipient, subject string, data InviteData) error {
-	body, err := s.renderInviteTemplate(data)
-	if err != nil {
-		return err
-	}
-	return s.Send(recipient, subject, body)
-}
-
-func (s *EmailMessageSender) renderInviteTemplate(data InviteData) (string, error) {
-	var buf bytes.Buffer
-	buf.WriteString(fmt.Sprintf(`You've been invited to join %s`, data.OrgName))
-	if data.TeamName != "" {
-		buf.WriteString(fmt.Sprintf(` as part of the %s team`, data.TeamName))
-	}
-	buf.WriteString(fmt.Sprintf(`.
-
-Role: %s
-Invited by: %s
-Accept URL: %s
-Expires: %s
-`, data.Role, data.InviterName, data.AcceptURL, data.ExpiresIn))
 	return buf.String(), nil
 }

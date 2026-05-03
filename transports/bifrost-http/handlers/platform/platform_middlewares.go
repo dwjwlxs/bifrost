@@ -3,6 +3,7 @@ package handlers
 import (
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
+	"github.com/maximhq/bifrost/framework/model"
 	"github.com/valyala/fasthttp"
 	"gorm.io/gorm"
 )
@@ -17,7 +18,8 @@ type platformVKKey struct{}
 type platformTeamKey struct{}
 
 // GetPlatformResolvedRoleFromContext returns the resolved role string set by
-// role middlewares (e.g., "org_admin", "team_admin"). Returns empty string if not set.
+// role middlewares (e.g., ResolvedRoleOrgAdmin, ResolvedRoleTeamAdmin).
+// Returns empty string if not set.
 func GetPlatformResolvedRoleFromContext(ctx *fasthttp.RequestCtx) string {
 	if v := ctx.UserValue(platformResolvedRoleKey{}); v != nil {
 		if s, ok := v.(string); ok {
@@ -52,7 +54,7 @@ func RequireAdmin(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 
 // RequireOrgAdmin checks that the platform user is an admin for the organization
 // identified by the :orgId path parameter.
-// Sets platform_resolved_role to "org_admin" on success.
+// Sets platform_resolved_role to ResolvedRoleOrgAdmin on success.
 func RequireOrgAdmin(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		claims := GetPlatformClaimsFromContext(ctx)
@@ -72,7 +74,7 @@ func RequireOrgAdmin(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 			return
 		}
 
-		ctx.SetUserValue(platformResolvedRoleKey{}, "org_admin")
+		ctx.SetUserValue(platformResolvedRoleKey{}, model.ResolvedRoleOrgAdmin)
 		next(ctx)
 	}
 }
@@ -93,14 +95,7 @@ func RequireOrgMember(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 			return
 		}
 
-		isMember := false
-		for _, org := range claims.Orgs {
-			if org.ID == orgID {
-				isMember = true
-				break
-			}
-		}
-		if !isMember {
+		if !claims.IsOrgMember(orgID) {
 			sendError(ctx, fasthttp.StatusForbidden, "FORBIDDEN", "Organization membership required")
 			return
 		}
@@ -113,7 +108,7 @@ func RequireOrgMember(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 // identified by the :teamId path parameter.
 // First checks if the user is org_admin for the team's parent org (org_admin implies team_admin).
 // Then checks claims.IsTeamAdmin(teamID).
-// Sets platform_resolved_role to "org_admin" or "team_admin" on success.
+// Sets platform_resolved_role to ResolvedRoleOrgAdmin or ResolvedRoleTeamAdmin on success.
 func RequireTeamAdmin(db *gorm.DB) schemas.BifrostHTTPMiddleware {
 	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 		return func(ctx *fasthttp.RequestCtx) {
@@ -134,7 +129,7 @@ func RequireTeamAdmin(db *gorm.DB) schemas.BifrostHTTPMiddleware {
 			var team tables.TableTeam
 			if err := db.Where("id = ?", teamID).First(&team).Error; err == nil && team.CustomerID != nil {
 				if claims.IsOrgAdmin(*team.CustomerID) {
-					ctx.SetUserValue(platformResolvedRoleKey{}, "org_admin")
+					ctx.SetUserValue(platformResolvedRoleKey{}, model.ResolvedRoleOrgAdmin)
 					next(ctx)
 					return
 				}
@@ -142,7 +137,7 @@ func RequireTeamAdmin(db *gorm.DB) schemas.BifrostHTTPMiddleware {
 
 			// Check direct team admin
 			if claims.IsTeamAdmin(teamID) {
-				ctx.SetUserValue(platformResolvedRoleKey{}, "team_admin")
+				ctx.SetUserValue(platformResolvedRoleKey{}, model.ResolvedRoleTeamAdmin)
 				next(ctx)
 				return
 			}
@@ -154,11 +149,18 @@ func RequireTeamAdmin(db *gorm.DB) schemas.BifrostHTTPMiddleware {
 
 // RequireTeamMember checks that the platform user is a member of the team
 // identified by the :teamId path parameter, or is org_admin.
+// System admins (is_admin=true) are implicitly team members.
 func RequireTeamMember(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		claims := GetPlatformClaimsFromContext(ctx)
 		if claims == nil {
 			sendError(ctx, fasthttp.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
+			return
+		}
+
+		// System admins are implicitly team members
+		if claims.IsAdmin {
+			next(ctx)
 			return
 		}
 
@@ -170,7 +172,7 @@ func RequireTeamMember(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 
 		// org_admin implies team_member
 		for _, org := range claims.Orgs {
-			if org.Role == "admin" || org.Role == "owner" {
+			if model.IsOrgAdminRole(org.Role) {
 				next(ctx)
 				return
 			}

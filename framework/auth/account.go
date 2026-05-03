@@ -43,7 +43,7 @@ func (s *service) ChangeEmail(ctx context.Context, userID string, req ChangeEmai
 	}
 
 	// Send the code (fire and forget)
-	_ = s.codeSender.SendVerificationCode(ctx, newEmail, VerificationCodeTypeEmailChange, code)
+	_ = s.sendVerificationCode(ctx, newEmail, VerificationCodeTypeEmailChange, code)
 
 	return nil
 }
@@ -90,7 +90,7 @@ func (s *service) VerifyEmailChange(ctx context.Context, userID string, req Veri
 
 	// Notify old email (fire and forget, non-fatal)
 	if user.Email != "" {
-		_ = s.codeSender.SendVerificationCode(ctx, user.Email, VerificationCodeTypeEmailVerify, "your email has been changed to "+newEmail)
+		_ = s.sendVerificationCode(ctx, user.Email, VerificationCodeTypeEmailVerify, "your email has been changed to "+newEmail)
 	}
 
 	return nil
