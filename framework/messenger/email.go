@@ -1,34 +1,11 @@
-// Package email provides email sending functionality for Bifrost.
-package email
+package messenger
 
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/go-mail/mail/v2"
 )
-
-// Config holds SMTP configuration.
-type Config struct {
-	Host     string // SMTP server host (e.g., "smtp.gmail.com")
-	Port     int    // SMTP server port (e.g., 587 for TLS, 465 for SSL)
-	Username string // SMTP auth username
-	Password string // SMTP auth password (or app password)
-	From     string // Sender email address
-	UseTLS   bool   // Use TLS (port 587)
-	UseSSL   bool   // Use SSL (port 465)
-	AppURL   string // Base URL for constructing invite links (e.g., "https://app.bifrost.ai")
-}
-
-// Interface for email sender (allows swapping implementations).
-type Sender interface {
-	Send(to, subject, body string) error
-}
-
-func NewSender(config Config) Sender {
-	return &EmailSender{config: config}
-}
 
 // EmailSender handles email sending using go-mail/mail.
 type EmailSender struct {
@@ -53,38 +30,11 @@ func (s *EmailSender) Send(to, subject, htmlBody string) error {
 		d.StartTLSPolicy = mail.MandatoryStartTLS
 	}
 
-	return d.DialAndSend(m)
-}
-
-// NoOpSender is a sender that logs emails instead of sending them.
-// Useful for development and testing.
-type NoOpSender struct {
-	mu     sync.Mutex
-	emails []NoOpEmail
-}
-
-// NoOpEmail represents a logged email.
-type NoOpEmail struct {
-	To      string
-	Subject string
-	Body    string
-}
-
-// NewNoOpSender creates a sender that logs emails instead of sending.
-func NewNoOpSender() Sender {
-	return &NoOpSender{}
-}
-
-// Send logs the email instead of sending it.
-func (s *NoOpSender) Send(to, subject, body string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.emails = append(s.emails, NoOpEmail{
-		To:      to,
-		Subject: subject,
-		Body:    body,
-	})
-	fmt.Printf("[EMAIL] To: %s, Subject: %s\n", to, subject)
+	if err := d.DialAndSend(m); err != nil {
+		s.config.Logger.Error("failed to send email: %v, %v, %v", to, subject, err)
+		return err
+	}
+	s.config.Logger.Debug("email sent successfully: %v, %v, %v", to, subject, htmlBody)
 	return nil
 }
 

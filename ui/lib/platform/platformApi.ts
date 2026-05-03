@@ -18,7 +18,7 @@
  *   /api/platform/teams/:teamId/members             → RequireTeamAdmin
  *   /api/platform/admin/orgs                         → RequireAdmin (system-wide)
  *   /api/platform/admin/users                        → RequireAdmin
- *   /api/platform/invitations/:token/accept          → public
+ *   /api/platform/invitations/:token/accept          → RequireAuth (email must match invite)
  *
  * Type conventions:
  *   API responses follow { code, message, data } wrapper.
@@ -33,6 +33,7 @@ import "./endpoints/organizations";
 import "./endpoints/teams";
 import "./endpoints/admin";
 import "./endpoints/billing";
+import "./endpoints/invitations";
 import "./endpoints/providers";
 
 // ─── Re-export types (single source of truth: ./types.ts) ─────────
@@ -72,7 +73,6 @@ export {
 	usePlatformRegisterMutation,
 	usePlatformVerifyEmailMutation,
 	usePlatformResendVerificationMutation,
-	usePlatformAcceptInvitationMutation,
 } from "./endpoints/auth";
 
 // Profile
@@ -96,7 +96,11 @@ export {
 export {
 	usePlatformListOrgsQuery,
 	usePlatformGetOrgQuery,
+	usePlatformUpdateOrgMutation,
 	usePlatformListOrgMembersQuery,
+	usePlatformInviteOrgMemberMutation,
+	usePlatformRemoveOrgMemberMutation,
+	usePlatformUpdateOrgMemberMutation,
 	usePlatformListOrgTeamsQuery,
 	usePlatformCreateOrgTeamMutation,
 } from "./endpoints/organizations";
@@ -106,6 +110,7 @@ export {
 	usePlatformListTeamsQuery,
 	usePlatformGetTeamQuery,
 	usePlatformUpdateTeamMutation,
+	usePlatformDeleteTeamMutation,
 	usePlatformListTeamMembersQuery,
 	usePlatformInviteTeamMemberMutation,
 	usePlatformRemoveTeamMemberMutation,
@@ -152,3 +157,9 @@ export {
 	usePlatformAdminUpdateProviderKeyMutation,
 	usePlatformAdminDeleteProviderKeyMutation,
 } from "./endpoints/providers";
+
+// Invitations
+export {
+	usePlatformGetInvitationQuery,
+	usePlatformAcceptInvitationMutation,
+} from "./endpoints/invitations";

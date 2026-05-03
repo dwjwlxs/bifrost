@@ -19,11 +19,55 @@ const organizationsApi = platformBaseApi.injectEndpoints({
 			providesTags: (result, error, id) => [{ type: "Orgs", id }],
 		}),
 
+		/** Update organization (org_admin only) */
+		platformUpdateOrg: builder.mutation<PlatformOrg, { id: string; name?: string }>({
+			query: ({ id, ...body }) => ({ url: `/platform/orgs/${id}`, method: "PUT", body }),
+			invalidatesTags: ["Orgs"],
+		}),
+
 		/** List members of an organization (org_admin only) */
 		platformListOrgMembers: builder.query<PlatformOrgMember[], string>({
 			query: (orgId) => ({ url: `/platform/orgs/${orgId}/members`, method: "GET" }),
 			transformResponse: (response: { data?: { items?: PlatformOrgMember[] } }) => response.data?.items ?? [],
 			providesTags: ["Users"],
+		}),
+
+		/** Invite a member to an organization (org_admin only) */
+		platformInviteOrgMember: builder.mutation<
+			{ code: string; message: string },
+			{ org_id: string; email: string; role?: "admin" | "member" }
+		>({
+			query: ({ org_id, ...body }) => ({
+				url: `/platform/orgs/${org_id}/members/invite`,
+				method: "POST",
+				body,
+			}),
+			invalidatesTags: ["Users"],
+		}),
+
+		/** Remove a member from an organization (org_admin only) */
+		platformRemoveOrgMember: builder.mutation<
+			{ code: string; message: string },
+			{ org_id: string; user_id: string }
+		>({
+			query: ({ org_id, user_id }) => ({
+				url: `/platform/orgs/${org_id}/members/${user_id}`,
+				method: "DELETE",
+			}),
+			invalidatesTags: ["Users"],
+		}),
+
+		/** Update a member's role in an organization (org_admin only) */
+		platformUpdateOrgMember: builder.mutation<
+			{ code: string; message: string },
+			{ org_id: string; user_id: string; role: "admin" | "member" }
+		>({
+			query: ({ org_id, user_id, role }) => ({
+				url: `/platform/orgs/${org_id}/members/${user_id}`,
+				method: "PUT",
+				body: { role },
+			}),
+			invalidatesTags: ["Users"],
 		}),
 
 		/** List teams within an organization (org_admin only) */
@@ -49,7 +93,11 @@ const organizationsApi = platformBaseApi.injectEndpoints({
 export const {
 	usePlatformListOrgsQuery,
 	usePlatformGetOrgQuery,
+	usePlatformUpdateOrgMutation,
 	usePlatformListOrgMembersQuery,
+	usePlatformInviteOrgMemberMutation,
+	usePlatformRemoveOrgMemberMutation,
+	usePlatformUpdateOrgMemberMutation,
 	usePlatformListOrgTeamsQuery,
 	usePlatformCreateOrgTeamMutation,
 } = organizationsApi;

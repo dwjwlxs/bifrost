@@ -1130,20 +1130,23 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	}
 	platformAuthHandler := platform_handlers.NewPlatformAuthHandler(db, s.Config.ConsumerAuthService, s.Config.ConfigStore)
 	platformAdminHandler := platform_handlers.NewPlatformAdminHandler(db, s.Config.ConfigStore, s.Config.ConsumerAuthService)
-	platformOrgHandler := platform_handlers.NewPlatformOrgHandler(db, s.Config.ConfigStore)
-	platformTeamHandler := platform_handlers.NewPlatformTeamHandler(db, s.Config.ConfigStore)
+	platformOrgHandler := platform_handlers.NewPlatformOrgHandler(db, s.Config.ConfigStore, logger, s.Config.Messenger, s.Config.PlatformURL)
+	platformTeamHandler := platform_handlers.NewPlatformTeamHandler(db, s.Config.ConfigStore, logger, s.Config.Messenger, s.Config.PlatformURL)
 	platformVKHandler := platform_handlers.NewPlatformVKHandler(db, s.Config.ConfigStore)
+	platformInvitationHandler := platform_handlers.NewPlatformInvitationHandler(db, logger, s.Config.Messenger, s.Config.PlatformURL)
 	// Platform protected routes need PlatformAuthMiddleware
 	var platformProtectedMw = make([]schemas.BifrostHTTPMiddleware, len(middlewares), len(middlewares)+1)
 	copy(platformProtectedMw, middlewares)
 	platformProtectedMw = append(platformProtectedMw, platform_handlers.PlatformAuthMiddleware(db, s.Config.ConsumerAuthService))
 
 	// Platform multi-tenant routes
-	platformAuthHandler.RegisterRoutes(s.Router, middlewares...)          // login/register are public
-	platformAdminHandler.RegisterRoutes(s.Router, platformProtectedMw...) // admin needs auth
-	platformOrgHandler.RegisterRoutes(s.Router, platformProtectedMw...)   // org needs auth
-	platformTeamHandler.RegisterRoutes(s.Router, platformProtectedMw...)  // team needs auth
-	platformVKHandler.RegisterRoutes(s.Router, platformProtectedMw...)    // VK needs auth
+	platformAuthHandler.RegisterRoutes(s.Router, middlewares...)                    // login/register are public
+	platformAdminHandler.RegisterRoutes(s.Router, platformProtectedMw...)           // admin needs auth
+	platformOrgHandler.RegisterRoutes(s.Router, platformProtectedMw...)             // org needs auth
+	platformTeamHandler.RegisterRoutes(s.Router, platformProtectedMw...)            // team needs auth
+	platformVKHandler.RegisterRoutes(s.Router, platformProtectedMw...)              // VK needs auth
+	platformInvitationHandler.RegisterRoutes(s.Router)                              // GET /invitations/:token (public)
+	platformInvitationHandler.RegisterAcceptRoute(s.Router, platformProtectedMw...) // POST /invitations/:token/accept (auth required)
 
 	// OAuth metadata + per-user OAuth endpoints (no auth middleware — must be publicly accessible)
 	oauthMetadataHandler := handlers.NewOAuthMetadataHandler(s.Config)

@@ -25,6 +25,8 @@ export interface NavItem {
 	requireAdmin?: boolean;
 	/** If true, visible when user is org_admin or team_admin */
 	requireOrgOrTeamAdmin?: boolean;
+	/** If true, renders as a visual separator instead of a link */
+	separator?: boolean;
 }
 
 export const consoleNavItems: NavItem[] = [
@@ -42,14 +44,21 @@ export const adminNavItems: NavItem[] = [
 	{ label: "Model Prices", to: "/platform/console/admin/model-prices", icon: DollarSign, requireAdmin: true },
 ];
 
+const adminSeparator: NavItem = { label: "", to: "", icon: Building2, separator: true };
+
 /**
  * Returns all visible nav items for a given user role flags.
  */
 export function getVisibleNavItems(opts: { isAdmin: boolean; isOwner: boolean; isTeamAdmin: boolean }): NavItem[] {
 	const isPrivileged = opts.isAdmin || opts.isOwner || opts.isTeamAdmin;
-	return [...consoleNavItems, ...adminNavItems].filter((item) => {
-		if (item.requireAdmin) return opts.isAdmin;
+	const visibleConsole = consoleNavItems.filter((item) => {
+		if (item.requireAdmin) return false;
 		if (item.requireOrgOrTeamAdmin) return isPrivileged;
 		return true;
 	});
+	const visibleAdmin = adminNavItems.filter((item) => item.requireAdmin && opts.isAdmin);
+	if (visibleConsole.length === 0 || visibleAdmin.length === 0) {
+		return [...visibleConsole, ...visibleAdmin];
+	}
+	return [...visibleConsole, adminSeparator, ...visibleAdmin];
 }

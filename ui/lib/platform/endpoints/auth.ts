@@ -30,9 +30,6 @@ const authApi = platformBaseApi.injectEndpoints({
 			query: (body) => ({ url: "/auth/resend-verification", method: "POST", body }),
 		}),
 
-		platformAcceptInvitation: builder.mutation<{ code: string; message: string; data?: { token: string } }, { token: string }>({
-			query: (body) => ({ url: `/platform/invitations/${body.token}/accept`, method: "POST" }),
-		}),
 	}),
 });
 
@@ -41,5 +38,4 @@ export const {
 	usePlatformRegisterMutation,
 	usePlatformVerifyEmailMutation,
 	usePlatformResendVerificationMutation,
-	usePlatformAcceptInvitationMutation,
 } = authApi;

@@ -9,11 +9,12 @@ import (
 	"time"
 
 	"github.com/fasthttp/router"
-	fauth "github.com/maximhq/bifrost/framework/auth"
 	"github.com/google/uuid"
 	"github.com/maximhq/bifrost/core/schemas"
+	fauth "github.com/maximhq/bifrost/framework/auth"
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
+	"github.com/maximhq/bifrost/framework/model"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
 	"gorm.io/gorm"
@@ -22,17 +23,17 @@ import (
 
 // PlatformAdminHandler handles system admin API operations.
 type PlatformAdminHandler struct {
-	db               *gorm.DB
-	configStore      configstore.ConfigStore
-	consumerAuth     fauth.AuthService
+	db           *gorm.DB
+	configStore  configstore.ConfigStore
+	consumerAuth fauth.AuthService
 }
 
 // NewPlatformAdminHandler creates a new PlatformAdminHandler.
 func NewPlatformAdminHandler(db *gorm.DB, configStore configstore.ConfigStore, consumerAuth fauth.AuthService) *PlatformAdminHandler {
 	return &PlatformAdminHandler{
-		db:               db,
-		configStore:      configStore,
-		consumerAuth:     consumerAuth,
+		db:           db,
+		configStore:  configStore,
+		consumerAuth: consumerAuth,
 	}
 }
 
@@ -140,7 +141,7 @@ func (h *PlatformAdminHandler) createOrg(ctx *fasthttp.RequestCtx) {
 		orgMember := tables.TablePlatformOrgMember{
 			OrgID:    orgID,
 			UserID:   *req.AdminUserID,
-			Role:     "admin",
+			Role:     model.OrgRoleAdmin,
 			JoinedAt: now,
 		}
 		if err := tx.Create(&orgMember).Error; err != nil {
@@ -203,8 +204,8 @@ func (h *PlatformAdminHandler) updateOrg(ctx *fasthttp.RequestCtx) {
 	}
 
 	var req struct {
-		Name         string  `json:"name"`
-		OwnerUserID  *string `json:"owner_user_id,omitempty"`
+		Name        string  `json:"name"`
+		OwnerUserID *string `json:"owner_user_id,omitempty"`
 	}
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		sendError(ctx, fasthttp.StatusBadRequest, "Invalid request format", err.Error())
@@ -222,6 +223,74 @@ func (h *PlatformAdminHandler) updateOrg(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	// Check if owner is actually changing
+	ownerChanged := req.OwnerUserID != nil && (customer.OwnerUserID == nil || *req.OwnerUserID != *customer.OwnerUserID)
+
+	if ownerChanged {
+		// Use transaction to atomically update customer + sync platform_org_members
+		tx := h.db.Begin()
+		if tx.Error != nil {
+			sendError(ctx, fasthttp.StatusInternalServerError, "Failed to start transaction", tx.Error.Error())
+			return
+		}
+
+		// 1. Update customer record
+		customer.Name = req.Name
+		customer.OwnerUserID = req.OwnerUserID
+		if err := tx.Save(&customer).Error; err != nil {
+			tx.Rollback()
+			sendError(ctx, fasthttp.StatusInternalServerError, "Failed to update organization", err.Error())
+			return
+		}
+
+		newOwnerID := *req.OwnerUserID
+
+		// 2. Upsert new owner into platform_org_members with role='owner'
+		var newOwnerMember tables.TablePlatformOrgMember
+		if err := tx.Where("org_id = ? AND user_id = ?", orgID, newOwnerID).FirstOrInit(&newOwnerMember).Error; err != nil {
+			tx.Rollback()
+			sendError(ctx, fasthttp.StatusInternalServerError, "Failed to lookup org member", err.Error())
+			return
+		}
+		newOwnerMember.OrgID = orgID
+		newOwnerMember.UserID = newOwnerID
+		newOwnerMember.Role = model.OrgRoleOwner
+		newOwnerMember.JoinedAt = time.Now()
+		if err := tx.Save(&newOwnerMember).Error; err != nil {
+			tx.Rollback()
+			sendError(ctx, fasthttp.StatusInternalServerError, "Failed to add new owner to org members", err.Error())
+			return
+		}
+
+		// 3. Remove old owner from platform_org_members (if existed and different from new)
+		if customer.OwnerUserID != nil && *customer.OwnerUserID != newOwnerID {
+			if err := tx.Where("org_id = ? AND user_id = ?", orgID, *customer.OwnerUserID).Delete(&tables.TablePlatformOrgMember{}).Error; err != nil {
+				tx.Rollback()
+				sendError(ctx, fasthttp.StatusInternalServerError, "Failed to remove old owner from org members", err.Error())
+				return
+			}
+		}
+
+		if err := tx.Commit().Error; err != nil {
+			tx.Rollback()
+			sendError(ctx, fasthttp.StatusInternalServerError, "Failed to commit transaction", err.Error())
+			return
+		}
+
+		sendJSON(ctx, map[string]any{
+			"code":    "0",
+			"message": "success",
+			"data": map[string]any{
+				"id":            customer.ID,
+				"name":          customer.Name,
+				"owner_user_id": customer.OwnerUserID,
+				"updated_at":    customer.UpdatedAt,
+			},
+		})
+		return
+	}
+
+	// No owner change — simple update (original logic)
 	customer.Name = req.Name
 	if req.OwnerUserID != nil {
 		customer.OwnerUserID = req.OwnerUserID
@@ -300,7 +369,7 @@ func (h *PlatformAdminHandler) listUsers(ctx *fasthttp.RequestCtx) {
 	}
 
 	search := string(ctx.QueryArgs().Peek("search"))
-	
+
 	users, total, err := h.consumerAuth.ListUsers(context.Background(), int(offset), int(limit), search)
 	if err != nil {
 		sendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("%d", fasthttp.StatusInternalServerError), fmt.Sprintf("Failed to list users: %s", err.Error()))
@@ -359,24 +428,24 @@ func (h *PlatformAdminHandler) listUsers(ctx *fasthttp.RequestCtx) {
 		// Derive display role: admin > org_admin > team_admin > team_member > user
 		role := "user"
 		if isAdmin {
-			role = "admin"
+			role = model.RoleAdmin
 		} else {
 			for _, o := range orgs {
-				if o["role"] == "admin" {
-					role = "org_admin"
+				if r, ok := o["role"].(string); ok && model.IsOrgAdminRole(r) {
+					role = model.ResolvedRoleOrgAdmin
 					break
 				}
 			}
 			if role == "user" {
 				for _, t := range teams {
-					if t["role"] == "admin" {
-						role = "team_admin"
+					if r, ok := t["role"].(string); ok && model.IsTeamAdminRole(r) {
+						role = model.ResolvedRoleTeamAdmin
 						break
 					}
 				}
 			}
 			if role == "user" && (len(orgs) > 0 || len(teams) > 0) {
-				role = "team_member"
+				role = model.ResolvedRoleTeamMember
 			}
 		}
 
@@ -430,8 +499,8 @@ func (h *PlatformAdminHandler) updateUserStatus(ctx *fasthttp.RequestCtx) {
 
 	// Validate status — only allow active, suspended, pending_verification
 	validStatuses := map[string]bool{
-		"active":              true,
-		"suspended":           true,
+		"active":               true,
+		"suspended":            true,
 		"pending_verification": true,
 	}
 	if !validStatuses[req.Status] {

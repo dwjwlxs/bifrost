@@ -24,6 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Copy, Trash2, Eye, EyeOff, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import type { PlatformVirtualKey } from "@/lib/platform/platformApi";
@@ -43,12 +44,16 @@ export default function VirtualKeysPage() {
 	const [newName, setNewName] = useState("");
 	const [newDesc, setNewDesc] = useState("");
 	const [newTeamId, setNewTeamId] = useState<string>("");
+	const [newBudgetLimit, setNewBudgetLimit] = useState<string>("0");
+	const [newBudgetResetDuration, setNewBudgetResetDuration] = useState<string>("1h");
 
 	// Edit form state
 	const [editingVK, setEditingVK] = useState<PlatformVirtualKey | null>(null);
 	const [editName, setEditName] = useState("");
 	const [editDesc, setEditDesc] = useState("");
 	const [editActive, setEditActive] = useState(true);
+	const [editBudgetLimit, setEditBudgetLimit] = useState<string>("");
+	const [editBudgetResetDuration, setEditBudgetResetDuration] = useState<string>("");
 
 	const toggleKeyVisibility = (keyId: string) => {
 		setShowKeys((prev) => ({
@@ -75,6 +80,8 @@ export default function VirtualKeysPage() {
 		setEditName(vk.name);
 		setEditDesc(vk.description || "");
 		setEditActive(vk.is_active);
+		setEditBudgetLimit(vk.budget_limit?.toString() || "");
+		setEditBudgetResetDuration(vk.budget_reset_duration || "1h");
 		setEditOpen(true);
 	};
 
@@ -84,16 +91,33 @@ export default function VirtualKeysPage() {
 			return;
 		}
 		try {
-			await createVK({
+			const payload: any = {
 				name: newName.trim(),
 				description: newDesc.trim() || undefined,
 				team_id: newTeamId || undefined,
-			}).unwrap();
+			};
+
+			// Add budget limit if provided (0 means unlimited, skip it)
+			if (newBudgetLimit.trim() && newBudgetLimit !== "0") {
+				const budgetValue = parseFloat(newBudgetLimit);
+				if (!isNaN(budgetValue) && budgetValue >= 0) {
+					payload.budget_limit = budgetValue;
+				}
+			}
+
+			// Add budget reset duration if provided and not "1h"
+			if (newBudgetResetDuration.trim() && newBudgetResetDuration !== "1h") {
+				payload.budget_reset_duration = newBudgetResetDuration;
+			}
+
+			await createVK(payload).unwrap();
 			toast.success("Virtual key created successfully");
 			setCreateOpen(false);
 			setNewName("");
 			setNewDesc("");
 			setNewTeamId("");
+			setNewBudgetLimit("0");
+			setNewBudgetResetDuration("1h");
 		} catch (error: unknown) {
 			const message =
 				error instanceof Error
@@ -109,13 +133,32 @@ export default function VirtualKeysPage() {
 			return;
 		}
 		try {
+			const data: any = {
+				name: editName.trim(),
+				description: editDesc.trim() || undefined,
+				is_active: editActive,
+			};
+
+			// Add budget limit if provided (0 means unlimited, skip it)
+			if (editBudgetLimit.trim() && editBudgetLimit !== "0") {
+				const budgetValue = parseFloat(editBudgetLimit);
+				if (!isNaN(budgetValue) && budgetValue >= 0) {
+					data.budget_limit = budgetValue;
+				}
+			} else if (editBudgetLimit === "" || editBudgetLimit === "0") {
+				data.budget_limit = undefined;
+			}
+
+			// Add budget reset duration if provided and not "1h"
+			if (editBudgetResetDuration.trim() && editBudgetResetDuration !== "1h") {
+				data.budget_reset_duration = editBudgetResetDuration;
+			} else if (editBudgetResetDuration === "" || editBudgetResetDuration === "1h") {
+				data.budget_reset_duration = undefined;
+			}
+
 			await updateVK({
 				id: editingVK.id,
-				data: {
-					name: editName.trim(),
-					description: editDesc.trim() || undefined,
-					is_active: editActive,
-				},
+				data,
 			}).unwrap();
 			toast.success("Virtual key updated successfully");
 			setEditOpen(false);
@@ -222,10 +265,59 @@ export default function VirtualKeysPage() {
 												{team.name}
 											</option>
 										))}
-									</select>
-								</div>
-							)}
-						</div>
+						</select>
+					</div>
+				)}
+
+				{/* Budget limit */}
+				<div className="space-y-2">
+					<Label htmlFor="vk-budget">
+						Budget Limit (USD) <span className="text-muted-foreground font-normal">(optional)</span>
+					</Label>
+					<Input
+						id="vk-budget"
+						type="number"
+						min="0"
+						step="0.01"
+						placeholder="100.00 (0 or empty = no limit)"
+						value={newBudgetLimit}
+						onChange={(e) => setNewBudgetLimit(e.target.value)}
+						disabled={isCreating}
+					/>
+					<p className="text-muted-foreground text-xs">
+						Set to a positive number for a budget limit.
+					</p>
+				</div>
+
+				{/* Budget reset duration */}
+				<div className="space-y-2">
+					<Label htmlFor="vk-reset-duration">
+						Budget Reset Duration <span className="text-muted-foreground font-normal">(optional)</span>
+					</Label>
+					<Select
+						value={newBudgetResetDuration}
+						onValueChange={setNewBudgetResetDuration}
+						disabled={isCreating}
+					>
+						<SelectTrigger id="vk-reset-duration">
+							<SelectValue placeholder="Select reset period (e.g., '1M' for monthly)" />
+						</SelectTrigger>
+						<SelectContent>
+						<SelectItem value="none">No reset (one-time budget)</SelectItem>
+								<SelectItem value="1h">Hourly</SelectItem>
+								<SelectItem value="1D">Daily</SelectItem>
+							<SelectItem value="1W">Weekly</SelectItem>
+							<SelectItem value="2W">Bi-weekly</SelectItem>
+							<SelectItem value="1M">Monthly</SelectItem>
+							<SelectItem value="3M">Quarterly</SelectItem>
+							<SelectItem value="1Y">Yearly</SelectItem>
+						</SelectContent>
+					</Select>
+					<p className="text-muted-foreground text-xs">
+						Examples: "1D" (daily), "1W" (weekly), "1M" (monthly)
+					</p>
+				</div>
+			</div>
 						<div className="flex justify-end gap-2">
 							<Button variant="outline" onClick={() => setCreateOpen(false)} disabled={isCreating}>
 								Cancel
@@ -381,16 +473,65 @@ export default function VirtualKeysPage() {
 								<p id="edit-vk-active-desc" className="text-muted-foreground text-xs">
 									{editActive ? "Key is enabled and can be used" : "Key is disabled and cannot be used"}
 								</p>
-							</div>
-							<Switch
-								id="edit-vk-active"
-								aria-describedby="edit-vk-active-desc"
-								checked={editActive}
-								onCheckedChange={setEditActive}
-								disabled={isUpdating}
-							/>
-						</div>
 					</div>
+					<Switch
+						id="edit-vk-active"
+						aria-describedby="edit-vk-active-desc"
+						checked={editActive}
+						onCheckedChange={setEditActive}
+						disabled={isUpdating}
+					/>
+				</div>
+
+				{/* Budget limit */}
+				<div className="space-y-2">
+					<Label htmlFor="edit-vk-budget">
+						Budget Limit (USD) <span className="text-muted-foreground font-normal">(optional)</span>
+					</Label>
+					<Input
+						id="edit-vk-budget"
+						type="number"
+						min="0"
+						step="0.01"
+						placeholder="100.00 (0 or empty = no limit)"
+						value={editBudgetLimit}
+						onChange={(e) => setEditBudgetLimit(e.target.value)}
+						disabled={isUpdating}
+					/>
+					<p className="text-muted-foreground text-xs">
+						Set to a positive number for a budget limit.
+					</p>
+				</div>
+
+				{/* Budget reset duration */}
+				<div className="space-y-2">
+					<Label htmlFor="edit-vk-reset-duration">
+						Budget Reset Duration <span className="text-muted-foreground font-normal">(optional)</span>
+					</Label>
+					<Select
+						value={editBudgetResetDuration}
+						onValueChange={setEditBudgetResetDuration}
+						disabled={isUpdating}
+					>
+						<SelectTrigger id="edit-vk-reset-duration">
+							<SelectValue placeholder="Select reset period (e.g., '1M' for monthly)" />
+						</SelectTrigger>
+						<SelectContent>
+						<SelectItem value="none">No reset (one-time budget)</SelectItem>
+								<SelectItem value="1h">Hourly</SelectItem>
+								<SelectItem value="1D">Daily</SelectItem>
+							<SelectItem value="1W">Weekly</SelectItem>
+							<SelectItem value="2W">Bi-weekly</SelectItem>
+							<SelectItem value="1M">Monthly</SelectItem>
+							<SelectItem value="3M">Quarterly</SelectItem>
+							<SelectItem value="1Y">Yearly</SelectItem>
+						</SelectContent>
+					</Select>
+					<p className="text-muted-foreground text-xs">
+						Examples: "1D" (daily), "1W" (weekly), "1M" (monthly)
+					</p>
+				</div>
+			</div>
 					<DialogFooter>
 						<div className="flex justify-end gap-2">
 							<Button variant="outline" onClick={() => setEditOpen(false)} disabled={isUpdating}>

@@ -1,4 +1,4 @@
-package handlers
+package platform
 
 import (
 	"crypto/rand"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/maximhq/bifrost/framework/model"
 )
 
 // ─── Platform JWT (multi-tenant, string UUID user IDs) ─────────
@@ -77,9 +78,27 @@ type TeamClaim struct {
 }
 
 // IsOrgAdmin returns true if the user has admin role in the given organization.
+// System admins (is_admin=true) are implicitly org admins for any org.
 func (c *PlatformClaims) IsOrgAdmin(orgID string) bool {
+	if c.IsAdmin {
+		return true
+	}
 	for _, org := range c.Orgs {
-		if org.ID == orgID && (org.Role == "admin" || org.Role == "owner") {
+		if org.ID == orgID && model.IsOrgAdminRole(org.Role) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsOrgMember returns true if the user is a member of the given organization.
+// System admins (is_admin=true) are implicitly members of any org.
+func (c *PlatformClaims) IsOrgMember(orgID string) bool {
+	if c.IsAdmin {
+		return true
+	}
+	for _, org := range c.Orgs {
+		if org.ID == orgID {
 			return true
 		}
 	}
@@ -89,7 +108,7 @@ func (c *PlatformClaims) IsOrgAdmin(orgID string) bool {
 // IsTeamAdmin returns true if the user has admin role in the given team.
 func (c *PlatformClaims) IsTeamAdmin(teamID string) bool {
 	for _, team := range c.Teams {
-		if team.ID == teamID && (team.Role == "admin" || team.Role == "owner") {
+		if team.ID == teamID && model.IsTeamAdminRole(team.Role) {
 			return true
 		}
 	}

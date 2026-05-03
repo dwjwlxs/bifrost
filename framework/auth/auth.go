@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/maximhq/bifrost/framework/messenger"
 	"github.com/pkg/errors"
 )
 
@@ -123,7 +125,8 @@ type service struct {
 	jwtManager    JWTManager
 	tokenGen      *TokenGenerator
 	verifier      *VerificationCodeManager
-	codeSender    MessageSender
+	codeSender    messenger.Sender
+	logger        schemas.Logger
 	store         StoreFactory
 	rateLimiter   RateLimiter
 	oauthRegistry *OAuthProviderRegistry
@@ -133,7 +136,7 @@ type service struct {
 // If the JWKS private key is not configured, a new ES256 key pair is generated.
 // If codeSender is nil, a NoopCodeSender is used.
 // If rateLimiter is nil, a NoopRateLimiter is used.
-func NewAuthService(config *Config, store StoreFactory, codeSender MessageSender, rateLimiter RateLimiter) (AuthService, error) {
+func NewAuthService(config *Config, store StoreFactory, codeSender messenger.Sender, rateLimiter RateLimiter, logger schemas.Logger) (AuthService, error) {
 	if config == nil {
 		config = DefaultConfig()
 	}
@@ -149,7 +152,7 @@ func NewAuthService(config *Config, store StoreFactory, codeSender MessageSender
 	}
 
 	if codeSender == nil {
-		codeSender = &NoopMessageSender{}
+		codeSender = &messenger.NoOpSender{}
 	}
 
 	if rateLimiter == nil {
@@ -170,6 +173,7 @@ func NewAuthService(config *Config, store StoreFactory, codeSender MessageSender
 		codeSender:    codeSender,
 		store:         store,
 		rateLimiter:   rateLimiter,
+		logger:        logger,
 		oauthRegistry: oauthRegistry,
 	}, nil
 }
@@ -253,7 +257,7 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (*User, err
 	}
 
 	// Send the code (fire and forget — failures are non-fatal)
-	_ = s.codeSender.SendVerificationCode(ctx, email, VerificationCodeTypeEmailVerify, code)
+	_ = s.sendVerificationCode(ctx, email, VerificationCodeTypeEmailVerify, code)
 
 	return user, nil
 }
@@ -342,7 +346,7 @@ func (s *service) ResendVerificationCode(ctx context.Context, email string) erro
 	}
 
 	// Send the code
-	_ = s.codeSender.SendVerificationCode(ctx, email, VerificationCodeTypeEmailVerify, code)
+	_ = s.sendVerificationCode(ctx, email, VerificationCodeTypeEmailVerify, code)
 	return nil
 }
 
@@ -563,7 +567,7 @@ func (s *service) ForgotPassword(ctx context.Context, req ForgotPasswordRequest)
 	}
 
 	// Send the code (fire and forget)
-	_ = s.codeSender.SendVerificationCode(ctx, email, VerificationCodeTypePasswordReset, code)
+	_ = s.sendVerificationCode(ctx, email, VerificationCodeTypePasswordReset, code)
 
 	return nil
 }

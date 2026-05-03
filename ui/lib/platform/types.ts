@@ -5,6 +5,39 @@
  * endpoint modules, and UI components alike.
  */
 
+// ─── Role Constants ─────────────────────────────────────────────
+// Role VALUES are the actual strings stored in the database and returned
+// by the API. Constant NAMES are globally unique so that code always
+// indicates whether it's an org or team context.
+
+/** Base role values — the actual strings stored in the database */
+export const RoleAdmin = "admin" as const;
+export const RoleMember = "member" as const;
+export const RoleOwner = "owner" as const;
+
+/** Org-specific role aliases — semantically scoped to organization membership */
+export const OrgRoleAdmin = RoleAdmin;   // org admin — can manage teams, members, VKs
+export const OrgRoleMember = RoleMember; // org member — read-only access to org info
+export const OrgRoleOwner = RoleOwner;   // org owner/creator — full org control
+
+/** Team-specific role aliases — semantically scoped to team membership */
+export const TeamRoleAdmin = RoleAdmin;   // team admin — can manage members, VKs
+export const TeamRoleMember = RoleMember; // team member — read-only access to team info
+
+/** Resolved role values — set by backend middleware to indicate the effective role */
+export const ResolvedRoleOrgAdmin = "org_admin" as const;
+export const ResolvedRoleTeamAdmin = "team_admin" as const;
+export const ResolvedRoleTeamMember = "team_member" as const;
+
+/** All possible org member role values */
+export type OrgRole = typeof OrgRoleAdmin | typeof OrgRoleMember | typeof OrgRoleOwner;
+
+/** All possible team member role values */
+export type TeamRole = typeof TeamRoleAdmin | typeof TeamRoleMember;
+
+/** All possible DB-level role values (union of org + team) */
+export type PlatformRole = OrgRole | TeamRole;
+
 // ─── User & Membership ────────────────────────────────────────────
 
 export interface PlatformUserInfo {
@@ -36,10 +69,12 @@ export interface PlatformOrg {
 	id: string;
 	name?: string;
 	owner_user_id?: string;
+	/** Owner's username (resolved from auth_users by backend) */
+	owner_username?: string;
 	budget_id?: string;
 	rate_limit_id?: string;
 	/** User's role within this org (present in JWT / membership context) */
-	role?: "admin" | "member";
+	role?: OrgRole;
 	created_at?: string;
 	updated_at?: string;
 }
@@ -55,7 +90,7 @@ export interface PlatformTeam {
 	budget_spent?: number;
 	budget_reset_at?: string;
 	/** User's role within this team (present in JWT / membership context) */
-	role?: "admin" | "member";
+	role?: TeamRole;
 	created_at?: string;
 	updated_at?: string;
 }
@@ -67,7 +102,7 @@ export interface PlatformOrgMember {
 	user_id: string;
 	email: string;
 	username: string;
-	role: "admin" | "member";
+	role: OrgRole;
 	joined_at?: string;
 }
 
@@ -76,13 +111,14 @@ export interface PlatformTeamMember {
 	user_id: string;
 	email: string;
 	username: string;
-	role: "admin" | "member";
+	role: TeamRole;
 	joined_at?: string;
 }
 
 /** Invitation record */
 export interface PlatformInvitation {
 	id: string;
+	token?: string;
 	org_id?: string;
 	team_id?: string;
 	email: string;
@@ -90,6 +126,12 @@ export interface PlatformInvitation {
 	accepted: boolean;
 	expires_at: string;
 	created_at?: string;
+}
+
+/** Response from GET /api/platform/invitations/:token */
+export interface PlatformInvitationDetails extends PlatformInvitation {
+	org_name: string;
+	team_name: string;
 }
 
 // ─── Virtual Key ──────────────────────────────────────────────────
@@ -104,6 +146,7 @@ export interface PlatformVirtualKey {
 	team_id?: string;
 	customer_id?: string;
 	budget_limit?: number;
+	budget_reset_duration?: string;
 	current_usage?: number;
 	created_at: string;
 	updated_at: string;
