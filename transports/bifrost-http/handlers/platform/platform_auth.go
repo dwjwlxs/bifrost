@@ -21,7 +21,7 @@ import (
 )
 
 // Cookie name for refresh token (httpOnly, sent automatically on refresh requests)
-const refreshTokenCookieName = "bifrost_refresh_token"
+const refreshTokenCookieName = "platform_refresh_token"
 
 // setRefreshTokenCookie sets an httpOnly cookie with the refresh token.
 func setRefreshTokenCookie(ctx *fasthttp.RequestCtx, token string, expiresAt time.Time) {

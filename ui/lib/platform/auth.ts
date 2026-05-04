@@ -7,7 +7,7 @@ import type { PlatformOrg, PlatformTeam, PlatformUserInfo } from "./types";
 
 export type { PlatformOrg, PlatformTeam, PlatformUserInfo };
 
-const TOKEN_KEY="***";
+const TOKEN_KEY = "***";
 const USER_KEY = "platform_user";
 
 // ─── Logout guard ──────────────────────────────────────────────────────
@@ -131,7 +131,6 @@ export function clearToken(): void {
 	localStorage.removeItem(TOKEN_KEY);
 }
 
-
 /**
  * Decode a platform JWT and store user in localStorage.
  * Convenience helper: decodeJWT() → userFromJWT() → setUser().
@@ -164,7 +163,6 @@ export function clearUser(): void {
 	if (typeof window === "undefined") return;
 	localStorage.removeItem(USER_KEY);
 }
-
 
 export function isAuthenticated(): boolean {
 	const token = getToken();
@@ -208,6 +206,9 @@ export function setLoggedInfo(token: string): void {
 }
 
 // Clear token and user info from localStorage.
+// NOTE: does NOT reset the isLoggedOut flag — that stays true until the
+// next successful login (setLoggedInfo). This prevents in-flight query
+// re-subscriptions from firing between clearLoggedInfo and navigate().
 export function clearLoggedInfo(): void {
 	clearToken();
 	clearUser();
