@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/uuid"
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/providers/bedrock"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -616,7 +615,7 @@ func bedrockBatchPreCallback(handlerStore lib.HandlerStore) func(ctx *fasthttp.R
 
 		if apiKey != "" {
 			key := schemas.Key{
-				ID:               uuid.New().String(),
+				ID:               schemas.NewID(),
 				Value:            *schemas.NewEnvVar(apiKey),
 				BedrockKeyConfig: &schemas.BedrockKeyConfig{},
 			}
@@ -633,7 +632,7 @@ func bedrockBatchPreCallback(handlerStore lib.HandlerStore) func(ctx *fasthttp.R
 			}
 
 			key := schemas.Key{
-				ID: uuid.New().String(),
+				ID: schemas.NewID(),
 				BedrockKeyConfig: &schemas.BedrockKeyConfig{
 					AccessKey: *schemas.NewEnvVar(accessKey),
 					SecretKey: *schemas.NewEnvVar(secretKey),
@@ -1274,7 +1273,7 @@ func bedrockPreCallback(handlerStore lib.HandlerStore) func(ctx *fasthttp.Reques
 		if apiKey != "" {
 			// Case 1: API Key Authentication
 			key := schemas.Key{
-				ID:    uuid.New().String(),
+				ID:    schemas.NewID(),
 				Value: *schemas.NewEnvVar(apiKey),
 				// BedrockKeyConfig is required by the provider even if using API Key
 				BedrockKeyConfig: &schemas.BedrockKeyConfig{},
@@ -1292,7 +1291,7 @@ func bedrockPreCallback(handlerStore lib.HandlerStore) func(ctx *fasthttp.Reques
 			}
 
 			key := schemas.Key{
-				ID: uuid.New().String(),
+				ID: schemas.NewID(),
 				BedrockKeyConfig: &schemas.BedrockKeyConfig{
 					AccessKey: *schemas.NewEnvVar(accessKey),
 					SecretKey: *schemas.NewEnvVar(secretKey),

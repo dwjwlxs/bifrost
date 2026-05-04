@@ -6,7 +6,6 @@ import (
 	"time"
 
 	ws "github.com/fasthttp/websocket"
-	"github.com/google/uuid"
 	"github.com/maximhq/bifrost/core/schemas"
 )
 
@@ -74,7 +73,7 @@ type RealtimeTurnPluginState struct {
 // NewSession creates a new session for a client WebSocket connection.
 func NewSession(clientConn *ws.Conn) *Session {
 	return &Session{
-		id:         uuid.NewString(),
+		id:         schemas.NewID(),
 		clientConn: clientConn,
 	}
 }

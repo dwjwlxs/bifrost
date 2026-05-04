@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/fasthttp/router"
-	"github.com/google/uuid"
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/mcp"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -400,7 +399,7 @@ func (h *MCPHandler) addMCPClient(ctx *fasthttp.RequestCtx) {
 
 	// Generate a unique client ID if not provided
 	if req.ClientID == "" {
-		req.ClientID = uuid.New().String()
+		req.ClientID = schemas.NewID()
 	}
 
 	if err := validateToolsToExecute(req.ToolsToExecute); err != nil {

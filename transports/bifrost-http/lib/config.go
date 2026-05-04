@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	"github.com/google/uuid"
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/mcp"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -870,7 +869,7 @@ func processProvider(
 	// Process environment variables in keys (including key-level configs)
 	for i, providerKeyInFile := range providerCfgInFile.Keys {
 		if providerKeyInFile.ID == "" {
-			providerCfgInFile.Keys[i].ID = uuid.NewString()
+			providerCfgInFile.Keys[i].ID = schemas.NewID()
 		}
 		if err := providerKeyInFile.Aliases.Validate(); err != nil {
 			return fmt.Errorf("invalid aliases for key %q in provider %s: %w", providerKeyInFile.Name, provider, err)
@@ -1134,7 +1133,7 @@ func loadMCPConfig(ctx context.Context, config *Config, configData *ConfigData) 
 			for _, clientConfig := range config.MCPConfig.ClientConfigs {
 				if clientConfig != nil {
 					if clientConfig.ID == "" {
-						clientConfig.ID = uuid.NewString()
+						clientConfig.ID = schemas.NewID()
 					}
 					if err := config.ConfigStore.CreateMCPClientConfig(ctx, clientConfig); err != nil {
 						logger.Warn("failed to create MCP client config: %v", err)
@@ -1158,7 +1157,7 @@ func mergeMCPConfig(ctx context.Context, config *Config, configData *ConfigData,
 	clientConfigsToAdd := make([]*schemas.MCPClientConfig, 0)
 	for _, newClientConfig := range tempMCPConfig.ClientConfigs {
 		if newClientConfig.ID == "" {
-			newClientConfig.ID = uuid.NewString()
+			newClientConfig.ID = schemas.NewID()
 		}
 		found := false
 		for _, existingClientConfig := range mcpConfig.ClientConfigs {
@@ -3617,7 +3616,7 @@ func (c *Config) AddProvider(ctx context.Context, provider schemas.ModelProvider
 	}
 	for i, key := range config.Keys {
 		if key.ID == "" {
-			config.Keys[i].ID = uuid.NewString()
+			config.Keys[i].ID = schemas.NewID()
 		}
 	}
 	// First add the provider to the store
@@ -3685,7 +3684,7 @@ func (c *Config) UpdateProviderConfig(ctx context.Context, provider schemas.Mode
 	c.Providers[provider] = config
 	for i, key := range config.Keys {
 		if key.ID == "" {
-			config.Keys[i].ID = uuid.NewString()
+			config.Keys[i].ID = schemas.NewID()
 		}
 	}
 	skipDBUpdate := false
@@ -3747,7 +3746,7 @@ func (c *Config) AddProviderKey(ctx context.Context, provider schemas.ModelProvi
 	}
 
 	if key.ID == "" {
-		key.ID = uuid.NewString()
+		key.ID = schemas.NewID()
 	}
 
 	updatedConfig := existingConfig
@@ -4243,7 +4242,7 @@ func (c *Config) autoDetectProviders(ctx context.Context) {
 		for _, envVar := range envVars {
 			if apiKey := os.Getenv(envVar); apiKey != "" {
 				// Generate a unique ID for the auto-detected key
-				keyID := uuid.NewString()
+				keyID := schemas.NewID()
 				// Create default provider configuration
 				providerConfig := configstore.ProviderConfig{
 					Keys: []schemas.Key{

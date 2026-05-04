@@ -6,10 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/messenger"
-	"github.com/pkg/errors"
 )
 
 // AuthService defines the public interface for consumer authentication.
@@ -228,11 +226,7 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (*User, err
 	}
 
 	now := time.Now()
-	_userID, err := uuid.NewV7()
-	if err != nil {
-		return nil, errors.Wrap(ErrUserIDAllocation, err.Error())
-	}
-	userID := _userID.String()
+	userID := schemas.NewID()
 	user := &User{
 		ID:              userID,
 		Email:           req.Email,
@@ -298,7 +292,7 @@ func (s *service) VerifyEmail(ctx context.Context, req VerifyEmailRequest) (*Tok
 	}
 
 	// Issue token pair
-	sessionID := uuid.New().String()
+	sessionID := schemas.NewID()
 	tokens, err := s.tokenGen.GenerateTokenPair(user, sessionID)
 	if err != nil {
 		return nil, err
@@ -310,7 +304,7 @@ func (s *service) VerifyEmail(ctx context.Context, req VerifyEmailRequest) (*Tok
 		ID:               sessionID,
 		UserID:           user.ID,
 		RefreshTokenHash: rtHash,
-		TokenFamily:      uuid.New().String(),
+		TokenFamily:      schemas.NewID(),
 		ExpiresAt:        time.Now().Add(s.config.RefreshTokenTTL),
 		CreatedAt:        now,
 	}); err != nil {
@@ -402,7 +396,7 @@ func (s *service) Login(ctx context.Context, req LoginRequest, deviceInfo string
 	_ = s.rateLimiter.ResetFailedLogins(ctx, user.ID)
 
 	// Issue token pair
-	sessionID := uuid.New().String()
+	sessionID := schemas.NewID()
 	tokens, err := s.tokenGen.GenerateTokenPair(user, sessionID)
 	if err != nil {
 		return nil, err
@@ -414,7 +408,7 @@ func (s *service) Login(ctx context.Context, req LoginRequest, deviceInfo string
 		ID:               sessionID,
 		UserID:           user.ID,
 		RefreshTokenHash: rtHash,
-		TokenFamily:      uuid.New().String(),
+		TokenFamily:      schemas.NewID(),
 		DeviceInfo:       deviceInfo,
 		IPAddress:        ipAddress,
 		ExpiresAt:        time.Now().Add(s.config.RefreshTokenTTL),
@@ -465,7 +459,7 @@ func (s *service) RefreshToken(ctx context.Context, req RefreshTokenRequest) (*T
 	}
 
 	// Issue new token pair with the SAME family
-	newSessionID := uuid.New().String()
+	newSessionID := schemas.NewID()
 	tokens, err := s.tokenGen.GenerateTokenPair(user, newSessionID)
 	if err != nil {
 		return nil, err
@@ -536,7 +530,7 @@ func normalizeEmail(email string) string {
 
 // generateUUID creates a new UUID v4 string.
 func generateUUID() string {
-	return uuid.New().String()
+	return schemas.NewID()
 }
 
 // --- ForgotPassword ---
@@ -667,7 +661,7 @@ func (s *service) OAuthLogin(ctx context.Context, req OAuthCallbackRequest, devi
 
 	// New user — auto-register
 	now := time.Now()
-	userID := uuid.New().String()
+	userID := schemas.NewID()
 	email := userInfo.Email
 	emailNormalized := normalizeEmail(email)
 
@@ -677,7 +671,7 @@ func (s *service) OAuthLogin(ctx context.Context, req OAuthCallbackRequest, devi
 		if err == nil && existingUser != nil {
 			// Link to existing account
 			identity = &Identity{
-				ID:          uuid.New().String(),
+				ID:          schemas.NewID(),
 				UserID:      existingUser.ID,
 				Provider:    userInfo.Provider,
 				ProviderUID: userInfo.ProviderUID,
@@ -716,7 +710,7 @@ func (s *service) OAuthLogin(ctx context.Context, req OAuthCallbackRequest, devi
 
 	// Create identity
 	identity = &Identity{
-		ID:          uuid.New().String(),
+		ID:          schemas.NewID(),
 		UserID:      userID,
 		Provider:    userInfo.Provider,
 		ProviderUID: userInfo.ProviderUID,
@@ -739,14 +733,14 @@ func (s *service) issueTokenPair(ctx context.Context, userID, deviceInfo, ipAddr
 		return nil, fmt.Errorf("auth: failed to get user: %w", err)
 	}
 
-	sessionID := uuid.New().String()
+	sessionID := schemas.NewID()
 	tokens, err := s.tokenGen.GenerateTokenPair(user, sessionID)
 	if err != nil {
 		return nil, err
 	}
 
 	if familyID == "" {
-		familyID = uuid.New().String()
+		familyID = schemas.NewID()
 	}
 
 	rtHash := HashSHA256Base64(tokens.RefreshToken)

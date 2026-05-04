@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/fasthttp/router"
-	"github.com/google/uuid"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
@@ -302,11 +301,11 @@ func (h *PlatformOrgHandler) listOrgMembers(ctx *fasthttp.RequestCtx) {
 	type authUserInfo struct {
 		ID       string `gorm:"column:id"`
 		Email    string `gorm:"column:email"`
-		Username string `gorm:"column:username"`
+		Username string `gorm:"column:user_name"`
 	}
 	var userInfos []authUserInfo
 	if len(userIDs) > 0 {
-		if err := h.db.Table("auth_users").Select("id, email, username").Where("id IN ? AND deleted_at IS NULL", userIDs).Find(&userInfos).Error; err != nil {
+		if err := h.db.Table("auth_users").Select("id, email, user_name").Where("id IN ? AND deleted_at IS NULL", userIDs).Find(&userInfos).Error; err != nil {
 			// Non-fatal: proceed without user info
 			log.Printf("WARN: failed to query auth_users for org members: %v", err)
 		}
@@ -417,7 +416,7 @@ func (h *PlatformOrgHandler) createOrgTeam(ctx *fasthttp.RequestCtx) {
 
 	now := time.Now()
 	team := tables.TableTeam{
-		ID:         uuid.NewString(),
+		ID:         schemas.NewID(),
 		Name:       req.Name,
 		CustomerID: &orgID,
 		CreatedAt:  now,
@@ -648,10 +647,10 @@ func (h *PlatformOrgHandler) batchGetUsernames(userIDs []string) map[string]stri
 
 	type userInfo struct {
 		ID       string `gorm:"column:id"`
-		Username string `gorm:"column:username"`
+		Username string `gorm:"column:user_name"`
 	}
 	var users []userInfo
-	if err := h.db.Table("auth_users").Select("id, username").Where("id IN ? AND deleted_at IS NULL", userIDs).Find(&users).Error; err != nil {
+	if err := h.db.Table("auth_users").Select("id, user_name").Where("id IN ? AND deleted_at IS NULL", userIDs).Find(&users).Error; err != nil {
 		log.Printf("WARN: failed to query auth_users for owner usernames: %v", err)
 		return result
 	}

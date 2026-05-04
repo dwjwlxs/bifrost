@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
 )
@@ -117,7 +116,7 @@ func (m *DistributedLockManager) NewLock(lockKey string) (*DistributedLock, erro
 		store:         m.store,
 		logger:        m.logger,
 		lockKey:       lockKey,
-		holderID:      uuid.New().String(),
+		holderID:      schemas.NewID(),
 		ttl:           m.defaultTTL,
 		retryInterval: m.retryInterval,
 		maxRetries:    m.maxRetries,

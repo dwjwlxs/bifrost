@@ -9,7 +9,6 @@ import (
 	"path"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/maxim-go/logging"
 )
@@ -87,7 +86,7 @@ func imageInputToAttachment(img schemas.ImageInput, idx int) interface{} {
 	}
 	return &logging.FileDataAttachment{
 		BaseAttachmentProps: logging.BaseAttachmentProps{
-			ID:       uuid.New().String(),
+			ID:       schemas.NewID(),
 			Name:     name,
 			MimeType: mime,
 		},
@@ -116,7 +115,7 @@ func inputImageStringToAttachment(s string) interface{} {
 	name := "input_image." + extFromMime(mime)
 	return &logging.FileDataAttachment{
 		BaseAttachmentProps: logging.BaseAttachmentProps{
-			ID:       uuid.New().String(),
+			ID:       schemas.NewID(),
 			Name:     name,
 			MimeType: mime,
 		},
@@ -214,7 +213,7 @@ func responsesFileToAttachment(block *schemas.ResponsesMessageContentBlock) inte
 		urlStr := *block.FileURL
 		return &logging.UrlAttachment{
 			BaseAttachmentProps: logging.BaseAttachmentProps{
-				ID:       uuid.New().String(),
+				ID:       schemas.NewID(),
 				Name:     name,
 				MimeType: mime,
 				Metadata: map[string]string{"url": urlStr},
@@ -239,7 +238,7 @@ func responsesFileToAttachment(block *schemas.ResponsesMessageContentBlock) inte
 		}
 		return &logging.FileDataAttachment{
 			BaseAttachmentProps: logging.BaseAttachmentProps{
-				ID:       uuid.New().String(),
+				ID:       schemas.NewID(),
 				Name:     name,
 				MimeType: mime,
 			},
@@ -263,7 +262,7 @@ func chatFileToAttachment(f *schemas.ChatInputFile) interface{} {
 		urlStr := *f.FileURL
 		return &logging.UrlAttachment{
 			BaseAttachmentProps: logging.BaseAttachmentProps{
-				ID:       uuid.New().String(),
+				ID:       schemas.NewID(),
 				Name:     name,
 				MimeType: mime,
 				Metadata: map[string]string{"url": urlStr},
@@ -288,7 +287,7 @@ func chatFileToAttachment(f *schemas.ChatInputFile) interface{} {
 		}
 		return &logging.FileDataAttachment{
 			BaseAttachmentProps: logging.BaseAttachmentProps{
-				ID:       uuid.New().String(),
+				ID:       schemas.NewID(),
 				Name:     name,
 				MimeType: mime,
 			},
@@ -333,7 +332,7 @@ func audioDataToAttachment(data string, format *string) interface{} {
 
 	return &logging.FileDataAttachment{
 		BaseAttachmentProps: logging.BaseAttachmentProps{
-			ID:       uuid.New().String(),
+			ID:       schemas.NewID(),
 			Name:     "audio." + extFromMime(mime),
 			MimeType: mime,
 		},
@@ -373,7 +372,7 @@ func urlToAttachment(urlStr string, kind string, outputFormat string) interface{
 	}
 	return &logging.UrlAttachment{
 		BaseAttachmentProps: logging.BaseAttachmentProps{
-			ID:       uuid.New().String(),
+			ID:       schemas.NewID(),
 			Name:     name,
 			MimeType: mime,
 			Metadata: map[string]string{"url": urlStr},
@@ -423,7 +422,7 @@ func dataURLToAttachment(dataURL string, kind string) interface{} {
 	name := kind + "." + extFromMime(mime)
 	return &logging.FileDataAttachment{
 		BaseAttachmentProps: logging.BaseAttachmentProps{
-			ID:       uuid.New().String(),
+			ID:       schemas.NewID(),
 			Name:     name,
 			MimeType: mime,
 		},

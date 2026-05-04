@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	"github.com/google/uuid"
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
@@ -99,7 +98,7 @@ func (e *AsyncJobExecutor) SubmitJob(bifrostCtx *schemas.BifrostContext, resultT
 
 	now := time.Now().UTC()
 	job := &AsyncJob{
-		ID:           uuid.New().String(),
+		ID:           schemas.NewID(),
 		Status:       schemas.AsyncJobStatusPending,
 		RequestType:  operationType,
 		VirtualKeyID: virtualKeyID,

@@ -6,7 +6,6 @@ import (
 	"net/url"
 
 	"github.com/bytedance/sonic"
-	"github.com/google/uuid"
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
@@ -119,7 +118,7 @@ func (h *ProviderHandler) createProviderKey(ctx *fasthttp.RequestCtx) {
 	}
 
 	if key.ID == "" {
-		key.ID = uuid.NewString()
+		key.ID = schemas.NewID()
 	}
 	if key.Enabled == nil {
 		key.Enabled = bifrost.Ptr(true)

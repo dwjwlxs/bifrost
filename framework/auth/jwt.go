@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
-	"github.com/google/uuid"
+	"github.com/maximhq/bifrost/core/schemas"
 )
 
 // --- Types shared across all JWT implementations ---
@@ -118,7 +118,7 @@ func newES256JWTManager(privatePEM string, issuer, audience string) (JWTManager,
 		}
 	}
 
-	kid := uuid.New().String()
+	kid := schemas.NewID()
 
 	return &ES256JWTManager{
 		privateKey: privateKey,

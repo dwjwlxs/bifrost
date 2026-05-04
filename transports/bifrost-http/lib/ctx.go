@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/plugins/governance"
 	"github.com/maximhq/bifrost/plugins/maxim"
@@ -167,7 +166,7 @@ func ConvertToBifrostContext(ctx *fasthttp.RequestCtx, allowDirectKeys bool, mat
 		// First, check if x-request-id header exists
 		requestID := string(ctx.Request.Header.Peek("x-request-id"))
 		if requestID == "" {
-			requestID = uuid.New().String()
+			requestID = schemas.NewID()
 		}
 		bifrostCtx.SetValue(schemas.BifrostContextKeyRequestID, requestID)
 	}

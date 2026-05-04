@@ -48,6 +48,22 @@ func getRefreshTokenFromCookie(ctx *fasthttp.RequestCtx) string {
 	return string(ctx.Request.Header.Cookie(refreshTokenCookieName))
 }
 
+// clearRefreshTokenCookie removes the httpOnly refresh token cookie by setting Max-Age=0.
+func clearRefreshTokenCookie(ctx *fasthttp.RequestCtx) {
+	cookie := fasthttp.AcquireCookie()
+	defer fasthttp.ReleaseCookie(cookie)
+	cookie.SetKey(refreshTokenCookieName)
+	cookie.SetValue("")
+	cookie.SetMaxAge(0)
+	cookie.SetPath("/")
+	cookie.SetHTTPOnly(true)
+	cookie.SetSameSite(fasthttp.CookieSameSiteLaxMode)
+	if string(ctx.Request.Header.Peek("X-Forwarded-Proto")) == "https" {
+		cookie.SetSecure(true)
+	}
+	ctx.Response.Header.SetCookie(cookie)
+}
+
 // Context key types for platform auth (prevents key collisions).
 type platformUserIDKey struct{}
 type platformClaimsKey struct{}
@@ -130,6 +146,7 @@ func (h *PlatformAuthHandler) RegisterRoutes(r *router.Router, middlewares ...sc
 	r.POST("/api/platform/register", lib.ChainMiddlewares(h.register, middlewares...))
 	r.POST("/api/platform/verify", lib.ChainMiddlewares(h.verify, middlewares...))
 	r.POST("/api/platform/refresh-token", lib.ChainMiddlewares(h.refreshToken, middlewares...))
+	r.POST("/api/platform/logout", lib.ChainMiddlewares(h.logout, middlewares...))
 
 	// Protected routes (platform JWT + auth JWT dual verification)
 	platformAuthMw := append([]schemas.BifrostHTTPMiddleware{PlatformAuthMiddleware(h.db, h.authService)}, middlewares...)
@@ -259,7 +276,7 @@ func (h *PlatformAuthHandler) issuePlatformToken(ctx *fasthttp.RequestCtx, token
 		return "", fmt.Errorf("failed to sign platform token: %w", err)
 	}
 
-	setRefreshTokenCookie(ctx, tokenPair.RefreshToken, tokenPair.ExpiresAt)
+	setRefreshTokenCookie(ctx, tokenPair.RefreshToken, tokenPair.RefreshExpiresAt)
 	return platformJWT, nil
 }
 
@@ -412,6 +429,36 @@ func (h *PlatformAuthHandler) verify(ctx *fasthttp.RequestCtx) {
 			"refresh_token": tokenPair.RefreshToken,
 			"expires_at":    tokenPair.ExpiresAt.Format(time.RFC3339),
 		},
+	})
+}
+
+// logout handles POST /api/platform/logout
+// Public route (no platform JWT required) so that users with expired access tokens can still log out.
+// Revokes the server-side session and clears the httpOnly refresh token cookie.
+func (h *PlatformAuthHandler) logout(ctx *fasthttp.RequestCtx) {
+	// 1. Read refresh token from httpOnly cookie or request body
+	refreshToken := getRefreshTokenFromCookie(ctx)
+	if refreshToken == "" {
+		var req struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+		_ = json.Unmarshal(ctx.PostBody(), &req) // body may be empty
+		refreshToken = req.RefreshToken
+	}
+
+	// 2. Revoke server-side session if a refresh token was found
+	if refreshToken != "" {
+		goCtx := context.Background()
+		_ = h.authService.Logout(goCtx, refreshToken)
+	}
+
+	// 3. Always clear the httpOnly cookie — even if no refresh token was found,
+	//    clearing the cookie ensures a clean client state.
+	clearRefreshTokenCookie(ctx)
+
+	sendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "logged out",
 	})
 }
 
