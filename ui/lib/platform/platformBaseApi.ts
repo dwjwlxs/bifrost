@@ -49,7 +49,6 @@ const rawBaseQuery = fetchBaseQuery({
 // if multiple requests get 401 simultaneously, only one triggers refresh
 let refreshPromise: Promise<boolean> | null = null;
 
-
 /**
  * Attempt to refresh the access token using the httpOnly refresh token cookie.
  * The browser automatically sends the cookie with the request.
@@ -94,12 +93,24 @@ async function tryRefreshToken(): Promise<boolean> {
  * 3. On refresh failure (e.g. refresh token expired), clears auth state
  */
 const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (args, api, extraOptions) => {
+	// Short-circuit QUERY requests after explicit logout — prevents components
+	// that are still mounted (between markLoggedOut and navigate/unmount)
+	// from issuing new API calls or re-subscribing to RTK Query endpoints.
+	// MUTATIONS are allowed through so that login/register still work
+	// (the isLoggedOut flag is only cleared on successful login via setLoggedInfo).
+	if (isUserLoggedOut() && api.type === "query") {
+		return {
+			error: {
+				status: 401,
+				data: "Session ended — user logged out",
+			} as FetchBaseQueryError,
+		};
+	}
+
 	let result = await rawBaseQuery(args, api, extraOptions);
 
 	// 401 → try to refresh once (unless the user has explicitly logged out)
 	if (result.error?.status === 401) {
-		// If the user initiated a logout, skip refresh — in-flight requests
-		// returning 401 after logout must not trigger a refresh-token roundtrip.
 		if (isUserLoggedOut()) {
 			return result;
 		}
@@ -127,12 +138,16 @@ const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> =
 			// dispatch the RTK Query internal resetApiState action directly.
 			clearLoggedInfo();
 			if (!platformRouter) {
-				console.error("[platformBaseApi] 401 refresh failed but platformRouter not injected — cannot redirect to login. Call setPlatformRouter() in main.tsx.");
+				console.error(
+					"[platformBaseApi] 401 refresh failed but platformRouter not injected — cannot redirect to login. Call setPlatformRouter() in main.tsx.",
+				);
 			} else {
 				platformRouter.navigate({ to: "/platform/login", replace: true });
 			}
 			if (!platformStore) {
-				console.error("[platformBaseApi] 401 refresh failed but platformStore not injected — cannot reset API state. Call setPlatformStore() in main.tsx.");
+				console.error(
+					"[platformBaseApi] 401 refresh failed but platformStore not injected — cannot reset API state. Call setPlatformStore() in main.tsx.",
+				);
 			} else {
 				platformStore.dispatch({ type: "platformApi/resetApiState" });
 			}
