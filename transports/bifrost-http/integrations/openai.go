@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/bytedance/sonic"
-	"github.com/google/uuid"
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/providers/openai"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -280,7 +279,7 @@ func AzureEndpointPreHook(handlerStore lib.HandlerStore) func(ctx *fasthttp.Requ
 		apiVersionStr := apiVersion
 
 		key := schemas.Key{
-			ID:             uuid.New().String(),
+			ID:             schemas.NewID(),
 			Models:         schemas.WhiteList{"*"},
 			AzureKeyConfig: &schemas.AzureKeyConfig{},
 		}

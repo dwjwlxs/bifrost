@@ -11,8 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework"
@@ -434,7 +432,7 @@ func (plugin *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.Bifro
 	}
 
 	// Generate UUID for this request
-	requestID := uuid.New().String()
+	requestID := schemas.NewID()
 
 	// Store request ID, model, and provider in context for PostLLMHook
 	ctx.SetValue(requestIDKey, requestID)

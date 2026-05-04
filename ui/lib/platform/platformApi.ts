@@ -76,11 +76,7 @@ export {
 } from "./endpoints/auth";
 
 // Profile
-export {
-	usePlatformGetProfileQuery,
-	usePlatformUpdateProfileMutation,
-	usePlatformChangePasswordMutation,
-} from "./endpoints/profile";
+export { usePlatformGetProfileQuery, usePlatformUpdateProfileMutation, usePlatformChangePasswordMutation } from "./endpoints/profile";
 
 // Virtual Keys
 export {
@@ -89,6 +85,7 @@ export {
 	usePlatformUpdateVKMutation,
 	usePlatformDeleteVKMutation,
 	usePlatformListTeamVKsQuery,
+	usePlatformListTeamMyVKsQuery,
 	usePlatformUpdateTeamVKMutation,
 } from "./endpoints/virtualKeys";
 
@@ -159,7 +156,4 @@ export {
 } from "./endpoints/providers";
 
 // Invitations
-export {
-	usePlatformGetInvitationQuery,
-	usePlatformAcceptInvitationMutation,
-} from "./endpoints/invitations";
+export { usePlatformGetInvitationQuery, usePlatformAcceptInvitationMutation } from "./endpoints/invitations";

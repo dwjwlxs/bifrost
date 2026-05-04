@@ -111,10 +111,11 @@ type VerificationCode struct {
 
 // TokenPair represents an access token + refresh token pair.
 type TokenPair struct {
-	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"refresh_token"`
-	ExpiresAt    time.Time `json:"expires_at"`
-	TokenType    string    `json:"token_type"`
+	AccessToken      string    `json:"access_token"`
+	RefreshToken     string    `json:"refresh_token"`
+	ExpiresAt        time.Time `json:"expires_at"`         // access token expiry (for frontend refresh scheduling)
+	RefreshExpiresAt time.Time `json:"refresh_expires_at"` // refresh token expiry (for cookie max-age)
+	TokenType        string    `json:"token_type"`
 }
 
 // RegisterRequest holds the input for user registration.

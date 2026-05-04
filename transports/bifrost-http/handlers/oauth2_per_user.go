@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/fasthttp/router"
-	"github.com/google/uuid"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
@@ -82,7 +81,7 @@ func (h *PerUserOAuthHandler) handleDynamicClientRegistration(ctx *fasthttp.Requ
 	}
 
 	// Generate client_id
-	clientID := uuid.New().String()
+	clientID := schemas.NewID()
 
 	// Serialize arrays
 	redirectURIsJSON, _ := json.Marshal(req.RedirectURIs)
@@ -93,7 +92,7 @@ func (h *PerUserOAuthHandler) handleDynamicClientRegistration(ctx *fasthttp.Requ
 	grantTypesJSON, _ := json.Marshal(grantTypes)
 
 	client := &tables.TablePerUserOAuthClient{
-		ID:           uuid.New().String(),
+		ID:           schemas.NewID(),
 		ClientID:     clientID,
 		ClientName:   req.ClientName,
 		RedirectURIs: string(redirectURIsJSON),
@@ -190,7 +189,7 @@ func (h *PerUserOAuthHandler) handleAuthorize(ctx *fasthttp.RequestCtx) {
 
 	// Create a PendingFlow to carry OAuth params through the consent screen.
 	flow := &tables.TablePerUserOAuthPendingFlow{
-		ID:                uuid.New().String(),
+		ID:                schemas.NewID(),
 		ClientID:          clientID,
 		RedirectURI:       redirectURI,
 		CodeChallenge:     codeChallenge,
@@ -337,7 +336,7 @@ func (h *PerUserOAuthHandler) handleToken(ctx *fasthttp.RequestCtx) {
 		}
 		expiresAt = time.Now().Add(24 * time.Hour)
 		newSession := &tables.TablePerUserOAuthSession{
-			ID:           uuid.New().String(),
+			ID:           schemas.NewID(),
 			AccessToken:  newAccessToken,
 			RefreshToken: newRefreshToken,
 			ClientID:     clientID,
@@ -521,7 +520,7 @@ func (h *PerUserOAuthHandler) handleUpstreamAuthorize(ctx *fasthttp.RequestCtx) 
 	}
 	// Store upstream OAuth session linking state → MCP client + identity.
 	upstreamSession := &tables.TableOauthUserSession{
-		ID:               uuid.New().String(),
+		ID:               schemas.NewID(),
 		MCPClientID:      mcpClientID,
 		OauthConfigID:    *mcpClient.OauthConfigID,
 		State:            state,

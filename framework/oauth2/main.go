@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
@@ -330,7 +329,7 @@ func (p *OAuth2Provider) InitiateOAuthFlow(ctx context.Context, config *schemas.
 	}
 
 	// Create oauth config ID
-	oauthConfigID := uuid.New().String()
+	oauthConfigID := schemas.NewID()
 
 	// Determine OAuth endpoints (discovery or provided)
 	authorizeURL := config.AuthorizeURL
@@ -543,7 +542,7 @@ func (p *OAuth2Provider) CompleteOAuthFlow(ctx context.Context, state, code stri
 	scopesJSON, _ := json.Marshal(scopes)
 
 	// Create oauth_token record (sanitize tokens to prevent header formatting issues)
-	tokenID := uuid.New().String()
+	tokenID := schemas.NewID()
 	tokenRecord := &tables.TableOauthToken{
 		ID:           tokenID,
 		AccessToken:  strings.TrimSpace(tokenResponse.AccessToken),
@@ -803,7 +802,7 @@ func (p *OAuth2Provider) InitiateUserOAuthFlow(ctx context.Context, oauthConfigI
 	}
 
 	// Create per-user OAuth session
-	sessionID := uuid.New().String()
+	sessionID := schemas.NewID()
 	expiresAt := time.Now().Add(15 * time.Minute)
 
 	// Propagate identity from context so the callback can link the token to the user
@@ -940,7 +939,7 @@ func (p *OAuth2Provider) CompleteUserOAuthFlow(ctx context.Context, state string
 
 	// Create per-user OAuth token record, propagating identity from session
 	tokenRecord := &tables.TableOauthUserToken{
-		ID:            uuid.New().String(),
+		ID:            schemas.NewID(),
 		SessionToken:  sessionToken,
 		VirtualKeyID:  session.VirtualKeyID,
 		UserID:        session.UserID,

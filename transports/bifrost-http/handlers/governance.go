@@ -15,7 +15,6 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/fasthttp/router"
-	"github.com/google/uuid"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
 	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
@@ -505,7 +504,7 @@ func (h *GovernanceHandler) createVirtualKey(ctx *fasthttp.RequestCtx) {
 	var vk configstoreTables.TableVirtualKey
 	if err := h.configStore.ExecuteTransaction(ctx, func(tx *gorm.DB) error {
 		vk = configstoreTables.TableVirtualKey{
-			ID:              uuid.NewString(),
+			ID:              schemas.NewID(),
 			Name:            req.Name,
 			Value:           governance.GenerateVirtualKey(),
 			Description:     req.Description,
@@ -516,7 +515,7 @@ func (h *GovernanceHandler) createVirtualKey(ctx *fasthttp.RequestCtx) {
 		}
 		if req.RateLimit != nil {
 			rateLimit := configstoreTables.TableRateLimit{
-				ID:                   uuid.NewString(),
+				ID:                   schemas.NewID(),
 				TokenMaxLimit:        req.RateLimit.TokenMaxLimit,
 				TokenResetDuration:   req.RateLimit.TokenResetDuration,
 				RequestMaxLimit:      req.RateLimit.RequestMaxLimit,
@@ -539,7 +538,7 @@ func (h *GovernanceHandler) createVirtualKey(ctx *fasthttp.RequestCtx) {
 		if len(req.Budgets) > 0 {
 			for _, b := range req.Budgets {
 				budget := configstoreTables.TableBudget{
-					ID:            uuid.NewString(),
+					ID:            schemas.NewID(),
 					MaxLimit:      b.MaxLimit,
 					ResetDuration: b.ResetDuration,
 					LastReset:     budgetLastReset(vk.CalendarAligned, b.ResetDuration),
@@ -598,7 +597,7 @@ func (h *GovernanceHandler) createVirtualKey(ctx *fasthttp.RequestCtx) {
 				// Create rate limit for provider config if provided
 				if pc.RateLimit != nil {
 					rateLimit := configstoreTables.TableRateLimit{
-						ID:                   uuid.NewString(),
+						ID:                   schemas.NewID(),
 						TokenMaxLimit:        pc.RateLimit.TokenMaxLimit,
 						TokenResetDuration:   pc.RateLimit.TokenResetDuration,
 						RequestMaxLimit:      pc.RateLimit.RequestMaxLimit,
@@ -627,7 +626,7 @@ func (h *GovernanceHandler) createVirtualKey(ctx *fasthttp.RequestCtx) {
 						}
 						seenDurations[b.ResetDuration] = true
 						budget := configstoreTables.TableBudget{
-							ID:               uuid.NewString(),
+							ID:               schemas.NewID(),
 							MaxLimit:         b.MaxLimit,
 							ResetDuration:    b.ResetDuration,
 							LastReset:        budgetLastReset(vk.CalendarAligned, b.ResetDuration),
@@ -832,7 +831,7 @@ func (h *GovernanceHandler) updateVirtualKey(ctx *fasthttp.RequestCtx) {
 				} else {
 					// New budget duration — create fresh
 					budget := configstoreTables.TableBudget{
-						ID:            uuid.NewString(),
+						ID:            schemas.NewID(),
 						MaxLimit:      b.MaxLimit,
 						ResetDuration: b.ResetDuration,
 						LastReset:     budgetLastReset(vk.CalendarAligned, b.ResetDuration),
@@ -893,7 +892,7 @@ func (h *GovernanceHandler) updateVirtualKey(ctx *fasthttp.RequestCtx) {
 			} else {
 				// Create new rate limit
 				rateLimit := configstoreTables.TableRateLimit{
-					ID:                   uuid.NewString(),
+					ID:                   schemas.NewID(),
 					TokenMaxLimit:        req.RateLimit.TokenMaxLimit,
 					TokenResetDuration:   req.RateLimit.TokenResetDuration,
 					RequestMaxLimit:      req.RateLimit.RequestMaxLimit,
@@ -973,7 +972,7 @@ func (h *GovernanceHandler) updateVirtualKey(ctx *fasthttp.RequestCtx) {
 					// Create rate limit for provider config if provided
 					if pc.RateLimit != nil {
 						rateLimit := configstoreTables.TableRateLimit{
-							ID:                   uuid.NewString(),
+							ID:                   schemas.NewID(),
 							TokenMaxLimit:        pc.RateLimit.TokenMaxLimit,
 							TokenResetDuration:   pc.RateLimit.TokenResetDuration,
 							RequestMaxLimit:      pc.RateLimit.RequestMaxLimit,
@@ -1001,7 +1000,7 @@ func (h *GovernanceHandler) updateVirtualKey(ctx *fasthttp.RequestCtx) {
 							}
 							seenDurations[b.ResetDuration] = true
 							budget := configstoreTables.TableBudget{
-								ID:               uuid.NewString(),
+								ID:               schemas.NewID(),
 								MaxLimit:         b.MaxLimit,
 								ResetDuration:    b.ResetDuration,
 								LastReset:        budgetLastReset(vk.CalendarAligned, b.ResetDuration),
@@ -1092,7 +1091,7 @@ func (h *GovernanceHandler) updateVirtualKey(ctx *fasthttp.RequestCtx) {
 							} else {
 								// New budget duration — create fresh
 								budget := configstoreTables.TableBudget{
-									ID:               uuid.NewString(),
+									ID:               schemas.NewID(),
 									MaxLimit:         b.MaxLimit,
 									ResetDuration:    b.ResetDuration,
 									LastReset:        budgetLastReset(vk.CalendarAligned, b.ResetDuration),
@@ -1150,7 +1149,7 @@ func (h *GovernanceHandler) updateVirtualKey(ctx *fasthttp.RequestCtx) {
 						} else {
 							// Create new rate limit for existing provider config
 							rateLimit := configstoreTables.TableRateLimit{
-								ID:                   uuid.NewString(),
+								ID:                   schemas.NewID(),
 								TokenMaxLimit:        pc.RateLimit.TokenMaxLimit,
 								TokenResetDuration:   pc.RateLimit.TokenResetDuration,
 								RequestMaxLimit:      pc.RateLimit.RequestMaxLimit,
@@ -1441,13 +1440,13 @@ func (h *GovernanceHandler) createTeam(ctx *fasthttp.RequestCtx) {
 	var team configstoreTables.TableTeam
 	if err := h.configStore.ExecuteTransaction(ctx, func(tx *gorm.DB) error {
 		team = configstoreTables.TableTeam{
-			ID:         uuid.NewString(),
+			ID:         schemas.NewID(),
 			Name:       req.Name,
 			CustomerID: req.CustomerID,
 		}
 		if req.RateLimit != nil {
 			rateLimit := configstoreTables.TableRateLimit{
-				ID:                   uuid.NewString(),
+				ID:                   schemas.NewID(),
 				TokenMaxLimit:        req.RateLimit.TokenMaxLimit,
 				TokenResetDuration:   req.RateLimit.TokenResetDuration,
 				RequestMaxLimit:      req.RateLimit.RequestMaxLimit,
@@ -1478,7 +1477,7 @@ func (h *GovernanceHandler) createTeam(ctx *fasthttp.RequestCtx) {
 			}
 			seenDurations[b.ResetDuration] = true
 			budget := configstoreTables.TableBudget{
-				ID:              uuid.NewString(),
+				ID:              schemas.NewID(),
 				MaxLimit:        b.MaxLimit,
 				ResetDuration:   b.ResetDuration,
 				LastReset:       budgetLastReset(b.CalendarAligned, b.ResetDuration),
@@ -1636,7 +1635,7 @@ func (h *GovernanceHandler) updateTeam(ctx *fasthttp.RequestCtx) {
 					matchedIDs[existing.ID] = true
 				} else {
 					budget := configstoreTables.TableBudget{
-						ID:              uuid.NewString(),
+						ID:              schemas.NewID(),
 						MaxLimit:        b.MaxLimit,
 						ResetDuration:   b.ResetDuration,
 						LastReset:       budgetLastReset(b.CalendarAligned, b.ResetDuration),
@@ -1694,7 +1693,7 @@ func (h *GovernanceHandler) updateTeam(ctx *fasthttp.RequestCtx) {
 			} else {
 				// Create new rate limit
 				rateLimit := configstoreTables.TableRateLimit{
-					ID:                   uuid.NewString(),
+					ID:                   schemas.NewID(),
 					TokenMaxLimit:        req.RateLimit.TokenMaxLimit,
 					TokenResetDuration:   req.RateLimit.TokenResetDuration,
 					RequestMaxLimit:      req.RateLimit.RequestMaxLimit,
@@ -1871,13 +1870,13 @@ func (h *GovernanceHandler) createCustomer(ctx *fasthttp.RequestCtx) {
 	var customer configstoreTables.TableCustomer
 	if err := h.configStore.ExecuteTransaction(ctx, func(tx *gorm.DB) error {
 		customer = configstoreTables.TableCustomer{
-			ID:   uuid.NewString(),
+			ID:   schemas.NewID(),
 			Name: req.Name,
 		}
 
 		if req.Budget != nil {
 			budget := configstoreTables.TableBudget{
-				ID:            uuid.NewString(),
+				ID:            schemas.NewID(),
 				MaxLimit:      req.Budget.MaxLimit,
 				ResetDuration: req.Budget.ResetDuration,
 				LastReset:     budgetLastReset(false, req.Budget.ResetDuration),
@@ -1893,7 +1892,7 @@ func (h *GovernanceHandler) createCustomer(ctx *fasthttp.RequestCtx) {
 		}
 		if req.RateLimit != nil {
 			rateLimit := configstoreTables.TableRateLimit{
-				ID:                   uuid.NewString(),
+				ID:                   schemas.NewID(),
 				TokenMaxLimit:        req.RateLimit.TokenMaxLimit,
 				TokenResetDuration:   req.RateLimit.TokenResetDuration,
 				RequestMaxLimit:      req.RateLimit.RequestMaxLimit,
@@ -2029,7 +2028,7 @@ func (h *GovernanceHandler) updateCustomer(ctx *fasthttp.RequestCtx) {
 					return fmt.Errorf("invalid reset duration format: %s", *req.Budget.ResetDuration)
 				}
 				budget := configstoreTables.TableBudget{
-					ID:            uuid.NewString(),
+					ID:            schemas.NewID(),
 					MaxLimit:      *req.Budget.MaxLimit,
 					ResetDuration: *req.Budget.ResetDuration,
 					LastReset:     budgetLastReset(false, *req.Budget.ResetDuration),
@@ -2076,7 +2075,7 @@ func (h *GovernanceHandler) updateCustomer(ctx *fasthttp.RequestCtx) {
 			} else {
 				// Create new rate limit
 				rateLimit := configstoreTables.TableRateLimit{
-					ID:                   uuid.NewString(),
+					ID:                   schemas.NewID(),
 					TokenMaxLimit:        req.RateLimit.TokenMaxLimit,
 					TokenResetDuration:   req.RateLimit.TokenResetDuration,
 					RequestMaxLimit:      req.RateLimit.RequestMaxLimit,
@@ -2423,7 +2422,7 @@ func (h *GovernanceHandler) createModelConfig(ctx *fasthttp.RequestCtx) {
 	var mc configstoreTables.TableModelConfig
 	if err := h.configStore.ExecuteTransaction(ctx, func(tx *gorm.DB) error {
 		mc = configstoreTables.TableModelConfig{
-			ID:        uuid.NewString(),
+			ID:        schemas.NewID(),
 			ModelName: req.ModelName,
 			Provider:  req.Provider,
 			CreatedAt: time.Now(),
@@ -2432,7 +2431,7 @@ func (h *GovernanceHandler) createModelConfig(ctx *fasthttp.RequestCtx) {
 		// Create budget if provided
 		if req.Budget != nil {
 			budget := configstoreTables.TableBudget{
-				ID:            uuid.NewString(),
+				ID:            schemas.NewID(),
 				MaxLimit:      req.Budget.MaxLimit,
 				ResetDuration: req.Budget.ResetDuration,
 				LastReset:     budgetLastReset(false, req.Budget.ResetDuration),
@@ -2450,7 +2449,7 @@ func (h *GovernanceHandler) createModelConfig(ctx *fasthttp.RequestCtx) {
 		// Create rate limit if provided
 		if req.RateLimit != nil {
 			rateLimit := configstoreTables.TableRateLimit{
-				ID:                   uuid.NewString(),
+				ID:                   schemas.NewID(),
 				TokenMaxLimit:        req.RateLimit.TokenMaxLimit,
 				TokenResetDuration:   req.RateLimit.TokenResetDuration,
 				RequestMaxLimit:      req.RateLimit.RequestMaxLimit,
@@ -2559,7 +2558,7 @@ func (h *GovernanceHandler) updateModelConfig(ctx *fasthttp.RequestCtx) {
 					return fmt.Errorf("invalid reset duration format: %s", *req.Budget.ResetDuration)
 				}
 				budget := configstoreTables.TableBudget{
-					ID:            uuid.NewString(),
+					ID:            schemas.NewID(),
 					MaxLimit:      *req.Budget.MaxLimit,
 					ResetDuration: *req.Budget.ResetDuration,
 					LastReset:     budgetLastReset(false, *req.Budget.ResetDuration),
@@ -2607,7 +2606,7 @@ func (h *GovernanceHandler) updateModelConfig(ctx *fasthttp.RequestCtx) {
 			} else {
 				// Create new rate limit
 				rateLimit := configstoreTables.TableRateLimit{
-					ID:                   uuid.NewString(),
+					ID:                   schemas.NewID(),
 					TokenMaxLimit:        req.RateLimit.TokenMaxLimit,
 					TokenResetDuration:   req.RateLimit.TokenResetDuration,
 					RequestMaxLimit:      req.RateLimit.RequestMaxLimit,
@@ -2815,7 +2814,7 @@ func (h *GovernanceHandler) updateProviderGovernance(ctx *fasthttp.RequestCtx) {
 					return fmt.Errorf("both max_limit and reset_duration are required when creating a new budget")
 				}
 				budget := configstoreTables.TableBudget{
-					ID:            uuid.NewString(),
+					ID:            schemas.NewID(),
 					MaxLimit:      *req.Budget.MaxLimit,
 					ResetDuration: *req.Budget.ResetDuration,
 					LastReset:     budgetLastReset(false, *req.Budget.ResetDuration),
@@ -2863,7 +2862,7 @@ func (h *GovernanceHandler) updateProviderGovernance(ctx *fasthttp.RequestCtx) {
 			} else {
 				// Create new rate limit
 				rateLimit := configstoreTables.TableRateLimit{
-					ID:                   uuid.NewString(),
+					ID:                   schemas.NewID(),
 					TokenMaxLimit:        req.RateLimit.TokenMaxLimit,
 					TokenResetDuration:   req.RateLimit.TokenResetDuration,
 					RequestMaxLimit:      req.RateLimit.RequestMaxLimit,
@@ -3217,7 +3216,7 @@ func (h *GovernanceHandler) createRoutingRule(ctx *fasthttp.RequestCtx) {
 	}
 
 	// Build targets
-	ruleID := uuid.NewString()
+	ruleID := schemas.NewID()
 	targets := make([]configstoreTables.TableRoutingTarget, 0, len(req.Targets))
 	for _, t := range req.Targets {
 		targets = append(targets, configstoreTables.TableRoutingTarget{
@@ -3584,7 +3583,7 @@ func (h *GovernanceHandler) createPricingOverride(ctx *fasthttp.RequestCtx) {
 
 	now := time.Now()
 	override := configstoreTables.TablePricingOverride{
-		ID:               uuid.NewString(),
+		ID:               schemas.NewID(),
 		Name:             name,
 		ScopeKind:        string(req.ScopeKind),
 		VirtualKeyID:     normalizeOptionalString(req.VirtualKeyID),

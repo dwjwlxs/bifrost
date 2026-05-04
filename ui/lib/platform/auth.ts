@@ -10,6 +10,26 @@ export type { PlatformOrg, PlatformTeam, PlatformUserInfo };
 const TOKEN_KEY="***";
 const USER_KEY = "platform_user";
 
+// ─── Logout guard ──────────────────────────────────────────────────────
+// Module-level flag set on explicit logout. Prevents in-flight or
+// post-unmount 401s from triggering a token refresh after the user has
+// already chosen to sign out. Cleared on successful login / refresh.
+let isLoggedOut = false;
+
+/** Mark the session as explicitly logged out (skips refresh on 401). */
+export function markLoggedOut(): void {
+	isLoggedOut = true;
+}
+
+/** Returns true if the user has explicitly logged out and refresh should be skipped. */
+export function isUserLoggedOut(): boolean {
+	return isLoggedOut;
+}
+
+export function clearLoggedOut(): void {
+	isLoggedOut = false;
+}
+
 /** JWT payload from platform login endpoint (non-verifying decode for UI use). */
 interface PlatformJWTPayload {
 	sub: string; // user ID as string
@@ -111,6 +131,7 @@ export function clearToken(): void {
 	localStorage.removeItem(TOKEN_KEY);
 }
 
+
 /**
  * Decode a platform JWT and store user in localStorage.
  * Convenience helper: decodeJWT() → userFromJWT() → setUser().
@@ -144,20 +165,20 @@ export function clearUser(): void {
 	localStorage.removeItem(USER_KEY);
 }
 
+
 export function isAuthenticated(): boolean {
 	const token = getToken();
 	if (!token) return false;
 
-	// Check JWT expiration — reject expired tokens at the routing level
-	// so users are redirected to login immediately instead of getting a 401 later.
-	const payload = decodePlatformToken(token);
-	if (payload?.exp && payload.exp * 1000 < Date.now()) {
-		// No setLoggedOut() needed here — this runs at route guard level before
-		// any console page loads, so there are no in-flight API requests to guard against.
-		clearLoggedInfo();
-		return false;
-	}
-
+	// When the JWT is expired, do NOT clear localStorage or return false here.
+	// The user may still have a valid refresh token (httpOnly cookie), and the
+	// API layer (platformBaseQuery) handles 401 → refresh-token flow automatically.
+	// Returning false at this point would skip refresh entirely and redirect to
+	// login immediately — a poor UX when the session is still recoverable.
+	// If refresh also fails, the baseQuery will clear auth state and redirect.
+	//
+	// We still return true so the route guard lets the page load; the first API
+	// call will trigger 401 → refresh → retry (or redirect on refresh failure).
 	return true;
 }
 
@@ -177,8 +198,10 @@ export function clearCookie(name: string, options: { path?: string; domain?: str
 
 // Store token + decoded user info from a JWT access token.
 // Convenience helper: setToken() → decodeAndStoreUser().
+// Also clears the isLoggedOut flag — used after login or successful refresh.
 export function setLoggedInfo(token: string): void {
 	if (typeof window === "undefined") return;
+	isLoggedOut = false;
 	localStorage.setItem(TOKEN_KEY, token);
 
 	decodeAndStoreUser(token);

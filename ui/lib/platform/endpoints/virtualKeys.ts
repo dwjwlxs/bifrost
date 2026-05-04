@@ -62,6 +62,13 @@ const virtualKeysApi = platformBaseApi.injectEndpoints({
 			providesTags: ["VirtualKeys"],
 		}),
 
+		/** List only the current user's VKs within a team (team_member) */
+		platformListTeamMyVKs: builder.query<PlatformVirtualKey[], string>({
+			query: (teamId) => ({ url: `/platform/teams/${teamId}/my-virtual-keys`, method: "GET" }),
+			transformResponse: (response: { data?: { items?: PlatformVirtualKey[] } }) => response.data?.items ?? [],
+			providesTags: ["VirtualKeys"],
+		}),
+
 		/** Update a VK budget within a team (team_admin only) */
 		platformUpdateTeamVK: builder.mutation<
 			PlatformVirtualKey,
@@ -92,5 +99,6 @@ export const {
 	usePlatformUpdateVKMutation,
 	usePlatformDeleteVKMutation,
 	usePlatformListTeamVKsQuery,
+	usePlatformListTeamMyVKsQuery,
 	usePlatformUpdateTeamVKMutation,
 } = virtualKeysApi;

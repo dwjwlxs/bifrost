@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/maximhq/bifrost/core/schemas"
 )
 
@@ -14,12 +13,12 @@ import (
 type DeferredSpanInfo struct {
 	SpanID              string
 	StartTime           time.Time
-	Tracer              schemas.Tracer          // Reference to tracer for completing the span
-	RequestID           string                  // Request ID for accumulator lookup
-	FirstChunkTime      time.Time               // Timestamp of first chunk (for TTFT calculation)
-	ChunkCount          int                     // Count of received streaming chunks (for AttrTotalChunks)
+	Tracer              schemas.Tracer           // Reference to tracer for completing the span
+	RequestID           string                   // Request ID for accumulator lookup
+	FirstChunkTime      time.Time                // Timestamp of first chunk (for TTFT calculation)
+	ChunkCount          int                      // Count of received streaming chunks (for AttrTotalChunks)
 	AccumulatedResponse *schemas.BifrostResponse // Full accumulated response from streaming chunks
-	mu                  sync.Mutex              // Mutex for thread-safe chunk accumulation
+	mu                  sync.Mutex               // Mutex for thread-safe chunk accumulation
 }
 
 // TraceStore manages traces with thread-safe access and object pooling
@@ -434,13 +433,13 @@ func (s *TraceStore) Stop() {
 // generateTraceID generates a W3C-compliant trace ID.
 // Returns 32 lowercase hex characters (128-bit UUID without hyphens).
 func generateTraceID() string {
-	u := uuid.New()
+	u := schemas.NewUUID()
 	return hex.EncodeToString(u[:])
 }
 
 // generateSpanID generates a W3C-compliant span ID.
 // Returns 16 lowercase hex characters (first 64 bits of a UUID).
 func generateSpanID() string {
-	u := uuid.New()
+	u := schemas.NewUUID()
 	return hex.EncodeToString(u[:8])
 }

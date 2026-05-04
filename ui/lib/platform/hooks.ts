@@ -4,7 +4,7 @@
  */
 import { useMemo, useCallback } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { clearLoggedInfo, getUser } from "./auth";
+import { clearLoggedInfo, getUser, markLoggedOut } from "./auth";
 import type { PlatformOrg, PlatformTeam } from "./types";
 import {
   OrgRoleAdmin,
@@ -16,12 +16,17 @@ import {
 } from "./types";
 import { store } from "@/lib/store";
 import { platformApi } from "./platformApi";
-import { setLoggedOut } from "./platformBaseApi";
+import { getApiBaseUrl } from "@/lib/utils/port";
 
 /**
- * Logout helper — clears the platform token/user from localStorage,
- * resets the RTK Query cache so no stale authenticated data leaks into
- * the next session, and redirects to the login page.
+ * Logout helper — calls the backend logout endpoint (which revokes the
+ * server-side session and clears the httpOnly refresh token cookie),
+ * then clears localStorage, resets the RTK Query cache, and redirects
+ * to the login page.
+ *
+ * The backend endpoint is public (no platform JWT required) so that
+ * users with expired access tokens can still log out. The browser
+ * automatically sends the httpOnly cookie with `credentials: "include"`.
  *
  * Reusable across any component that needs a "sign out" action.
  *
@@ -30,13 +35,34 @@ import { setLoggedOut } from "./platformBaseApi";
  */
 export function useLogout(redirectTo: string = "/platform/login") {
   const navigate = useNavigate();
-  return useCallback(() => {
-    setLoggedOut(); // must be FIRST — blocks in-flight 401s from triggering tryRefreshToken()
+  return useCallback(async () => {
+    // 1. Set module-level logout flag FIRST — prevents any in-flight 401
+    //    from triggering a refresh-token roundtrip after we've decided to leave.
+    markLoggedOut();
+
+    // 2. Reset RTK Query cache — aborts in-flight requests and clears subscriptions,
+    //    so page components won't re-fetch after we clear the token.
+    store.dispatch(platformApi.util.resetApiState());
+
+    // 3. Revoke server session + clear httpOnly cookie (fire-and-forget).
+    //    Must happen AFTER markLoggedOut so that the 401 from this request
+    //    (if any) is also safely ignored by baseQuery.
+    try {
+      const baseUrl = getApiBaseUrl();
+      fetch(`${baseUrl}/platform/logout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      }).catch(() => {});
+    } catch {
+      // Network error — proceed with client-side cleanup
+    }
+
+    // 4. Clear localStorage (token + user info)
     clearLoggedInfo();
 
-    navigate({ to: redirectTo }); // 先跳转 → console 组件卸载，订阅取消
-    // resetApiState() 此时已经没有活跃订阅了，不会触发新请求
-    store.dispatch(platformApi.util.resetApiState());
+    // 5. Navigate away — components unmount, subscriptions already cancelled by step 2
+    navigate({ to: redirectTo });
   }, [navigate, redirectTo]);
 }
 

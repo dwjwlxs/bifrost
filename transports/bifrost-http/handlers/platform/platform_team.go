@@ -256,11 +256,11 @@ func (h *PlatformTeamHandler) listTeamMembers(ctx *fasthttp.RequestCtx) {
 	type authUserInfo struct {
 		ID       string `gorm:"column:id"`
 		Email    string `gorm:"column:email"`
-		Username string `gorm:"column:username"`
+		Username string `gorm:"column:user_name"`
 	}
 	var userInfos []authUserInfo
 	if len(userIDs) > 0 {
-		if err := h.db.Table("auth_users").Select("id, email, username").Where("id IN ? AND deleted_at IS NULL", userIDs).Find(&userInfos).Error; err != nil {
+		if err := h.db.Table("auth_users").Select("id, email, user_name").Where("id IN ? AND deleted_at IS NULL", userIDs).Find(&userInfos).Error; err != nil {
 			// Non-fatal: proceed without user info
 			log.Printf("WARN: failed to query auth_users for team members: %v", err)
 		}

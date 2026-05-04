@@ -1,8 +1,7 @@
 import { useSearch } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "@tanstack/react-router";
-import { isAuthenticated, setLoggedInfo } from "@/lib/platform/auth";
-import { clearLoggedOut } from "@/lib/platform/platformBaseApi";
+import { isAuthenticated, setLoggedInfo, clearLoggedOut } from "@/lib/platform/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/fasthttp/router"
-	"github.com/google/uuid"
 	"github.com/maximhq/bifrost/core/schemas"
 	fauth "github.com/maximhq/bifrost/framework/auth"
 	"github.com/maximhq/bifrost/framework/configstore"
@@ -115,7 +114,7 @@ func (h *PlatformAdminHandler) createOrg(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	orgID := uuid.NewString()
+	orgID := schemas.NewID()
 	now := time.Now()
 	customer := tables.TableCustomer{
 		ID:        orgID,

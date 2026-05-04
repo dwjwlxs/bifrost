@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"time"
 )
 
 // TokenGenerator handles the creation of token pairs (access + refresh).
@@ -37,10 +38,11 @@ func (g *TokenGenerator) GenerateTokenPair(user *User, sessionID string) (*Token
 	}
 
 	return &TokenPair{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		ExpiresAt:    expiresAt,
-		TokenType:    "Bearer",
+		AccessToken:      accessToken,
+		RefreshToken:     refreshToken,
+		ExpiresAt:        expiresAt,
+		RefreshExpiresAt: time.Now().Add(g.config.RefreshTokenTTL),
+		TokenType:        "Bearer",
 	}, nil
 }
 

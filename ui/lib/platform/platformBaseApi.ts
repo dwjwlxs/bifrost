@@ -4,7 +4,7 @@
  */
 import { getApiBaseUrl } from "@/lib/utils/port";
 import { createApi, fetchBaseQuery, BaseQueryFn } from "@reduxjs/toolkit/query/react";
-import { getToken, setLoggedInfo, clearLoggedInfo } from "./auth";
+import { getToken, setLoggedInfo, clearLoggedInfo, isUserLoggedOut } from "./auth";
 import type { FetchArgs, FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import type { Router } from "@tanstack/react-router";
 
@@ -49,20 +49,6 @@ const rawBaseQuery = fetchBaseQuery({
 // if multiple requests get 401 simultaneously, only one triggers refresh
 let refreshPromise: Promise<boolean> | null = null;
 
-// Module-level flag — set during logout to block any in-flight refresh attempts.
-// resetApiState() does NOT abort running fetch() calls, so 401 responses from
-// console-page queries (virtual-keys, orgs, etc.) can arrive after logout.
-// Without this guard, tryRefreshToken() would succeed (httpOnly cookie still valid)
-// and storeAuthFromToken() would repopulate localStorage, silently "un-logging-out" the user.
-let isLoggedOut = false;
-
-export function setLoggedOut() {
-	isLoggedOut = true;
-}
-
-export function clearLoggedOut() {
-	isLoggedOut = false;
-}
 
 /**
  * Attempt to refresh the access token using the httpOnly refresh token cookie.
@@ -110,12 +96,11 @@ async function tryRefreshToken(): Promise<boolean> {
 const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (args, api, extraOptions) => {
 	let result = await rawBaseQuery(args, api, extraOptions);
 
-	// 401 → try to refresh once
+	// 401 → try to refresh once (unless the user has explicitly logged out)
 	if (result.error?.status === 401) {
-		// If the user has already logged out, skip refresh entirely.
-		// The httpOnly cookie is still valid, but clearUserInfo() has already run —
-		// letting tryRefreshToken() succeed would repopulate localStorage and undo the logout.
-		if (isLoggedOut) {
+		// If the user initiated a logout, skip refresh — in-flight requests
+		// returning 401 after logout must not trigger a refresh-token roundtrip.
+		if (isUserLoggedOut()) {
 			return result;
 		}
 
@@ -140,7 +125,6 @@ const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> =
 			// runs outside React component context — useNavigate() is invalid here.
 			// NOTE: We cannot import platformApi here (circular dep), so we
 			// dispatch the RTK Query internal resetApiState action directly.
-			setLoggedOut();
 			clearLoggedInfo();
 			if (!platformRouter) {
 				console.error("[platformBaseApi] 401 refresh failed but platformRouter not injected — cannot redirect to login. Call setPlatformRouter() in main.tsx.");

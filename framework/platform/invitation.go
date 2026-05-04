@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
 	"github.com/maximhq/bifrost/framework/messenger"
@@ -40,9 +39,9 @@ type InvitationServiceImpl struct {
 // CreateInvitation creates a pending invitation for a user to join a team.
 // teamID is required; orgID may be nil if the team has no parent org.
 func (s *InvitationServiceImpl) CreateInvitation(teamID string, orgID *string, email, role, inviterName, teamName, orgName string) error {
-	token := uuid.NewString()
+	token := schemas.NewID()
 	invitation := tables.TablePlatformInvitation{
-		ID:        uuid.NewString(),
+		ID:        schemas.NewID(),
 		TeamID:    &teamID,
 		OrgID:     orgID,
 		Email:     email,

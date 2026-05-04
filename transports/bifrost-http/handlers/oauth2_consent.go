@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/fasthttp/router"
-	"github.com/google/uuid"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
@@ -528,7 +527,7 @@ func (h *ConsentHandler) handleSubmit(ctx *fasthttp.RequestCtx) {
 	}
 
 	session := &tables.TablePerUserOAuthSession{
-		ID:           uuid.New().String(),
+		ID:           schemas.NewID(),
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		ClientID:     flow.ClientID,
@@ -544,7 +543,7 @@ func (h *ConsentHandler) handleSubmit(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	codeRecord := &tables.TablePerUserOAuthCode{
-		ID:            uuid.New().String(),
+		ID:            schemas.NewID(),
 		Code:          code,
 		ClientID:      flow.ClientID,
 		RedirectURI:   flow.RedirectURI,

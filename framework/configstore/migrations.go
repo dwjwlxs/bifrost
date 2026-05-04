@@ -11,7 +11,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/google/uuid"
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
@@ -1530,7 +1529,7 @@ func migrationAddMCPClientIDColumn(ctx context.Context, db *gorm.DB) error {
 
 				for _, client := range mcpClients {
 					// Generate a UUID for the client_id
-					clientID := uuid.New().String()
+					clientID := schemas.NewID()
 
 					// Update the client with the generated client_id
 					if err := tx.Model(&client).Update("client_id", clientID).Error; err != nil {
@@ -6171,7 +6170,7 @@ func migrationAddOllamaSGLConfigColumns(ctx context.Context, db *gorm.DB) error 
 				newKey := tables.TableKey{
 					Provider:   p.Name,
 					ProviderID: p.ID,
-					KeyID:      uuid.NewString(),
+					KeyID:      schemas.NewID(),
 					Weight:     &weight,
 					Enabled:    &enabled,
 					Models:     schemas.WhiteList{"*"},
