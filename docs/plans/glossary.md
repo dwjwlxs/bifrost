@@ -59,7 +59,7 @@
 | 英文 | 中文 | 定义 | 代码/备注 |
 |------|------|------|-----------|
 | Governance | 治理 | 预算上限、速率限制等管控能力 | `plugins/governance/` |
-| Billing | 计费 | 扣费付费、商业化运营能力 | `plugins/payment/` |
+| Billing | 计费 | 扣费付费、商业化运营能力 | `framework/payment/` |
 | Budget | 预算 | 消费限额/额度，分治理和计费两种类型 | `TableBudget` / `governance_budgets` |
 | BudgetType | 预算类型 | governance（治理限额）或 billing（计费额度） | `BudgetType string` |
 | BudgetChecker | 预算检查器 | 按 BudgetType 分流的检查/扣费接口 | `BudgetChecker` interface（Check + Deduct） |
@@ -117,8 +117,8 @@
 | Order Type | 订单类型 | recharge（充值）/ package_purchase（套餐购买） | `TablePlatformOrder.Type` |
 | Order Status | 订单状态 | pending / success / failed / expired / cancelled | `TablePlatformOrder.Status` |
 | Payment Gateway | 支付网关 | 支付平台的抽象接口 | `PaymentGateway` interface |
-| Stripe Gateway | Stripe 网关 | 基于 Stripe Checkout Session 的在线支付实现 | `plugins/payment/stripe.go` |
-| Manual Gateway | 手动网关 | 管理员手动标记支付的实现（无真实支付） | `plugins/payment/manual.go` |
+| Stripe Gateway | Stripe 网关 | 基于 Stripe Checkout Session 的在线支付实现 | `framework/payment/stripe.go` |
+| Manual Gateway | 手动网关 | 管理员手动标记支付的实现（无真实支付） | `framework/payment/manual.go` |
 | Checkout Session | 结账会话 | Stripe 托管支付页，用户在 Stripe 完成付款 | — |
 | Checkout URL | 结账链接 | Stripe Checkout Session 的跳转地址 | `PaymentResult.CheckoutURL` |
 | Webhook | 回调 | 支付平台主动通知支付结果的 HTTP 回调 | `POST /api/billing/webhook/stripe` |
@@ -315,7 +315,6 @@ pending → cancelled（用户取消）
 | MCP Plugin | MCP 插件 | MCP 工具调用集成 | `PluginTypeMCP` |
 | HTTP Plugin | HTTP 插件 | HTTP 传输层拦截 | `PluginTypeHTTP` |
 | Governance Plugin | 治理插件 | 预算、限速、RBAC、路由 | `plugins/governance/` |
-| Payment Plugin | 支付插件 | 充值、套餐购买、支付网关 | `plugins/payment/`（计划中） |
 | Telemetry Plugin | 遥测插件 | Prometheus 指标 | `plugins/telemetry/` |
 | Logging Plugin | 日志插件 | 请求/响应审计日志 | `plugins/logging/` |
 | Semantic Cache Plugin | 语义缓存插件 | 基于向量存储的语义缓存 | `plugins/semanticcache/` |

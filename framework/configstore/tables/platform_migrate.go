@@ -10,5 +10,6 @@ func PlatformMigrate(db *gorm.DB) error {
 		&TablePlatformTeamMember{},
 		&TablePlatformAdmin{},
 		&TablePlatformInvitation{},
+		&TablePlatformOrder{},
 	)
 }
