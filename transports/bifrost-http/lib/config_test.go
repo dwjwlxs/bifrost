@@ -11550,11 +11550,12 @@ func TestSQLite_RateLimit_HashMismatch_FileSync(t *testing.T) {
 func TestGenerateCustomerHash(t *testing.T) {
 	initTestLogger()
 
-	budgetID := "budget-1"
 	customer1 := tables.TableCustomer{
-		ID:       "customer-1",
-		Name:     "Test Customer",
-		BudgetID: &budgetID,
+		ID:   "customer-1",
+		Name: "Test Customer",
+		Budgets: []tables.TableBudget{
+			{ID: "budget-1"},
+		},
 	}
 
 	hash1, err := configstore.GenerateCustomerHash(customer1)
@@ -11587,21 +11588,22 @@ func TestGenerateCustomerHash(t *testing.T) {
 		t.Error("Different Name should produce different hash")
 	}
 
-	// Different BudgetID should produce different hash
-	newBudgetID := "budget-2"
+	// Different Budgets should produce different hash
 	customer4 := customer1
-	customer4.BudgetID = &newBudgetID
+	customer4.Budgets = []tables.TableBudget{
+		{ID: "budget-2"},
+	}
 	hash4, _ := configstore.GenerateCustomerHash(customer4)
 	if hash1 == hash4 {
-		t.Error("Different BudgetID should produce different hash")
+		t.Error("Different Budgets should produce different hash")
 	}
 
-	// Nil BudgetID should produce different hash
+	// Empty Budgets should produce different hash
 	customer5 := customer1
-	customer5.BudgetID = nil
+	customer5.Budgets = nil
 	hash5, _ := configstore.GenerateCustomerHash(customer5)
 	if hash1 == hash5 {
-		t.Error("Nil BudgetID should produce different hash")
+		t.Error("Empty Budgets should produce different hash")
 	}
 
 	t.Log("✓ Customer hash generation works correctly for all fields")

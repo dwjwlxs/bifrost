@@ -2906,21 +2906,14 @@ func (s *RDBConfigStore) DeleteCustomer(ctx context.Context, id string) error {
 		if err := tx.WithContext(ctx).Model(&tables.TableTeam{}).Where("customer_id = ?", id).Update("customer_id", nil).Error; err != nil {
 			return err
 		}
-		// Store the budget and rate limit IDs before deleting the customer
-		budgetID := customer.BudgetID
+		// Store the rate limit ID before deleting the customer
 		rateLimitID := customer.RateLimitID
-		// Delete the customer first
-		if err := tx.WithContext(ctx).Delete(&tables.TableCustomer{}, "id = ?", id).Error; err != nil {
+		// Delete the customer first (CASCADE will delete associated budgets)
+		if err := tx.WithContext(ctx).Select("Budgets").Delete(&tables.TableCustomer{}, "id = ?", id).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return ErrNotFound
 			}
 			return err
-		}
-		// Delete the customer's budget if it exists
-		if budgetID != nil {
-			if err := tx.WithContext(ctx).Delete(&tables.TableBudget{}, "id = ?", *budgetID).Error; err != nil {
-				return err
-			}
 		}
 		// Delete the customer's rate limit if it exists
 		if rateLimitID != nil {

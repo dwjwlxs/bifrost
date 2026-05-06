@@ -7,11 +7,10 @@ type TableCustomer struct {
 	ID          string  `gorm:"primaryKey;type:varchar(255)" json:"id"`
 	Name        string  `gorm:"type:varchar(255);not null" json:"name"`
 	OwnerUserID *string `gorm:"type:varchar(255);index" json:"owner_user_id,omitempty"`
-	BudgetID    *string `gorm:"type:varchar(255);index" json:"budget_id,omitempty"`
 	RateLimitID *string `gorm:"type:varchar(255);index" json:"rate_limit_id,omitempty"`
 
 	// Relationships
-	Budget      *TableBudget      `gorm:"foreignKey:BudgetID" json:"budget,omitempty"`
+	Budgets     []TableBudget     `gorm:"foreignKey:CustomerID;constraint:OnDelete:CASCADE" json:"budgets,omitempty"` // Multiple budgets (governance + billing)
 	RateLimit   *TableRateLimit   `gorm:"foreignKey:RateLimitID" json:"rate_limit,omitempty"`
 	Teams       []TableTeam       `gorm:"foreignKey:CustomerID" json:"teams"`
 	VirtualKeys []TableVirtualKey `gorm:"foreignKey:CustomerID" json:"virtual_keys"`

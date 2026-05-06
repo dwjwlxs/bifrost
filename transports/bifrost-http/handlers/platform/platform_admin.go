@@ -79,7 +79,7 @@ func (h *PlatformAdminHandler) listOrgs(ctx *fasthttp.RequestCtx) {
 			"id":            c.ID,
 			"name":          c.Name,
 			"owner_user_id": c.OwnerUserID,
-			"budget_id":     c.BudgetID,
+			"budgets":       c.Budgets,
 			"created_at":    c.CreatedAt,
 			"updated_at":    c.UpdatedAt,
 		}
@@ -187,7 +187,7 @@ func (h *PlatformAdminHandler) getOrg(ctx *fasthttp.RequestCtx) {
 			"id":            customer.ID,
 			"name":          customer.Name,
 			"owner_user_id": customer.OwnerUserID,
-			"budget_id":     customer.BudgetID,
+			"budgets":     customer.Budgets,
 			"created_at":    customer.CreatedAt,
 			"updated_at":    customer.UpdatedAt,
 		},

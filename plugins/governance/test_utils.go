@@ -119,6 +119,7 @@ func buildVirtualKeyWithProviders(id, value, name string, providers []configstor
 func buildBudget(id string, maxLimit float64, resetDuration string) *configstoreTables.TableBudget {
 	return &configstoreTables.TableBudget{
 		ID:            id,
+		Type:          configstoreTables.BudgetTypeGovernance,
 		MaxLimit:      maxLimit,
 		CurrentUsage:  0,
 		ResetDuration: resetDuration,
@@ -129,6 +130,7 @@ func buildBudget(id string, maxLimit float64, resetDuration string) *configstore
 func buildBudgetWithUsage(id string, maxLimit, currentUsage float64, resetDuration string) *configstoreTables.TableBudget {
 	return &configstoreTables.TableBudget{
 		ID:            id,
+		Type:          configstoreTables.BudgetTypeGovernance,
 		MaxLimit:      maxLimit,
 		CurrentUsage:  currentUsage,
 		ResetDuration: resetDuration,
@@ -184,8 +186,7 @@ func buildCustomer(id, name string, budget *configstoreTables.TableBudget) *conf
 		Name: name,
 	}
 	if budget != nil {
-		customer.Budget = budget
-		customer.BudgetID = &budget.ID
+		customer.Budgets = []configstoreTables.TableBudget{*budget}
 	}
 	return customer
 }
