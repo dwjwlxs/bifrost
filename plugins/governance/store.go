@@ -587,10 +587,10 @@ func (gs *LocalGovernanceStore) GetGovernanceData(ctx context.Context) *Governan
 		clone := *customer
 		clone.Teams = make([]configstoreTables.TableTeam, 0)
 		clone.VirtualKeys = make([]configstoreTables.TableVirtualKey, 0)
-		if clone.BudgetID != nil {
-			if liveBudget, exists := gs.budgets.Load(*clone.BudgetID); exists && liveBudget != nil {
-				if b, ok := liveBudget.(*configstoreTables.TableBudget); ok {
-					clone.Budget = b
+		for i, b := range clone.Budgets {
+			if liveBudget, exists := gs.budgets.Load(b.ID); exists && liveBudget != nil {
+				if lb, ok := liveBudget.(*configstoreTables.TableBudget); ok {
+					clone.Budgets[i] = *lb
 				}
 			}
 		}
@@ -895,12 +895,15 @@ func (gs *LocalGovernanceStore) CheckVirtualKeyBudget(ctx context.Context, vk *c
 		provider = request.Provider
 	}
 	// Use helper to collect budgets and their names (lock-free)
-	budgetsWithCategories := gs.collectBudgetsFromHierarchy(ctx, vk, provider)
+	allBudgetsByEntity := gs.collectBudgetsFromHierarchy(ctx, vk, provider)
+	// Filter to governance budgets only — billing budgets are checked separately
+	// by the billing checker (BudgetChecker interface) in the PreHook pipeline.
+	governanceBudgets := filterBudgetsByType(allBudgetsByEntity, configstoreTables.BudgetTypeGovernance)
 	gs.logger.Debug("LocalStore CheckBudget: Received %d baselines from remote nodes", len(baselines))
 	for budgetID, baseline := range baselines {
 		gs.logger.Debug("  - Baseline for budget %s: %.4f", budgetID, baseline)
 	}
-	return gs.CheckBudget(ctx, budgetsWithCategories, baselines)
+	return gs.CheckBudget(ctx, governanceBudgets, baselines)
 }
 
 // CheckProviderBudget performs budget checking for provider-level configs (lock-free for high performance)
@@ -1093,15 +1096,20 @@ func (gs *LocalGovernanceStore) CheckCustomerBudget(ctx context.Context, custome
 		return DecisionAllow, nil
 	}
 	customer, ok := customerValue.(*configstoreTables.TableCustomer)
-	if !ok || customer.BudgetID == nil {
+	if !ok || len(customer.Budgets) == 0 {
 		return DecisionAllow, nil
 	}
-	customerBudget := gs.LoadBudget(ctx, *customer.BudgetID)
-	if customerBudget == nil {
-		return DecisionAllow, nil
-	}
+	entityWiseBudgets := EntityWiseBudgets{}
 	key := fmt.Sprintf("Customer:%s", customerID)
-	entityWiseBudgets := EntityWiseBudgets{key: {customerBudget}}
+	for _, b := range customer.Budgets {
+		customerBudget := gs.LoadBudget(ctx, b.ID)
+		if customerBudget != nil {
+			entityWiseBudgets[key] = append(entityWiseBudgets[key], customerBudget)
+		}
+	}
+	if len(entityWiseBudgets) == 0 {
+		return DecisionAllow, nil
+	}
 	return gs.CheckBudget(ctx, entityWiseBudgets, baselines)
 }
 
@@ -2202,8 +2210,11 @@ func (gs *LocalGovernanceStore) collectBudgetsFromHierarchy(_ context.Context, v
 					teamCustomerID = *team.CustomerID
 					if customerValue, exists := gs.customers.Load(*team.CustomerID); exists && customerValue != nil {
 						if customer, ok := customerValue.(*configstoreTables.TableCustomer); ok && customer != nil {
-							if customer.BudgetID != nil {
-								if budgetValue, exists := gs.budgets.Load(*customer.BudgetID); exists && budgetValue != nil {
+							for _, cb := range customer.Budgets {
+								if seen[cb.ID] {
+									continue
+								}
+								if budgetValue, exists := gs.budgets.Load(cb.ID); exists && budgetValue != nil {
 									if budget, ok := budgetValue.(*configstoreTables.TableBudget); ok && budget != nil {
 										if categoryBudgets := entityWiseBudgets["Customer"]; categoryBudgets == nil {
 											entityWiseBudgets["Customer"] = []*configstoreTables.TableBudget{}
@@ -2223,8 +2234,11 @@ func (gs *LocalGovernanceStore) collectBudgetsFromHierarchy(_ context.Context, v
 	if vk.CustomerID != nil && (teamCustomerID == "" || *vk.CustomerID != teamCustomerID) {
 		if customerValue, exists := gs.customers.Load(*vk.CustomerID); exists && customerValue != nil {
 			if customer, ok := customerValue.(*configstoreTables.TableCustomer); ok && customer != nil {
-				if customer.BudgetID != nil {
-					if budgetValue, exists := gs.budgets.Load(*customer.BudgetID); exists && budgetValue != nil {
+				for _, cb := range customer.Budgets {
+					if seen[cb.ID] {
+						continue
+					}
+					if budgetValue, exists := gs.budgets.Load(cb.ID); exists && budgetValue != nil {
 						if budget, ok := budgetValue.(*configstoreTables.TableBudget); ok && budget != nil {
 							if categoryBudgets := entityWiseBudgets["Customer"]; categoryBudgets == nil {
 								entityWiseBudgets["Customer"] = []*configstoreTables.TableBudget{}
@@ -2238,6 +2252,38 @@ func (gs *LocalGovernanceStore) collectBudgetsFromHierarchy(_ context.Context, v
 		}
 	}
 	return entityWiseBudgets
+}
+
+// filterBudgetsByType filters EntityWiseBudgets by BudgetType, returning a new EntityWiseBudgets
+// containing only budgets of the specified type. Preserves entity category keys.
+func filterBudgetsByType(entityWise EntityWiseBudgets, budgetType configstoreTables.BudgetType) EntityWiseBudgets {
+	filtered := make(EntityWiseBudgets, len(entityWise))
+	for entity, budgets := range entityWise {
+		for _, b := range budgets {
+			// Empty Type defaults to governance for backward compatibility
+		// (budgets created before the billing dual-track feature have no Type set).
+		effectiveType := b.Type
+		if effectiveType == "" {
+			effectiveType = configstoreTables.BudgetTypeGovernance
+		}
+		if effectiveType == budgetType {
+				if filtered[entity] == nil {
+					filtered[entity] = []*configstoreTables.TableBudget{}
+				}
+				filtered[entity] = append(filtered[entity], b)
+			}
+		}
+	}
+	return filtered
+}
+
+// CollectBillingBudgets collects all billing-type budgets from the hierarchy for a given VK and provider.
+// This is the entry point for the billing check path — the BudgetChecker (Epic I-B) will call this
+// to obtain billing budgets and then apply OR-logic hybrid deduction.
+// Returns EntityWiseBudgets containing only budgets with Type == BudgetTypeBilling.
+func (gs *LocalGovernanceStore) CollectBillingBudgets(ctx context.Context, vk *configstoreTables.TableVirtualKey, provider schemas.ModelProvider) EntityWiseBudgets {
+	allBudgets := gs.collectBudgetsFromHierarchy(ctx, vk, provider)
+	return filterBudgetsByType(allBudgets, configstoreTables.BudgetTypeBilling)
 }
 
 // collectBudgetIDsFromMemory collects budget IDs from in-memory store data (lock-free)
@@ -2594,9 +2640,9 @@ func (gs *LocalGovernanceStore) CreateCustomerInMemory(ctx context.Context, cust
 	if customer == nil {
 		return // Nothing to create
 	}
-	// Create associated budget if exists
-	if customer.Budget != nil {
-		gs.budgets.Store(customer.Budget.ID, customer.Budget)
+	// Create associated budgets if exists
+	for _, b := range customer.Budgets {
+		gs.budgets.Store(b.ID, &b)
 	}
 	// Create associated rate limit if exists
 	if customer.RateLimit != nil {
@@ -2620,19 +2666,30 @@ func (gs *LocalGovernanceStore) UpdateCustomerInMemory(ctx context.Context, cust
 		clone := *customer
 
 		// Handle budget updates with consistent logic
-		if clone.Budget != nil {
-			// Preserve existing usage from memory when updating customer budget config
-			if existingBudgetValue, exists := gs.budgets.Load(clone.Budget.ID); exists && existingBudgetValue != nil {
-				if existingBudget, ok := existingBudgetValue.(*configstoreTables.TableBudget); ok && existingBudget != nil {
-					// Preserve current usage and last reset time from existing in-memory budget
-					clone.Budget.CurrentUsage = existingBudget.CurrentUsage
-					clone.Budget.LastReset = existingBudget.LastReset
+		// Reconcile multi-budget slice by ID: preserve live usage on matches,
+		// evict budgets that disappeared from the customer (owned-FK semantics —
+		// a customer's budgets are customer-scoped, so dropping the association means
+		// the budget no longer exists for anyone).
+		existingBudgetIDs := map[string]struct{}{}
+		for _, b := range existingCustomer.Budgets {
+			existingBudgetIDs[b.ID] = struct{}{}
+		}
+		nextBudgetIDs := map[string]struct{}{}
+		for i := range clone.Budgets {
+			b := &clone.Budgets[i]
+			nextBudgetIDs[b.ID] = struct{}{}
+			if live, exists := gs.budgets.Load(b.ID); exists && live != nil {
+				if lb, ok := live.(*configstoreTables.TableBudget); ok && lb != nil {
+					b.CurrentUsage = lb.CurrentUsage
+					b.LastReset = lb.LastReset
 				}
 			}
-			gs.budgets.Store(clone.Budget.ID, clone.Budget)
-		} else if existingCustomer.Budget != nil {
-			// Budget was removed from the customer, delete it from memory
-			gs.budgets.Delete(existingCustomer.Budget.ID)
+			gs.budgets.Store(b.ID, b)
+		}
+		for id := range existingBudgetIDs {
+			if _, stillThere := nextBudgetIDs[id]; !stillThere {
+				gs.budgets.Delete(id)
+			}
 		}
 
 		// Handle rate limit updates with consistent logic
@@ -2667,9 +2724,9 @@ func (gs *LocalGovernanceStore) DeleteCustomerInMemory(ctx context.Context, cust
 	// Get customer to check for associated budget and rate limit
 	if customerValue, exists := gs.customers.Load(customerID); exists && customerValue != nil {
 		if customer, ok := customerValue.(*configstoreTables.TableCustomer); ok && customer != nil {
-			// Delete associated budget if exists
-			if customer.BudgetID != nil {
-				gs.budgets.Delete(*customer.BudgetID)
+			// Delete associated budgets if exists
+			for _, b := range customer.Budgets {
+				gs.budgets.Delete(b.ID)
 			}
 			// Delete associated rate limit if exists
 			if customer.RateLimitID != nil {
@@ -2933,10 +2990,14 @@ func (gs *LocalGovernanceStore) updateBudgetReferences(ctx context.Context, rese
 		if !ok || customer == nil {
 			return true // continue
 		}
-		if customer.BudgetID != nil && *customer.BudgetID == budgetID {
-			clone := *customer
-			clone.Budget = resetBudget
-			gs.customers.Store(key, &clone)
+		for i := range customer.Budgets {
+			if customer.Budgets[i].ID == budgetID {
+				clone := *customer
+				clone.Budgets = append([]configstoreTables.TableBudget(nil), customer.Budgets...)
+				clone.Budgets[i] = *resetBudget
+				gs.customers.Store(key, &clone)
+				break
+			}
 		}
 		return true // continue
 	})

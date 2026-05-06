@@ -885,9 +885,21 @@ func GenerateCustomerHash(c tables.TableCustomer) (string, error) {
 	// Hash Name
 	hash.Write([]byte(c.Name))
 
-	// Hash BudgetID
-	if c.BudgetID != nil {
-		hash.Write([]byte("budgetID:" + *c.BudgetID))
+	// Hash sorted budget IDs — customer now owns multiple budgets; slice order must not
+	// affect the hash, otherwise config-sync would flip the hash on every reload.
+	if len(c.Budgets) > 0 {
+		ids := make([]string, len(c.Budgets))
+		for i, b := range c.Budgets {
+			ids[i] = b.ID
+		}
+		sort.Strings(ids)
+		hash.Write([]byte("budgetIDs:"))
+		for i, id := range ids {
+			if i > 0 {
+				hash.Write([]byte{','})
+			}
+			hash.Write([]byte(id))
+		}
 	}
 
 	return hex.EncodeToString(hash.Sum(nil)), nil

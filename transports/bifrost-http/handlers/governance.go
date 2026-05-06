@@ -238,14 +238,14 @@ type UpdateTeamRequest struct {
 // CreateCustomerRequest represents the request body for creating a customer
 type CreateCustomerRequest struct {
 	Name      string                  `json:"name" validate:"required"`
-	Budget    *CreateBudgetRequest    `json:"budget,omitempty"`
+	Budgets   []CreateBudgetRequest   `json:"budgets,omitempty"` // Multi-budget: each must have a unique reset_duration
 	RateLimit *CreateRateLimitRequest `json:"rate_limit,omitempty"` // Customer can have its own rate limit
 }
 
 // UpdateCustomerRequest represents the request body for updating a customer
 type UpdateCustomerRequest struct {
 	Name      *string                 `json:"name,omitempty"`
-	Budget    *UpdateBudgetRequest    `json:"budget,omitempty"`
+	Budgets   []UpdateBudgetRequest   `json:"budgets,omitempty"` // Multi-budget: replaces all customer budgets
 	RateLimit *UpdateRateLimitRequest `json:"rate_limit,omitempty"`
 }
 
@@ -1873,22 +1873,41 @@ func (h *GovernanceHandler) createCustomer(ctx *fasthttp.RequestCtx) {
 			ID:   schemas.NewID(),
 			Name: req.Name,
 		}
-
-		if req.Budget != nil {
-			budget := configstoreTables.TableBudget{
-				ID:            schemas.NewID(),
-				MaxLimit:      req.Budget.MaxLimit,
-				ResetDuration: req.Budget.ResetDuration,
-				LastReset:     budgetLastReset(false, req.Budget.ResetDuration),
-				CurrentUsage:  0,
+		// Customer row must exist before child budgets (FK on governance_budgets.customer_id)
+		if err := h.configStore.CreateCustomer(ctx, &customer, tx); err != nil {
+			return err
+		}
+		// Create owned multi-budgets; enforce unique reset_duration per customer
+		if len(req.Budgets) > 0 {
+			seenDurations := make(map[string]bool)
+			for _, b := range req.Budgets {
+				if b.MaxLimit < 0 {
+					return &badRequestError{err: fmt.Errorf("budget max_limit cannot be negative: %.2f", b.MaxLimit)}
+				}
+				if _, err := configstoreTables.ParseDuration(b.ResetDuration); err != nil {
+					return &badRequestError{err: fmt.Errorf("invalid reset duration format: %s", b.ResetDuration)}
+				}
+				if seenDurations[b.ResetDuration] {
+					return &badRequestError{err: fmt.Errorf("duplicate reset_duration in budgets: %s", b.ResetDuration)}
+				}
+				seenDurations[b.ResetDuration] = true
+				budget := configstoreTables.TableBudget{
+					ID:              schemas.NewID(),
+					MaxLimit:        b.MaxLimit,
+					ResetDuration:   b.ResetDuration,
+					LastReset:       budgetLastReset(b.CalendarAligned, b.ResetDuration),
+					CurrentUsage:    0,
+					CalendarAligned: b.CalendarAligned,
+					CustomerID:      &customer.ID,
+				}
+				if err := validateBudget(&budget); err != nil {
+					return err
+				}
+				if err := h.configStore.CreateBudget(ctx, &budget, tx); err != nil {
+					return err
+				}
+				customer.Budgets = append(customer.Budgets, budget)
 			}
-			if err := validateBudget(&budget); err != nil {
-				return err
-			}
-			if err := h.configStore.CreateBudget(ctx, &budget, tx); err != nil {
-				return err
-			}
-			customer.BudgetID = &budget.ID
 		}
 		if req.RateLimit != nil {
 			rateLimit := configstoreTables.TableRateLimit{
@@ -1905,11 +1924,14 @@ func (h *GovernanceHandler) createCustomer(ctx *fasthttp.RequestCtx) {
 			}
 			customer.RateLimitID = &rateLimit.ID
 		}
-		if err := h.configStore.CreateCustomer(ctx, &customer, tx); err != nil {
-			return err
-		}
 		return nil
 	}); err != nil {
+		var badReqErr *badRequestError
+		if errors.As(err, &badReqErr) {
+			SendError(ctx, 400, err.Error())
+			return
+		}
+		logger.Error("failed to create customer: %v", err)
 		SendError(ctx, 500, "failed to create customer")
 		return
 	}
@@ -1979,69 +2001,98 @@ func (h *GovernanceHandler) updateCustomer(ctx *fasthttp.RequestCtx) {
 	}
 	// Updating customer in database
 	if err := h.configStore.ExecuteTransaction(ctx, func(tx *gorm.DB) error {
-		// Track IDs to delete after updating the customer (to avoid FK constraint)
-		var budgetIDToDelete, rateLimitIDToDelete string
+		// Track rate-limit ID to delete after updating the customer (to avoid FK constraint)
+		var rateLimitIDToDelete string
 
 		// Update fields if provided
 		if req.Name != nil {
 			customer.Name = *req.Name
 		}
-		// Handle budget updates
-		if req.Budget != nil {
-			// Check if budget removal is requested (all fields nil)
-			budgetIsEmpty := isBudgetRemovalRequest(req.Budget)
-			if budgetIsEmpty {
-				// Mark budget for deletion after FK is removed
-				if customer.BudgetID != nil {
-					budgetIDToDelete = *customer.BudgetID
-					customer.BudgetID = nil
-					customer.Budget = nil
+		// Multi-budget reconciliation: match by reset_duration, preserve usage on update,
+		// create new budgets for new durations, delete unmatched existing budgets.
+		if req.Budgets != nil {
+			if len(req.Budgets) == 0 {
+				// Remove all budgets
+				for _, existing := range customer.Budgets {
+					if err := h.configStore.DeleteBudget(ctx, existing.ID, tx); err != nil {
+						return fmt.Errorf("failed to delete customer budget: %w", err)
+					}
 				}
-			} else if customer.BudgetID != nil {
-				// Update existing budget — all fields are optional (partial update)
-				budget := configstoreTables.TableBudget{}
-				if err := tx.First(&budget, "id = ?", *customer.BudgetID).Error; err != nil {
-					return err
-				}
-				if req.Budget.MaxLimit != nil {
-					budget.MaxLimit = *req.Budget.MaxLimit
-				}
-				if req.Budget.ResetDuration != nil {
-					budget.ResetDuration = *req.Budget.ResetDuration
-				}
-				if err := validateBudget(&budget); err != nil {
-					return err
-				}
-				if err := h.configStore.UpdateBudget(ctx, &budget, tx); err != nil {
-					return err
-				}
-				customer.Budget = &budget
+				customer.Budgets = nil
 			} else {
-				// Create new budget
-				if req.Budget.MaxLimit == nil || req.Budget.ResetDuration == nil {
-					return fmt.Errorf("both max_limit and reset_duration are required when creating a new budget")
+				// Validate incoming budgets
+				seenDurations := make(map[string]bool)
+				for _, b := range req.Budgets {
+					if b.MaxLimit != nil && *b.MaxLimit < 0 {
+						return fmt.Errorf("budget max_limit cannot be negative: %.2f", *b.MaxLimit)
+					}
+					if b.ResetDuration != nil {
+						if _, err := configstoreTables.ParseDuration(*b.ResetDuration); err != nil {
+							return fmt.Errorf("invalid reset duration format: %s", *b.ResetDuration)
+						}
+					}
+					if b.ResetDuration != nil && seenDurations[*b.ResetDuration] {
+						return fmt.Errorf("duplicate reset_duration in budgets: %s", *b.ResetDuration)
+					}
+					if b.ResetDuration != nil {
+						seenDurations[*b.ResetDuration] = true
+					}
 				}
-				if *req.Budget.MaxLimit < 0 {
-					return fmt.Errorf("budget max_limit cannot be negative: %.2f", *req.Budget.MaxLimit)
+
+				existingByDuration := make(map[string]configstoreTables.TableBudget)
+				for _, existing := range customer.Budgets {
+					existingByDuration[existing.ResetDuration] = existing
 				}
-				if _, err := configstoreTables.ParseDuration(*req.Budget.ResetDuration); err != nil {
-					return fmt.Errorf("invalid reset duration format: %s", *req.Budget.ResetDuration)
+
+				var reconciledBudgets []configstoreTables.TableBudget
+				matchedIDs := make(map[string]bool)
+				for _, b := range req.Budgets {
+					budget := configstoreTables.TableBudget{}
+					if b.ResetDuration != nil && b.MaxLimit != nil {
+						// Full spec: both fields provided — match by duration or create
+						if existing, ok := existingByDuration[*b.ResetDuration]; ok {
+							budget = existing
+							budget.MaxLimit = *b.MaxLimit
+							budget.ResetDuration = *b.ResetDuration
+							if b.CalendarAligned != nil {
+								budget.CalendarAligned = *b.CalendarAligned
+							}
+							matchedIDs[existing.ID] = true
+						} else {
+							budget = configstoreTables.TableBudget{
+								ID:              schemas.NewID(),
+								MaxLimit:        *b.MaxLimit,
+								ResetDuration:   *b.ResetDuration,
+								LastReset:       budgetLastReset(b.CalendarAligned != nil && *b.CalendarAligned, *b.ResetDuration),
+								CurrentUsage:    0,
+								CalendarAligned: b.CalendarAligned != nil && *b.CalendarAligned,
+								CustomerID:      &customer.ID,
+							}
+						}
+						if err := validateBudget(&budget); err != nil {
+							return err
+						}
+						if existing, ok := existingByDuration[budget.ResetDuration]; ok && matchedIDs[existing.ID] {
+							if err := h.configStore.UpdateBudget(ctx, &budget, tx); err != nil {
+								return err
+							}
+						} else {
+							if err := h.configStore.CreateBudget(ctx, &budget, tx); err != nil {
+								return err
+							}
+						}
+						reconciledBudgets = append(reconciledBudgets, budget)
+					}
 				}
-				budget := configstoreTables.TableBudget{
-					ID:            schemas.NewID(),
-					MaxLimit:      *req.Budget.MaxLimit,
-					ResetDuration: *req.Budget.ResetDuration,
-					LastReset:     budgetLastReset(false, *req.Budget.ResetDuration),
-					CurrentUsage:  0,
+				// Delete budgets no longer present
+				for _, existing := range customer.Budgets {
+					if !matchedIDs[existing.ID] {
+						if err := h.configStore.DeleteBudget(ctx, existing.ID, tx); err != nil {
+							return fmt.Errorf("failed to delete removed customer budget: %w", err)
+						}
+					}
 				}
-				if err := validateBudget(&budget); err != nil {
-					return err
-				}
-				if err := h.configStore.CreateBudget(ctx, &budget, tx); err != nil {
-					return err
-				}
-				customer.BudgetID = &budget.ID
-				customer.Budget = &budget
+				customer.Budgets = reconciledBudgets
 			}
 		}
 		// Handle rate limit updates
@@ -2097,12 +2148,7 @@ func (h *GovernanceHandler) updateCustomer(ctx *fasthttp.RequestCtx) {
 			return err
 		}
 
-		// Now that FK references are removed, delete the orphaned budget/rate limit
-		if budgetIDToDelete != "" {
-			if err := tx.Delete(&configstoreTables.TableBudget{}, "id = ?", budgetIDToDelete).Error; err != nil {
-				return err
-			}
-		}
+		// Now that FK references are removed, delete the orphaned rate limit
 		if rateLimitIDToDelete != "" {
 			if err := tx.Delete(&configstoreTables.TableRateLimit{}, "id = ?", rateLimitIDToDelete).Error; err != nil {
 				return err

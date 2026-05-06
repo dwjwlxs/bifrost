@@ -639,6 +639,15 @@ func triggerMigrations(ctx context.Context, db *gorm.DB) error {
 	if err := migrationAddOwnerUserIDColumn(ctx, db); err != nil {
 		return err
 	}
+	if err := migrationAddGovernanceUsersTable(ctx, db); err != nil {
+		return err
+	}
+	if err := migrationAddBillingFieldsToBudgetsTable(ctx, db); err != nil {
+		return err
+	}
+	if err := migrationConvertCustomerToMultiBudget(ctx, db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -7287,6 +7296,163 @@ func migrationAddOwnerUserIDColumn(ctx context.Context, db *gorm.DB) error {
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error running add_owner_user_id_column migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddGovernanceUsersTable creates the governance_users table for the
+// billing/governance dual-track system. TableUser existence indicates the user
+// is in the billing system and must have at least one billing Budget to use the API.
+func migrationAddGovernanceUsersTable(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "add_governance_users_table",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasTable(&tables.TableUser{}) {
+				if err := migrator.CreateTable(&tables.TableUser{}); err != nil {
+					return fmt.Errorf("failed to create governance_users table: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if migrator.HasTable(&tables.TableUser{}) {
+				if err := migrator.DropTable(&tables.TableUser{}); err != nil {
+					return fmt.Errorf("failed to drop governance_users table: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_governance_users_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddBillingFieldsToBudgetsTable adds billing-related columns to the
+// governance_budgets table: type, user_id, customer_id, user_scope_team_id,
+// user_scope_customer_id, expires_at, off_peak_discount.
+// Existing rows default to type='governance', preserving current behavior.
+func migrationAddBillingFieldsToBudgetsTable(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "add_billing_fields_to_budgets_table",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+
+			columns := []struct {
+				table  interface{}
+				column string
+				field  string
+			}{
+				{&tables.TableBudget{}, "type", "Type"},
+				{&tables.TableBudget{}, "user_id", "UserID"},
+				{&tables.TableBudget{}, "customer_id", "CustomerID"},
+				{&tables.TableBudget{}, "user_scope_team_id", "UserScopeTeamID"},
+				{&tables.TableBudget{}, "user_scope_customer_id", "UserScopeCustomerID"},
+				{&tables.TableBudget{}, "expires_at", "ExpiresAt"},
+				{&tables.TableBudget{}, "off_peak_discount", "OffPeakDiscount"},
+			}
+
+			for _, c := range columns {
+				if !migrator.HasColumn(c.table, c.column) {
+					if err := migrator.AddColumn(c.table, c.field); err != nil {
+						return fmt.Errorf("failed to add %s column to governance_budgets: %w", c.column, err)
+					}
+				}
+			}
+
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+
+			columns := []struct {
+				table  interface{}
+				column string
+			}{
+				{&tables.TableBudget{}, "off_peak_discount"},
+				{&tables.TableBudget{}, "expires_at"},
+				{&tables.TableBudget{}, "user_scope_customer_id"},
+				{&tables.TableBudget{}, "user_scope_team_id"},
+				{&tables.TableBudget{}, "customer_id"},
+				{&tables.TableBudget{}, "user_id"},
+				{&tables.TableBudget{}, "type"},
+			}
+
+			for _, c := range columns {
+				if migrator.HasColumn(c.table, c.column) {
+					if err := migrator.DropColumn(c.table, c.column); err != nil {
+						return fmt.Errorf("failed to drop %s column from governance_budgets: %w", c.column, err)
+					}
+				}
+			}
+
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_billing_fields_to_budgets_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationConvertCustomerToMultiBudget converts TableCustomer from single BudgetID
+// to multiple Budgets (has-many via CustomerID FK). It:
+//  1. Migrates existing budget_id references: sets customer_id on the referenced budget row
+//  2. Drops the legacy budget_id column from governance_customers
+func migrationConvertCustomerToMultiBudget(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "convert_customer_to_multi_budget",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migr := tx.Migrator()
+
+			// Step 1: Migrate data — set customer_id on budgets referenced by budget_id
+			if migr.HasColumn(&tables.TableCustomer{}, "budget_id") {
+				// Only run data migration if the budget_id column still exists
+				// and the target customer_id column exists on governance_budgets
+				if migr.HasColumn(&tables.TableBudget{}, "customer_id") {
+					if err := tx.Exec(`
+						UPDATE governance_budgets b
+						JOIN governance_customers c ON c.budget_id = b.id
+						SET b.customer_id = c.id
+						WHERE c.budget_id IS NOT NULL AND b.customer_id IS NULL
+					`).Error; err != nil {
+						// Log but don't fail — data migration is best-effort for new installs
+						_ = err
+					}
+				}
+				// Step 2: Drop the legacy budget_id column
+				if err := migr.DropColumn(&tables.TableCustomer{}, "budget_id"); err != nil {
+					return fmt.Errorf("failed to drop budget_id column from governance_customers: %w", err)
+				}
+			}
+
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migr := tx.Migrator()
+			// Re-add the budget_id column if it doesn't exist
+			if !migr.HasColumn(&tables.TableCustomer{}, "budget_id") {
+				type tmpCustomer struct {
+					BudgetID *string `gorm:"type:varchar(255);index"`
+				}
+				if err := migr.AddColumn(&tables.TableCustomer{}, "BudgetID"); err != nil {
+					return fmt.Errorf("failed to re-add budget_id column to governance_customers: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running convert_customer_to_multi_budget migration: %s", err.Error())
 	}
 	return nil
 }

@@ -224,7 +224,7 @@ func (h *PlatformOrgHandler) getOrg(ctx *fasthttp.RequestCtx) {
 	data := map[string]any{
 		"id":         customer.ID,
 		"name":       customer.Name,
-		"budget_id":  customer.BudgetID,
+		"budgets":  customer.Budgets,
 		"role":       role,
 		"created_at": customer.CreatedAt,
 		"updated_at": customer.UpdatedAt,
