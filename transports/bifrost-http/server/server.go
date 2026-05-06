@@ -1134,6 +1134,7 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	platformTeamHandler := platform_handlers.NewPlatformTeamHandler(db, s.Config.ConfigStore, logger, s.Config.Messenger, s.Config.PlatformURL)
 	platformVKHandler := platform_handlers.NewPlatformVKHandler(db, s.Config.ConfigStore)
 	platformInvitationHandler := platform_handlers.NewPlatformInvitationHandler(db, logger, s.Config.Messenger, s.Config.PlatformURL)
+	billingHandler := platform_handlers.NewBillingHandler(db, s.Config.ConfigStore)
 	// Platform protected routes need PlatformAuthMiddleware
 	var platformProtectedMw = make([]schemas.BifrostHTTPMiddleware, len(middlewares), len(middlewares)+1)
 	copy(platformProtectedMw, middlewares)
@@ -1146,6 +1147,7 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	platformTeamHandler.RegisterRoutes(s.Router, platformProtectedMw...)            // team needs auth
 	platformVKHandler.RegisterRoutes(s.Router, platformProtectedMw...)              // VK needs auth
 	platformInvitationHandler.RegisterRoutes(s.Router)                              // GET /invitations/:token (public)
+	billingHandler.RegisterRoutes(s.Router, platformProtectedMw...)                 // Billing needs auth
 	platformInvitationHandler.RegisterAcceptRoute(s.Router, platformProtectedMw...) // POST /invitations/:token/accept (auth required)
 
 	// OAuth metadata + per-user OAuth endpoints (no auth middleware — must be publicly accessible)

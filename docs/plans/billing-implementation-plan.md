@@ -110,13 +110,12 @@
 
 ### Epic I-C：Payment 模块骨架 + 手动充值
 
-**Story I-C-1：plugins/payment/ 模块初始化 + PaymentGateway 接口 + ManualGateway**
+**Story I-C-1：framework/payment/ 初始化 + PaymentGateway 接口 + ManualGateway**
 
-- 新建 `plugins/payment/` 目录 + `go.mod`
+- 新建 `framework/payment/` 目录
 - `gateway.go`：PaymentGateway 接口 + Options/Result 类型
 - `manual.go`：ManualGateway 实现（CreatePayment 直接返回 success，HandleWebhook/VerifyPayment 空实现）
 - `handler.go`：注册路由骨架（先注册 health 端点验证模块加载）
-- 更新 `go.work` 加入 payment 模块
 - 验证：`go build` 通过、Bifrost 启动后 `/api/billing/` 路由可达
 
 **Story I-C-2：TablePlatformOrder 订单表**
@@ -217,7 +216,7 @@
 
 **Story III-A-1：StripeGateway — CreatePayment**
 
-- 新文件：`plugins/payment/stripe.go`
+- 新文件：`framework/payment/stripe.go`
 - 依赖：`github.com/stripe/stripe-go/v82`
 - 实现 CreatePayment：创建 Checkout Session，返回跳转 URL
 - 支持 preferred_currency（MVP 用 Stripe 自动换算）
@@ -225,7 +224,7 @@
 
 **Story III-A-2：StripeGateway — HandleWebhook**
 
-- 文件：`plugins/payment/stripe.go`（追加）+ `webhook.go`
+- 文件：`framework/payment/stripe.go`（追加）+ `webhook.go`
 - 验证 Stripe 签名（webhookSecret + sig header）
 - 解析 event type：checkout.session.completed → success
 - 从 metadata 取 order_no 匹配订单
@@ -233,7 +232,7 @@
 
 **Story III-A-3：StripeGateway — VerifyPayment + 对账**
 
-- 文件：`plugins/payment/stripe.go`（追加）
+- 文件：`framework/payment/stripe.go`（追加）
 - 实现 VerifyPayment：查询 Checkout Session 状态
 - 可用于主动对账（订单 status 长时间 pending 时）
 - 验证：传入 paymentID 返回正确状态

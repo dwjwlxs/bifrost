@@ -648,6 +648,40 @@ func triggerMigrations(ctx context.Context, db *gorm.DB) error {
 	if err := migrationConvertCustomerToMultiBudget(ctx, db); err != nil {
 		return err
 	}
+	if err := migrationAddPlatformOrdersTable(ctx, db); err != nil {
+		return err
+	}
+	return nil
+}
+
+// migrationAddPlatformOrdersTable creates the platform_orders table for billing orders.
+func migrationAddPlatformOrdersTable(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "add_platform_orders_table",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasTable(&tables.TablePlatformOrder{}) {
+				if err := migrator.CreateTable(&tables.TablePlatformOrder{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if migrator.HasTable(&tables.TablePlatformOrder{}) {
+				if err := migrator.DropTable(&tables.TablePlatformOrder{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_platform_orders_table migration: %s", err.Error())
+	}
 	return nil
 }
 

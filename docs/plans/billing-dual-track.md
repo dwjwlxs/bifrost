@@ -895,9 +895,8 @@ pending → cancelled (用户取消)
 
 ### 14.1 项目定位
 
-`plugins/payment/` — Bifrost Go workspace 下的独立模块，与 governance 平级。
+`framework/payment/` — framework中的一个文件夹。
 
-- 有自己的 `go.mod`，通过 workspace 引用 `core/`、`framework/`
 - 注册为 Bifrost HTTP handler，通过 Bifrost 端口暴露端点
 - 函数内调用 governance store（不走 HTTP API），共享数据库
 - 不直接操作 Bifrost DB，通过 governance store 方法调用
@@ -906,7 +905,7 @@ pending → cancelled (用户取消)
 
 ```
 ┌──────────────────────────────────────────────┐
-│  plugins/payment/                            │
+│  framework/payment/                          │
 │                                              │
 │  handler.go       → HTTP 端点注册 + 请求处理   │
 │  service.go       → 业务编排（订单/充值/购买） │
@@ -928,7 +927,7 @@ pending → cancelled (用户取消)
 ### 14.3 PaymentGateway 接口
 
 ```go
-// plugins/payment/gateway.go
+// framework/payment/gateway.go
 
 type PaymentGateway interface {
     // CreatePayment 创建支付意图，返回跳转 URL 或支付凭证
@@ -971,7 +970,7 @@ type PaymentStatus struct {
 **StripeGateway** — 生产环境，使用 Stripe Checkout Session：
 
 ```go
-// plugins/payment/stripe.go
+// framework/payment/stripe.go
 
 type StripeGateway struct {
     apiKey        string // sk_live_xxx / sk_test_xxx
@@ -999,7 +998,7 @@ type StripeGateway struct {
 **ManualGateway** — admin 手动标记，无 Stripe：
 
 ```go
-// plugins/payment/manual.go
+// framework/payment/manual.go
 
 type ManualGateway struct{}
 
