@@ -289,6 +289,99 @@ func dropLegacyBudgetColumn(tx *gorm.DB, tableName string) error {
 	return nil
 }
 
+func migrationAddPlatformPackagesTable(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "add_platform_packages_table",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasTable(&tables.TablePlatformPackage{}) {
+				if err := migrator.CreateTable(&tables.TablePlatformPackage{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if migrator.HasTable(&tables.TablePlatformPackage{}) {
+				if err := migrator.DropTable(&tables.TablePlatformPackage{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_platform_packages_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddPlatformEntityPackagesTable creates the platform_entity_packages table for purchased package instances.
+func migrationAddPlatformEntityPackagesTable(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "add_platform_entity_packages_table",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasTable(&tables.TableEntityPackage{}) {
+				if err := migrator.CreateTable(&tables.TableEntityPackage{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if migrator.HasTable(&tables.TableEntityPackage{}) {
+				if err := migrator.DropTable(&tables.TableEntityPackage{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_platform_entity_packages_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddUserProviderConfigsTable creates the governance_user_provider_configs table
+// for per-user, per-provider model access rules.
+func migrationAddUserProviderConfigsTable(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "add_user_provider_configs_table",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasTable(&tables.TableUserProviderConfig{}) {
+				if err := migrator.CreateTable(&tables.TableUserProviderConfig{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if migrator.HasTable(&tables.TableUserProviderConfig{}) {
+				if err := migrator.DropTable(&tables.TableUserProviderConfig{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_user_provider_configs_table migration: %s", err.Error())
+	}
+	return nil
+}
+
 // Migrate performs the necessary database migrations.
 func triggerMigrations(ctx context.Context, db *gorm.DB) error {
 	// Acquire advisory lock to serialize migrations across cluster nodes.
@@ -649,6 +742,15 @@ func triggerMigrations(ctx context.Context, db *gorm.DB) error {
 		return err
 	}
 	if err := migrationAddPlatformOrdersTable(ctx, db); err != nil {
+		return err
+	}
+	if err := migrationAddPlatformPackagesTable(ctx, db); err != nil {
+		return err
+	}
+	if err := migrationAddPlatformEntityPackagesTable(ctx, db); err != nil {
+		return err
+	}
+	if err := migrationAddUserProviderConfigsTable(ctx, db); err != nil {
 		return err
 	}
 	return nil
