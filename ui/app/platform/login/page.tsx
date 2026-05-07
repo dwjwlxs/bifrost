@@ -11,8 +11,8 @@ import { usePlatformLoginMutation } from "@/lib/platform/platformApi";
 
 export default function LoginPage() {
 	const navigate = useNavigate();
-	const searchParams = useSearch({ from: "/platform/login" });
-	const redirect = (searchParams as { redirect?: string }).redirect;
+	const searchParams = useSearch({ strict: false }) as { redirect?: string };
+	const redirect = searchParams.redirect;
 	const [login, setLogin] = useState("");
 	const [password, setPassword] = useState("");
 	const [error, setError] = useState("");

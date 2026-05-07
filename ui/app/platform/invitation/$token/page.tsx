@@ -16,8 +16,8 @@ export default function InvitationPage() {
 	const token = params?.token || "";
 	const navigate = useNavigate();
 
-	const { data: invitation, isLoading, isError, error } = usePlatformGetInvitationQuery(token);
-	const [acceptInvitation, { isLoading: accepting, isSuccess }] = usePlatformAcceptInvitationMutation();
+	const { data: invitation, isLoading, isError, error: queryError } = usePlatformGetInvitationQuery(token);
+	const [acceptInvitation, { isLoading: accepting, isSuccess, error: acceptError }] = usePlatformAcceptInvitationMutation();
 
 	const notAuthenticated = !isAuthenticated();
 
@@ -44,8 +44,9 @@ export default function InvitationPage() {
 
 	// Decode backend error from RTK Query error
 	const errorMessage = (() => {
-		if (!error) return "";
-		const d = error as { data?: { message?: string } };
+		const err = acceptError || queryError;
+		if (!err) return "";
+		const d = err as { data?: { message?: string } };
 		return d?.data?.message || "An error occurred.";
 	})();
 
@@ -168,7 +169,7 @@ export default function InvitationPage() {
 									<Button onClick={handleAccept} className="w-full">
 										Sign in to Accept
 									</Button>
-									<Link to="/platform/login" search={{ redirect: `/platform/invitation/${token}` }} className="block">
+									<Link to="/platform/register" search={{ redirect: `/platform/invitation/${token}` }} className="block">
 										<Button variant="outline" className="w-full">Create an account</Button>
 									</Link>
 								</>
