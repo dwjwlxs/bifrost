@@ -732,6 +732,18 @@ func triggerMigrations(ctx context.Context, db *gorm.DB) error {
 	if err := migrationAddOwnerUserIDColumn(ctx, db); err != nil {
 		return err
 	}
+	if err := migrationAddPlatformOrgMembersTable(ctx, db); err != nil {
+		return err
+	}
+	if err := migrationAddPlatformTeamMembersTable(ctx, db); err != nil {
+		return err
+	}
+	if err := migrationAddPlatformAdminsTable(ctx, db); err != nil {
+		return err
+	}
+	if err := migrationAddPlatformInvitationsTable(ctx, db); err != nil {
+		return err
+	}
 	if err := migrationAddGovernanceUsersTable(ctx, db); err != nil {
 		return err
 	}
@@ -755,8 +767,6 @@ func triggerMigrations(ctx context.Context, db *gorm.DB) error {
 	}
 	return nil
 }
-
-// migrationAddPlatformOrdersTable creates the platform_orders table for billing orders.
 func migrationAddPlatformOrdersTable(ctx context.Context, db *gorm.DB) error {
 	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
 		ID: "add_platform_orders_table",
@@ -7432,6 +7442,134 @@ func migrationAddOwnerUserIDColumn(ctx context.Context, db *gorm.DB) error {
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error running add_owner_user_id_column migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddPlatformOrgMembersTable creates the platform_org_members table for
+// multi-tenant RBAC — maps users to organizations.
+func migrationAddPlatformOrgMembersTable(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "add_platform_org_members_table",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasTable(&tables.TablePlatformOrgMember{}) {
+				if err := migrator.CreateTable(&tables.TablePlatformOrgMember{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if migrator.HasTable(&tables.TablePlatformOrgMember{}) {
+				if err := migrator.DropTable(&tables.TablePlatformOrgMember{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_platform_org_members_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddPlatformTeamMembersTable creates the platform_team_members table for
+// multi-tenant RBAC — maps users to teams.
+func migrationAddPlatformTeamMembersTable(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "add_platform_team_members_table",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasTable(&tables.TablePlatformTeamMember{}) {
+				if err := migrator.CreateTable(&tables.TablePlatformTeamMember{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if migrator.HasTable(&tables.TablePlatformTeamMember{}) {
+				if err := migrator.DropTable(&tables.TablePlatformTeamMember{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_platform_team_members_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddPlatformAdminsTable creates the platform_admins table for system-level
+// administrator records.
+func migrationAddPlatformAdminsTable(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "add_platform_admins_table",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasTable(&tables.TablePlatformAdmin{}) {
+				if err := migrator.CreateTable(&tables.TablePlatformAdmin{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if migrator.HasTable(&tables.TablePlatformAdmin{}) {
+				if err := migrator.DropTable(&tables.TablePlatformAdmin{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_platform_admins_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddPlatformInvitationsTable creates the platform_invitations table for
+// pending invitations to join an org or team.
+func migrationAddPlatformInvitationsTable(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "add_platform_invitations_table",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasTable(&tables.TablePlatformInvitation{}) {
+				if err := migrator.CreateTable(&tables.TablePlatformInvitation{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if migrator.HasTable(&tables.TablePlatformInvitation{}) {
+				if err := migrator.DropTable(&tables.TablePlatformInvitation{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_platform_invitations_table migration: %s", err.Error())
 	}
 	return nil
 }
