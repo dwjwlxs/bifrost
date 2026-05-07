@@ -3,6 +3,7 @@ package platform
 import (
 	"bytes"
 	"fmt"
+	"text/template"
 	"time"
 
 	"github.com/maximhq/bifrost/core/schemas"
@@ -55,9 +56,11 @@ func (s *InvitationServiceImpl) CreateInvitation(teamID string, orgID *string, e
 		return fmt.Errorf("create invitation record: %w", err)
 	}
 
+	s.logger.Debug("user %s invites %s with %s", inviterName, email, token)
+
 	// Send invitation email asynchronously — failures are non-fatal
 	if s.messageSender != nil && s.platformURL != "" {
-		acceptURL := fmt.Sprintf("%s/invitation/%s", s.platformURL, token)
+		acceptURL := fmt.Sprintf("%s/platform/invitation/%s", s.platformURL, token)
 		inviteData := model.InviteData{
 			InviterName: inviterName,
 			OrgName:     orgName,
@@ -153,17 +156,72 @@ func (s *InvitationServiceImpl) sendInvitation(recipient, subject string, data m
 }
 
 func (s *InvitationServiceImpl) renderInviteTemplate(data model.InviteData) (string, error) {
-	var buf bytes.Buffer
-	buf.WriteString(fmt.Sprintf(`You've been invited to join %s`, data.OrgName))
-	if data.TeamName != "" {
-		buf.WriteString(fmt.Sprintf(` as part of the %s team`, data.TeamName))
-	}
-	buf.WriteString(fmt.Sprintf(`.
+	const tmpl = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+        .header h1 { margin: 0; font-size: 28px; letter-spacing: 2px; }
+        .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
+        .greeting { font-size: 16px; margin-bottom: 16px; }
+        .invite-card { background: white; border-radius: 8px; padding: 24px; margin: 24px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .invite-card h2 { margin: 0 0 8px 0; font-size: 20px; color: #333; }
+        .invite-card .org { color: #667eea; font-size: 18px; margin-bottom: 16px; }
+        .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+        .detail-row:last-child { border-bottom: none; }
+        .detail-label { color: #888; font-size: 14px; }
+        .detail-value { color: #333; font-size: 14px; font-weight: 500; }
+        .cta-wrapper { text-align: center; margin: 28px 0; }
+        .cta-button { display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 14px 36px; border-radius: 8px; font-size: 16px; font-weight: 600; }
+        .expiry-note { text-align: center; color: #888; font-size: 13px; margin-top: 16px; }
+        .footer { text-align: center; color: #999; font-size: 12px; margin-top: 24px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Bifrost</h1>
+        </div>
+        <div class="content">
+            <p class="greeting">You've been invited to join <strong>{{.OrgName}}</strong></p>
+            {{if .TeamName}}
+            <p class="greeting">as part of the <strong>{{.TeamName}}</strong> team</p>
+            {{end}}
+            <div class="invite-card">
+                <h2>Invitation Details</h2>
+                <div class="detail-row">
+                    <span class="detail-label">Role</span>
+                    <span class="detail-value">{{.Role}}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Invited by</span>
+                    <span class="detail-value">{{.InviterName}}</span>
+                </div>
+            </div>
+            <div class="cta-wrapper">
+                <a href="{{.AcceptURL}}" class="cta-button">Accept Invitation</a>
+            </div>
+            <p class="expiry-note">This invitation will expire in {{.ExpiresIn}}.</p>
+            <div class="footer">
+                <p>If you didn't expect this invitation, please ignore this email.</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>`
 
-Role: %s
-Invited by: %s
-Accept URL: %s
-Expires: %s
-`, data.Role, data.InviterName, data.AcceptURL, data.ExpiresIn))
+	t, err := template.New("invitation").Parse(tmpl)
+	if err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, data); err != nil {
+		return "", err
+	}
+
 	return buf.String(), nil
 }

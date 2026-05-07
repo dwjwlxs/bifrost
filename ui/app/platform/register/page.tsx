@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "@tanstack/react-router";
+import { useNavigate, Link, useSearch } from "@tanstack/react-router";
 import { isAuthenticated, setLoggedInfo, clearLoggedOut } from "@/lib/platform/auth";
 import { EmailVerificationDialog } from "@/app/platform/components/EmailVerificationDialog";
 import { usePlatformRegisterMutation } from "@/lib/platform/platformApi";
@@ -11,6 +11,8 @@ import { toast } from "sonner";
 
 export default function RegisterPage() {
 	const navigate = useNavigate();
+	const searchParams = useSearch({ strict: false }) as { redirect?: string };
+	const redirect = searchParams.redirect;
 	const [email, setEmail] = useState("");
 	const [username, setUsername] = useState("");
 	const [password, setPassword] = useState("");
@@ -140,7 +142,8 @@ export default function RegisterPage() {
 					// Refresh token is set via httpOnly cookie by the backend — no manual storage needed
 					clearLoggedOut();
 					setLoggedInfo(token);
-					navigate({ to: "/platform/console/dashboard" });
+					const redirectTo = redirect && redirect.startsWith("/") ? redirect : "/platform/console/dashboard";
+					navigate({ to: redirectTo });
 				}}
 			/>
 		</>
