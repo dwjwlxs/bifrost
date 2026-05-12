@@ -9,12 +9,16 @@ import {
 	Building2,
 	ShieldCheck,
 	Wallet,
+	CreditCard,
 	Activity,
 	Package,
 	Server,
 	Users,
 	DollarSign,
 	UsersRound,
+	ShoppingCart,
+	Receipt,
+	Boxes,
 } from "lucide-react";
 
 export interface NavItem {
@@ -34,14 +38,20 @@ export const consoleNavItems: NavItem[] = [
 	{ label: "Virtual Keys", to: "/platform/console/virtual-keys", icon: KeyRound },
 	{ label: "Organizations", to: "/platform/console/organizations", icon: Building2 },
 	{ label: "Usage", to: "/platform/console/usage", icon: Activity },
-	{ label: "RBAC", to: "/platform/console/rbac", icon: ShieldCheck, requireOrgOrTeamAdmin: true },
+	// { label: "Org Usage", to: "/platform/console/organization/usage", icon: LayoutDashboard, requireOrgOrTeamAdmin: true },
+	// { label: "RBAC", to: "/platform/console/rbac", icon: ShieldCheck, requireOrgOrTeamAdmin: true },
+	{ label: "Billing", to: "/platform/console/billing", icon: CreditCard },
+	// { label: "Wallet", to: "/platform/console/wallet", icon: Wallet },
+	{ label: "Package Marketplace", to: "/platform/console/packages", icon: ShoppingCart },
+	{ label: "My Packages", to: "/platform/console/entity-packages", icon: Boxes },
 ];
 
 export const adminNavItems: NavItem[] = [
-	{ label: "Packages", to: "/platform/console/admin/packages", icon: Package, requireAdmin: true },
 	{ label: "Providers", to: "/platform/console/admin/providers", icon: Server, requireAdmin: true },
+	{ label: "Packages", to: "/platform/console/admin/packages", icon: Package, requireAdmin: true },
+	{ label: "Orders", to: "/platform/console/admin/orders", icon: Receipt, requireAdmin: true },
 	{ label: "Users & Orgs", to: "/platform/console/admin/users", icon: Users, requireAdmin: true },
-	{ label: "Model Prices", to: "/platform/console/admin/model-prices", icon: DollarSign, requireAdmin: true },
+	{ label: "Price Override", to: "/platform/console/admin/model-prices", icon: DollarSign, requireAdmin: true },
 ];
 
 const adminSeparator: NavItem = { label: "", to: "", icon: Building2, separator: true };
