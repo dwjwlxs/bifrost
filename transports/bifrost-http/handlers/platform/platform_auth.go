@@ -97,23 +97,20 @@ type PlatformAuthHandler struct {
 	configStore configstore.ConfigStore
 	jwtKey      []byte
 	jwtExpiry   time.Duration
+
+	config *lib.Config
 }
 
 // NewPlatformAuthHandler creates a new PlatformAuthHandler.
-func NewPlatformAuthHandler(db *gorm.DB, authService fauth.AuthService, configStore configstore.ConfigStore) *PlatformAuthHandler {
-	if db == nil {
-		panic("NewPlatformAuthHandler: db must not be nil")
-	}
-	if authService == nil {
-		panic("NewPlatformAuthHandler: authService must not be nil")
-	}
+func NewPlatformAuthHandler(config *lib.Config) *PlatformAuthHandler {
 
 	return &PlatformAuthHandler{
-		db:          db,
-		authService: authService,
-		configStore: configStore,
+		db:          config.ConfigStore.DB(),
+		authService: config.ConsumerAuthService,
+		configStore: config.ConfigStore,
 		jwtKey:      platform.PlatformJWTKey,
 		jwtExpiry:   platform.PlatformJWTExpiry,
+		config:      config,
 	}
 }
 
@@ -149,7 +146,7 @@ func (h *PlatformAuthHandler) RegisterRoutes(r *router.Router, middlewares ...sc
 	r.POST("/api/platform/logout", lib.ChainMiddlewares(h.logout, middlewares...))
 
 	// Protected routes (platform JWT + auth JWT dual verification)
-	platformAuthMw := append([]schemas.BifrostHTTPMiddleware{PlatformAuthMiddleware(h.db, h.authService)}, middlewares...)
+	platformAuthMw := append([]schemas.BifrostHTTPMiddleware{PlatformAuthMiddleware(h.config)}, middlewares...)
 	r.GET("/api/platform/profile", lib.ChainMiddlewares(h.getProfile, platformAuthMw...))
 }
 
@@ -158,7 +155,9 @@ func (h *PlatformAuthHandler) RegisterRoutes(r *router.Router, middlewares ...sc
 // 2. Extract auth_token from platform claims
 // 3. Verify auth JWT via authService.ValidateAccessToken (ES256)
 // 4. Set platform_user_id and platform_claims on the request context
-func PlatformAuthMiddleware(db *gorm.DB, authService fauth.AuthService) schemas.BifrostHTTPMiddleware {
+func PlatformAuthMiddleware(config *lib.Config) schemas.BifrostHTTPMiddleware {
+	db := config.ConfigStore.DB()
+	authService := config.ConsumerAuthService
 	if db == nil || authService == nil {
 		panic("PlatformAuthMiddleware: db and authService must not be nil")
 	}
@@ -372,6 +371,15 @@ func (h *PlatformAuthHandler) register(ctx *fasthttp.RequestCtx) {
 			return
 		}
 		sendError(ctx, fasthttp.StatusConflict, "Registration failed", err.Error())
+		return
+	}
+
+	// Create governance_users record after registration succeeds.
+	if err := h.db.WithContext(goCtx).Create(&tables.TableUser{
+		ID:   user.ID,
+		Name: req.Username,
+	}).Error; err != nil {
+		sendError(ctx, fasthttp.StatusInternalServerError, "Failed to create governance user", err.Error())
 		return
 	}
 

@@ -769,6 +769,7 @@ func (m *AuthMiddleware) APIMiddleware() schemas.BifrostHTTPMiddleware {
 		"/api/oauth/callback",
 
 		"/api/platform/",
+		"/api/billing/",
 	}
 	return m.middleware(func(authConfig *configstore.AuthConfig, url string) bool {
 		if slices.Contains(systemWhitelistedRoutes, url) ||

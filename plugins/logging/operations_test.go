@@ -75,7 +75,7 @@ func TestUpdateLogEntryPreservesResponsesInputContentSummary(t *testing.T) {
 		}},
 	}
 
-	if err := plugin.updateLogEntry(context.Background(), requestID, "", "", 10, "", "", "", "", 0, nil, "", update); err != nil {
+	if err := plugin.updateLogEntry(context.Background(), requestID, "", "", 10, "", "", "", "", 0, nil, "", "", "", "", update); err != nil {
 		t.Fatalf("updateLogEntry() error = %v", err)
 	}
 
@@ -121,7 +121,7 @@ func TestUpdateLogEntryUpdatesContentSummaryForChatOutput(t *testing.T) {
 		},
 	}
 
-	if err := plugin.updateLogEntry(context.Background(), requestID, "", "", 10, "", "", "", "", 0, nil, "", update); err != nil {
+	if err := plugin.updateLogEntry(context.Background(), requestID, "", "", 10, "", "", "", "", 0, nil, "", "", "", "", update); err != nil {
 		t.Fatalf("updateLogEntry() error = %v", err)
 	}
 
@@ -166,7 +166,7 @@ func TestUpdateLogEntrySuppressesChatOutputWhenContentLoggingDisabled(t *testing
 		},
 	}
 
-	if err := plugin.updateLogEntry(context.Background(), requestID, "", "", 10, "", "", "", "", 0, nil, "", update); err != nil {
+	if err := plugin.updateLogEntry(context.Background(), requestID, "", "", 10, "", "", "", "", 0, nil, "", "", "", "", update); err != nil {
 		t.Fatalf("updateLogEntry() error = %v", err)
 	}
 

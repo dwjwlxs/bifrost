@@ -288,7 +288,7 @@ func (r *gormUserRepo) ListUsers(ctx context.Context, offset, limit int, search 
 	// Apply search filter if provided
 	if search != "" {
 		searchPattern := "%" + search + "%"
-		db = db.Where("email LIKE ? OR username LIKE ?", searchPattern, searchPattern)
+		db = db.Where("email LIKE ? OR user_name LIKE ?", searchPattern, searchPattern)
 	}
 
 	var total int64
