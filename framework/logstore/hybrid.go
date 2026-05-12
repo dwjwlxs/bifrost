@@ -11,13 +11,14 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/objectstore"
+	"gorm.io/gorm"
 )
 
 const (
-	defaultUploadWorkers         = 10
-	defaultUploadQueueSize       = 5000
-	maxContentSummaryBytes       = 2048
-	defaultMaxUploadQueueBytes   = 1 << 30 // 1 GiB
+	defaultUploadWorkers       = 10
+	defaultUploadQueueSize     = 5000
+	maxContentSummaryBytes     = 2048
+	defaultMaxUploadQueueBytes = 1 << 30 // 1 GiB
 )
 
 // uploadWork represents an async S3 upload job.
@@ -28,6 +29,8 @@ type uploadWork struct {
 	tags      map[string]string
 }
 
+var _ LogStore = (*HybridLogStore)(nil)
+
 // HybridLogStore wraps an existing LogStore and offloads large payload
 // fields to object storage while keeping a lightweight index in the DB.
 //
@@ -37,13 +40,13 @@ type uploadWork struct {
 //   - Intercepted: Create, CreateIfNotExists, BatchCreateIfNotExists, FindByID,
 //     Update, DeleteLog, DeleteLogs, DeleteLogsBatch, Close
 type HybridLogStore struct {
-	inner         LogStore
-	objects       objectstore.ObjectStore
-	prefix        string
-	logger        schemas.Logger
-	uploadQueue   chan *uploadWork
-	wg            sync.WaitGroup
-	closed        atomic.Bool
+	inner          LogStore
+	objects        objectstore.ObjectStore
+	prefix         string
+	logger         schemas.Logger
+	uploadQueue    chan *uploadWork
+	wg             sync.WaitGroup
+	closed         atomic.Bool
 	droppedUploads atomic.Int64
 	pendingBytes   atomic.Int64
 }
@@ -315,6 +318,10 @@ func (h *HybridLogStore) Update(ctx context.Context, id string, entry any) error
 	return h.inner.Update(ctx, id, entry)
 }
 
+func (h *HybridLogStore) DB() *gorm.DB {
+	return h.inner.DB()
+}
+
 func (h *HybridLogStore) DeleteLog(ctx context.Context, id string) error {
 	log, findErr := h.inner.FindByID(ctx, id)
 	if findErr != nil && !errors.Is(findErr, ErrNotFound) {
@@ -486,6 +493,10 @@ func (h *HybridLogStore) GetModelRankings(ctx context.Context, filters SearchFil
 
 func (h *HybridLogStore) GetUserRankings(ctx context.Context, filters SearchFilters) (*UserRankingResult, error) {
 	return h.inner.GetUserRankings(ctx, filters)
+}
+
+func (h *HybridLogStore) GetDimensionRankings(ctx context.Context, filters SearchFilters, dimension HistogramDimension) (*DimensionRankingResult, error) {
+	return h.inner.GetDimensionRankings(ctx, filters, dimension)
 }
 
 func (h *HybridLogStore) GetDimensionCostHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64, dimension HistogramDimension) (*DimensionCostHistogramResult, error) {

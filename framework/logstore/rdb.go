@@ -45,6 +45,8 @@ const (
 	defaultFilterDataLimit = 500
 )
 
+var _ LogStore = (*RDBLogStore)(nil)
+
 // RDBLogStore represents a log store that uses a SQLite database.
 type RDBLogStore struct {
 	db            *gorm.DB
@@ -875,6 +877,13 @@ func (s *RDBLogStore) GetHistogram(ctx context.Context, filters SearchFilters, b
 		Total           int64 `gorm:"column:total"`
 		Success         int64 `gorm:"column:success"`
 		Error           int64 `gorm:"column:error_count"`
+
+		PromptTokens     int64 `gorm:"column:prompt_tokens"`
+		CompletionTokens int64 `gorm:"column:completion_tokens"`
+		TotalTokens      int64 `gorm:"column:total_tokens"`
+		CachedReadTokens int64 `gorm:"column:cached_read_tokens"`
+
+		TotalCost float64 `gorm:"column:total_cost"`
 	}
 
 	// Build select clause with database-specific unix timestamp calculation
@@ -886,7 +895,12 @@ func (s *RDBLogStore) GetHistogram(ctx context.Context, filters SearchFilters, b
 			(CAST(strftime('%%s', timestamp) AS INTEGER) / %d) * %d as bucket_timestamp,
 			COUNT(*) as total,
 			SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success,
-			SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as error_count
+			SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as error_count,
+			COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+			COALESCE(SUM(completion_tokens), 0) as completion_tokens,
+			COALESCE(SUM(total_tokens), 0) as total_tokens,
+			COALESCE(SUM(cached_read_tokens), 0) as cached_read_tokens,
+			COALESCE(SUM(cost), 0) as total_cost
 		`, bucketSizeSeconds, bucketSizeSeconds)
 	case "mysql":
 		// MySQL: use UNIX_TIMESTAMP
@@ -894,7 +908,12 @@ func (s *RDBLogStore) GetHistogram(ctx context.Context, filters SearchFilters, b
 			(FLOOR(UNIX_TIMESTAMP(timestamp) / %d) * %d) as bucket_timestamp,
 			COUNT(*) as total,
 			SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success,
-			SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as error_count
+			SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as error_count,
+			COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+			COALESCE(SUM(completion_tokens), 0) as completion_tokens,
+			COALESCE(SUM(total_tokens), 0) as total_tokens,
+			COALESCE(SUM(cached_read_tokens), 0) as cached_read_tokens,
+			COALESCE(SUM(cost), 0) as total_cost
 		`, bucketSizeSeconds, bucketSizeSeconds)
 	default:
 		// PostgreSQL (and others): use EXTRACT(EPOCH FROM timestamp)
@@ -902,7 +921,12 @@ func (s *RDBLogStore) GetHistogram(ctx context.Context, filters SearchFilters, b
 			CAST(FLOOR(EXTRACT(EPOCH FROM timestamp) / %d) * %d AS BIGINT) as bucket_timestamp,
 			COUNT(*) as total,
 			SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success,
-			SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as error_count
+			SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as error_count,
+			COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+			COALESCE(SUM(completion_tokens), 0) as completion_tokens,
+			COALESCE(SUM(total_tokens), 0) as total_tokens,
+			COALESCE(SUM(cached_read_tokens), 0) as cached_read_tokens,
+			COALESCE(SUM(cost), 0) as total_cost
 		`, bucketSizeSeconds, bucketSizeSeconds)
 	}
 
@@ -919,16 +943,37 @@ func (s *RDBLogStore) GetHistogram(ctx context.Context, filters SearchFilters, b
 		Total   int64
 		Success int64
 		Error   int64
+
+		PromptTokens     int64
+		CompletionTokens int64
+		TotalTokens      int64
+		CachedReadTokens int64
+
+		TotalCost float64
 	})
 	for _, r := range results {
 		resultMap[r.BucketTimestamp] = struct {
 			Total   int64
 			Success int64
 			Error   int64
+
+			PromptTokens     int64
+			CompletionTokens int64
+			TotalTokens      int64
+			CachedReadTokens int64
+
+			TotalCost float64
 		}{
 			Total:   r.Total,
 			Success: r.Success,
 			Error:   r.Error,
+
+			PromptTokens:     r.PromptTokens,
+			CompletionTokens: r.CompletionTokens,
+			TotalTokens:      r.TotalTokens,
+			CachedReadTokens: r.CachedReadTokens,
+
+			TotalCost: r.TotalCost,
 		}
 	}
 
@@ -944,6 +989,13 @@ func (s *RDBLogStore) GetHistogram(ctx context.Context, filters SearchFilters, b
 				Count:     r.Total,
 				Success:   r.Success,
 				Error:     r.Error,
+
+				PromptTokens:     r.PromptTokens,
+				CompletionTokens: r.CompletionTokens,
+				TotalTokens:      r.TotalTokens,
+				CachedReadTokens: r.CachedReadTokens,
+
+				TotalCost: r.TotalCost,
 			}
 		}
 		return &HistogramResult{
@@ -961,6 +1013,13 @@ func (s *RDBLogStore) GetHistogram(ctx context.Context, filters SearchFilters, b
 				Count:     data.Total,
 				Success:   data.Success,
 				Error:     data.Error,
+
+				PromptTokens:     data.PromptTokens,
+				CompletionTokens: data.CompletionTokens,
+				TotalTokens:      data.TotalTokens,
+				CachedReadTokens: data.CachedReadTokens,
+
+				TotalCost: data.TotalCost,
 			}
 		} else {
 			buckets[i] = HistogramBucket{
@@ -968,6 +1027,13 @@ func (s *RDBLogStore) GetHistogram(ctx context.Context, filters SearchFilters, b
 				Count:     0,
 				Success:   0,
 				Error:     0,
+
+				PromptTokens:     0,
+				CompletionTokens: 0,
+				TotalTokens:      0,
+				CachedReadTokens: 0,
+
+				TotalCost: 0,
 			}
 		}
 	}
@@ -1416,6 +1482,7 @@ func (s *RDBLogStore) getLatencyHistogramPercentileCont(ctx context.Context, bas
 		P90Latency      sql.NullFloat64 `gorm:"column:p90_latency"`
 		P95Latency      sql.NullFloat64 `gorm:"column:p95_latency"`
 		P99Latency      sql.NullFloat64 `gorm:"column:p99_latency"`
+		Success         int64           `gorm:"column:success"`
 		TotalRequests   int64           `gorm:"column:total_requests"`
 	}
 
@@ -1425,6 +1492,7 @@ func (s *RDBLogStore) getLatencyHistogramPercentileCont(ctx context.Context, bas
 		percentile_cont(0.90) WITHIN GROUP (ORDER BY latency) as p90_latency,
 		percentile_cont(0.95) WITHIN GROUP (ORDER BY latency) as p95_latency,
 		percentile_cont(0.99) WITHIN GROUP (ORDER BY latency) as p99_latency,
+		SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success,
 		COUNT(*) as total_requests
 	`, bucketSizeSeconds, bucketSizeSeconds)
 
@@ -1446,6 +1514,7 @@ func (s *RDBLogStore) getLatencyHistogramPercentileCont(ctx context.Context, bas
 			P90Latency:    r.P90Latency.Float64,
 			P95Latency:    r.P95Latency.Float64,
 			P99Latency:    r.P99Latency.Float64,
+			Success:       r.Success,
 			TotalRequests: r.TotalRequests,
 		}
 	}
@@ -1459,10 +1528,14 @@ func (s *RDBLogStore) getLatencyHistogramSQLite(ctx context.Context, baseQuery *
 	var results []struct {
 		BucketTimestamp int64   `gorm:"column:bucket_timestamp"`
 		Latency         float64 `gorm:"column:latency"`
+		Success         int64   `gorm:"column:success"`
 	}
 
 	selectClause := fmt.Sprintf(
-		`(CAST(strftime('%%s', timestamp) AS INTEGER) / %d) * %d as bucket_timestamp, latency`,
+		`(CAST(strftime('%%s', timestamp) AS INTEGER) / %d) * %d as bucket_timestamp,
+		 latency,
+		(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success
+		`,
 		bucketSizeSeconds, bucketSizeSeconds,
 	)
 
@@ -1475,6 +1548,7 @@ func (s *RDBLogStore) getLatencyHistogramSQLite(ctx context.Context, baseQuery *
 
 	type bucketData struct {
 		latencies []float64
+		success   int64
 	}
 	bucketMap := make(map[int64]*bucketData)
 	var orderedKeys []int64
@@ -1487,6 +1561,7 @@ func (s *RDBLogStore) getLatencyHistogramSQLite(ctx context.Context, baseQuery *
 			orderedKeys = append(orderedKeys, r.BucketTimestamp)
 		}
 		bd.latencies = append(bd.latencies, r.Latency)
+		bd.success += r.Success
 	}
 
 	computedBuckets := make(map[int64]LatencyHistogramBucket, len(bucketMap))
@@ -1501,6 +1576,7 @@ func (s *RDBLogStore) getLatencyHistogramSQLite(ctx context.Context, baseQuery *
 			P90Latency:    computePercentile(bd.latencies, 0.90),
 			P95Latency:    computePercentile(bd.latencies, 0.95),
 			P99Latency:    computePercentile(bd.latencies, 0.99),
+			Success:       bd.success,
 			TotalRequests: int64(len(bd.latencies)),
 		}
 	}
@@ -1514,10 +1590,13 @@ func (s *RDBLogStore) getLatencyHistogramMySQL(ctx context.Context, baseQuery *g
 	var results []struct {
 		BucketTimestamp int64   `gorm:"column:bucket_timestamp"`
 		Latency         float64 `gorm:"column:latency"`
+		Success         int64   `gorm:"column:success"`
 	}
 
 	selectClause := fmt.Sprintf(
-		`(FLOOR(UNIX_TIMESTAMP(timestamp) / %d) * %d) as bucket_timestamp, latency`,
+		`(FLOOR(UNIX_TIMESTAMP(timestamp) / %d) * %d) as bucket_timestamp, latency,
+		(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success
+		`,
 		bucketSizeSeconds, bucketSizeSeconds,
 	)
 
@@ -1530,6 +1609,7 @@ func (s *RDBLogStore) getLatencyHistogramMySQL(ctx context.Context, baseQuery *g
 
 	type bucketData struct {
 		latencies []float64
+		success   int64
 	}
 	bucketMap := make(map[int64]*bucketData)
 	var orderedKeys []int64
@@ -1541,6 +1621,7 @@ func (s *RDBLogStore) getLatencyHistogramMySQL(ctx context.Context, baseQuery *g
 			bucketMap[r.BucketTimestamp] = bd
 			orderedKeys = append(orderedKeys, r.BucketTimestamp)
 		}
+		bd.success = r.Success
 		bd.latencies = append(bd.latencies, r.Latency)
 	}
 
@@ -1556,6 +1637,7 @@ func (s *RDBLogStore) getLatencyHistogramMySQL(ctx context.Context, baseQuery *g
 			P90Latency:    computePercentile(bd.latencies, 0.90),
 			P95Latency:    computePercentile(bd.latencies, 0.95),
 			P99Latency:    computePercentile(bd.latencies, 0.99),
+			Success:       bd.success,
 			TotalRequests: int64(len(bd.latencies)),
 		}
 	}
@@ -1842,6 +1924,149 @@ func (s *RDBLogStore) GetUserRankings(ctx context.Context, filters SearchFilters
 	}
 
 	return &UserRankingResult{Rankings: rankings}, nil
+}
+
+// GetDimensionRankings returns dimension values ranked by usage with trend comparison to the previous period.
+func (s *RDBLogStore) GetDimensionRankings(ctx context.Context, filters SearchFilters, dimension HistogramDimension) (*DimensionRankingResult, error) {
+	if !dimension.Valid() {
+		return nil, fmt.Errorf("invalid dimension: %s", dimension)
+	}
+
+	dimCol := string(dimension)
+	selectClause := fmt.Sprintf(`
+		%s as dimension_value,
+		COUNT(*) as total_requests,
+		SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
+		COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+		COALESCE(SUM(completion_tokens), 0) as completion_tokens,
+		COALESCE(SUM(cached_read_tokens), 0) as cached_read_tokens,
+		COALESCE(SUM(total_tokens), 0) as total_tokens,
+		COALESCE(SUM(cost), 0) as total_cost,
+		AVG(latency) as avg_latency
+	`, dimCol)
+
+	// Query current period
+	currentQuery := s.db.WithContext(ctx).Model(&Log{})
+	currentQuery = s.applyFilters(currentQuery, filters)
+	currentQuery = currentQuery.Where("status IN ?", []string{"success", "error"})
+	currentQuery = currentQuery.Where(dimCol + " IS NOT NULL AND " + dimCol + " != ''")
+
+	var currentResults []struct {
+		DimensionValue   string          `gorm:"column:dimension_value"`
+		TotalRequests    int64           `gorm:"column:total_requests"`
+		SuccessCount     int64           `gorm:"column:success_count"`
+		PromptTokens     sql.NullInt64   `gorm:"column:prompt_tokens"`
+		CompletionTokens sql.NullInt64   `gorm:"column:completion_tokens"`
+		CachedReadTokens sql.NullInt64   `gorm:"column:cached_read_tokens"`
+		TotalTokens      sql.NullInt64   `gorm:"column:total_tokens"`
+		TotalCost        sql.NullFloat64 `gorm:"column:total_cost"`
+		AvgLatency       sql.NullFloat64 `gorm:"column:avg_latency"`
+	}
+
+	if err := currentQuery.
+		Select(selectClause).
+		Group(dimCol).
+		Order("total_requests DESC").
+		Limit(defaultMaxRankingsLimit).
+		Find(&currentResults).Error; err != nil {
+		s.logger.Error("failed to get dimension rankings", "error", err)
+		return nil, fmt.Errorf("failed to get dimension rankings: %w", err)
+	}
+
+	// Query previous period for trend comparison
+	prevMap := make(map[string]DimensionRankingEntry)
+	if filters.StartTime != nil && filters.EndTime != nil {
+		duration := filters.EndTime.Sub(*filters.StartTime)
+		prevStart := filters.StartTime.Add(-duration)
+		prevEnd := filters.StartTime.Add(-time.Nanosecond)
+
+		prevFilters := filters
+		prevFilters.StartTime = &prevStart
+		prevFilters.EndTime = &prevEnd
+
+		prevQuery := s.db.WithContext(ctx).Model(&Log{})
+		prevQuery = s.applyFilters(prevQuery, prevFilters)
+		prevQuery = prevQuery.Where("status IN ?", []string{"success", "error"})
+		prevQuery = prevQuery.Where(dimCol + " IS NOT NULL AND " + dimCol + " != ''")
+
+		if len(currentResults) > 0 {
+			dimValues := make([]string, len(currentResults))
+			for i, r := range currentResults {
+				dimValues[i] = r.DimensionValue
+			}
+			prevQuery = prevQuery.Where(dimCol+" IN ?", dimValues)
+		}
+
+		var prevResults []struct {
+			DimensionValue   string          `gorm:"column:dimension_value"`
+			TotalRequests    int64           `gorm:"column:total_requests"`
+			SuccessCount     int64           `gorm:"column:success_count"`
+			PromptTokens     sql.NullInt64   `gorm:"column:prompt_tokens"`
+			CompletionTokens sql.NullInt64   `gorm:"column:completion_tokens"`
+			CachedReadTokens sql.NullInt64   `gorm:"column:cached_read_tokens"`
+			TotalTokens      sql.NullInt64   `gorm:"column:total_tokens"`
+			TotalCost        sql.NullFloat64 `gorm:"column:total_cost"`
+			AvgLatency       sql.NullFloat64 `gorm:"column:avg_latency"`
+		}
+
+		if err := prevQuery.
+			Select(selectClause).
+			Group(dimCol).
+			Find(&prevResults).Error; err != nil {
+			return nil, fmt.Errorf("failed to get previous period dimension rankings: %w", err)
+		}
+
+		for _, r := range prevResults {
+			entry := DimensionRankingEntry{
+				DimensionValue: r.DimensionValue,
+				TotalRequests:  r.TotalRequests,
+				TotalTokens:    r.TotalTokens.Int64,
+				TotalCost:      r.TotalCost.Float64,
+				AvgLatency:     r.AvgLatency.Float64,
+			}
+			if r.TotalRequests > 0 {
+				entry.SuccessRate = float64(r.SuccessCount) / float64(r.TotalRequests) * 100
+			}
+			prevMap[r.DimensionValue] = entry
+		}
+	}
+
+	// Build results with trends
+	rankings := make([]DimensionRankingWithTrend, len(currentResults))
+	for i, r := range currentResults {
+		entry := DimensionRankingEntry{
+			DimensionValue:   r.DimensionValue,
+			TotalRequests:    r.TotalRequests,
+			SuccessCount:     r.SuccessCount,
+			PromptTokens:     r.PromptTokens.Int64,
+			CompletionTokens: r.CompletionTokens.Int64,
+			CachedReadTokens: r.CachedReadTokens.Int64,
+			TotalTokens:      r.TotalTokens.Int64,
+			TotalCost:        r.TotalCost.Float64,
+			AvgLatency:       r.AvgLatency.Float64,
+		}
+		if r.TotalRequests > 0 {
+			entry.SuccessRate = float64(r.SuccessCount) / float64(r.TotalRequests) * 100
+		}
+
+		var trend DimensionRankingTrend
+		if prev, ok := prevMap[r.DimensionValue]; ok && prev.TotalRequests > 0 {
+			trend.HasPreviousPeriod = true
+			trend.RequestsTrend = pctChange(float64(prev.TotalRequests), float64(r.TotalRequests))
+			trend.TokensTrend = pctChange(float64(prev.TotalTokens), float64(r.TotalTokens.Int64))
+			trend.CostTrend = pctChange(prev.TotalCost, r.TotalCost.Float64)
+			if prev.AvgLatency > 0 {
+				trend.LatencyTrend = pctChange(prev.AvgLatency, r.AvgLatency.Float64)
+			}
+		}
+
+		rankings[i] = DimensionRankingWithTrend{
+			DimensionRankingEntry: entry,
+			Trend:                 trend,
+		}
+	}
+
+	return &DimensionRankingResult{Dimension: dimension, Rankings: rankings}, nil
 }
 
 // pctChange computes the percentage change from old to new.
@@ -3004,6 +3229,10 @@ func (s *RDBLogStore) Close(ctx context.Context) error {
 		return err
 	}
 	return sqlDB.Close()
+}
+
+func (s *RDBLogStore) DB() *gorm.DB {
+	return s.db
 }
 
 // DeleteLog deletes a log entry from the database by its ID.
