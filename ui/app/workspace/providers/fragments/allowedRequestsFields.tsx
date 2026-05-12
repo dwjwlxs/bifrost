@@ -7,10 +7,11 @@ import { BaseProvider, RequestType } from "@/lib/types/config";
 import { isRequestTypeDisabled } from "@/lib/utils/validation";
 import { Settings2 } from "lucide-react";
 import { useEffect, useMemo } from "react";
-import { Control, useFormContext } from "react-hook-form";
+import { Control, useFormContext, UseFormReturn } from "react-hook-form";
 
 interface AllowedRequestsFieldsProps {
-	control: Control<any>;
+	control?: Control<any>;
+	form?: UseFormReturn<any>;
 	namePrefix?: string;
 	pathOverridesPrefix?: string;
 	providerType?: BaseProvider;
@@ -85,17 +86,23 @@ const RequestTypes: Array<{ key: RequestType; label: string }> = [
 
 export function AllowedRequestsFields({
 	control,
+	form,
 	namePrefix = "allowed_requests",
 	pathOverridesPrefix = "request_path_overrides",
 	providerType,
 	disabled = false,
 }: AllowedRequestsFieldsProps) {
+	const ctx = control ? undefined : useFormContext();
+	// Prefer passed form prop, then control, then context
+	const formToUse = form ?? (control ? undefined : ctx);
+	const { getValues, setValue } = formToUse ?? {};
+
 	const leftColumn = RequestTypes.slice(0, RequestTypes.length / 2);
 	const rightColumn = RequestTypes.slice(RequestTypes.length / 2);
-	const { getValues, setValue } = useFormContext();
 
 	// Reset disabled fields when providerType changes
 	useEffect(() => {
+		if (!setValue) return;
 		RequestTypes.forEach(({ key }) => {
 			const fieldName = `${namePrefix}.${key}`;
 			setValue(fieldName, !isRequestTypeDisabled(providerType, key), { shouldDirty: true });

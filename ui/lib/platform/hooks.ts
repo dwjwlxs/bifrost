@@ -6,14 +6,7 @@ import { useMemo, useCallback } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { clearLoggedInfo, getUser, markLoggedOut } from "./auth";
 import type { PlatformOrg, PlatformTeam } from "./types";
-import {
-  OrgRoleAdmin,
-  OrgRoleOwner,
-  TeamRoleAdmin,
-  ResolvedRoleOrgAdmin,
-  ResolvedRoleTeamAdmin,
-  ResolvedRoleTeamMember,
-} from "./types";
+import { OrgRoleAdmin, OrgRoleOwner, TeamRoleAdmin, ResolvedRoleOrgAdmin, ResolvedRoleTeamAdmin, ResolvedRoleTeamMember } from "./types";
 import { store } from "@/lib/store";
 import { platformApi } from "./platformApi";
 import { getApiBaseUrl } from "@/lib/utils/port";
@@ -34,177 +27,166 @@ import { getApiBaseUrl } from "@/lib/utils/port";
  *                   Defaults to `/platform/login`.
  */
 export function useLogout(redirectTo: string = "/platform/login") {
-  const navigate = useNavigate();
-  return useCallback(async () => {
-    // 1. Set module-level logout flag FIRST — prevents any in-flight 401
-    //    from triggering a refresh-token roundtrip after we've decided to leave.
-    markLoggedOut();
+	const navigate = useNavigate();
+	return useCallback(async () => {
+		// 1. Set module-level logout flag FIRST — prevents any in-flight 401
+		//    from triggering a refresh-token roundtrip after we've decided to leave.
+		markLoggedOut();
 
-    // 2. Reset RTK Query cache — aborts in-flight requests and clears subscriptions,
-    //    so page components won't re-fetch after we clear the token.
-    store.dispatch(platformApi.util.resetApiState());
+		// 2. Reset RTK Query cache — aborts in-flight requests and clears subscriptions,
+		//    so page components won't re-fetch after we clear the token.
+		store.dispatch(platformApi.util.resetApiState());
 
-    // 3. Revoke server session + clear httpOnly cookie (fire-and-forget).
-    //    Must happen AFTER markLoggedOut so that the 401 from this request
-    //    (if any) is also safely ignored by baseQuery.
-    try {
-      const baseUrl = getApiBaseUrl();
-      fetch(`${baseUrl}/platform/logout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-      }).catch(() => {});
-    } catch {
-      // Network error — proceed with client-side cleanup
-    }
+		// 3. Revoke server session + clear httpOnly cookie (fire-and-forget).
+		//    Must happen AFTER markLoggedOut so that the 401 from this request
+		//    (if any) is also safely ignored by baseQuery.
+		try {
+			const baseUrl = getApiBaseUrl();
+			fetch(`${baseUrl}/platform/logout`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				credentials: "include",
+			}).catch(() => {});
+		} catch {
+			// Network error — proceed with client-side cleanup
+		}
 
-    // 4. Clear localStorage (token + user info)
-    clearLoggedInfo();
+		// 4. Clear localStorage (token + user info)
+		clearLoggedInfo();
 
-    // 5. Navigate away — components unmount, subscriptions already cancelled by step 2
-    navigate({ to: redirectTo });
-  }, [navigate, redirectTo]);
+		// 5. Navigate away — components unmount, subscriptions already cancelled by step 2
+		navigate({ to: redirectTo });
+	}, [navigate, redirectTo]);
 }
 
 export interface UserRoleFlags {
-  /** True if user is a system admin */
-  isAdmin: boolean;
-  /** True if user is an organization admin (customer_owner) */
-  isOwner: boolean;
-  /** True if user is a team admin */
-  isTeamAdmin: boolean;
-  /** True if user is a team member (read-only) */
-  isTeamMember: boolean;
-  /** True if user has no org/team membership */
-  isUser: boolean;
-  /** The derived display role string */
-  role: string;
-  /** Whether the user has any org membership */
-  hasOrg: boolean;
-  /** Whether the user has any team membership */
-  hasTeam: boolean;
+	/** True if user is a system admin */
+	isAdmin: boolean;
+	/** True if user is an organization admin (customer_owner) */
+	isOwner: boolean;
+	/** True if user is a team admin */
+	isTeamAdmin: boolean;
+	/** True if user is a team member (read-only) */
+	isTeamMember: boolean;
+	/** True if user has no org/team membership */
+	isUser: boolean;
+	/** The derived display role string */
+	role: string;
+	/** Whether the user has any org membership */
+	hasOrg: boolean;
+	/** Whether the user has any team membership */
+	hasTeam: boolean;
 }
 
 const defaultFlags: UserRoleFlags = {
-  isAdmin: false,
-  isOwner: false,
-  isTeamAdmin: false,
-  isTeamMember: false,
-  isUser: true,
-  role: "user",
-  hasOrg: false,
-  hasTeam: false,
+	isAdmin: false,
+	isOwner: false,
+	isTeamAdmin: false,
+	isTeamMember: false,
+	isUser: true,
+	role: "user",
+	hasOrg: false,
+	hasTeam: false,
 };
 
 /**
  * Primary role flags hook — mirrors the old behavior but with updated role logic.
  */
 export function useUserRole(): UserRoleFlags {
-  return useMemo(() => {
-    const user = getUser();
-    if (!user) return defaultFlags;
+	return useMemo(() => {
+		const user = getUser();
+		if (!user) return defaultFlags;
 
-    const role = user.role ?? "user";
-    return {
-      isAdmin: user.is_admin === true,
-      isOwner: role === ResolvedRoleOrgAdmin,
-      isTeamAdmin: role === ResolvedRoleTeamAdmin,
-      isTeamMember: role === ResolvedRoleTeamMember,
-      isUser: role === "user",
-      role,
-      hasOrg: (user.orgs?.length ?? 0) > 0,
-      hasTeam: (user.teams?.length ?? 0) > 0,
-    };
-  }, []);
+		const role = user.role ?? "user";
+		return {
+			isAdmin: user.is_admin === true,
+			isOwner: role === ResolvedRoleOrgAdmin,
+			isTeamAdmin: role === ResolvedRoleTeamAdmin,
+			isTeamMember: role === ResolvedRoleTeamMember,
+			isUser: role === "user",
+			role,
+			hasOrg: (user.orgs?.length ?? 0) > 0,
+			hasTeam: (user.teams?.length ?? 0) > 0,
+		};
+	}, []);
 }
 
 /**
  * Check if user is org_admin (customer_owner) for a specific org.
  */
 export function useIsOrgAdmin(orgId: string | undefined): boolean {
-  return useMemo(() => {
-    if (!orgId) return false;
-    const user = getUser();
-    if (!user) return false;
-    if (user.is_admin) return true;
-    // Mirror backend: OrgRoleAdmin OR OrgRoleOwner are both org admin roles
-    return (
-      user.orgs?.some(
-        (o) =>
-          o.id === orgId &&
-          (o.role === OrgRoleAdmin || o.role === OrgRoleOwner),
-      ) ?? false
-    );
-  }, [orgId]);
+	return useMemo(() => {
+		if (!orgId) return false;
+		const user = getUser();
+		if (!user) return false;
+		if (user.is_admin) return true;
+		// Mirror backend: OrgRoleAdmin OR OrgRoleOwner are both org admin roles
+		return user.orgs?.some((o) => o.id === orgId && (o.role === OrgRoleAdmin || o.role === OrgRoleOwner)) ?? false;
+	}, [orgId]);
 }
 
 /**
  * Check if user is team_admin (or org_admin of the parent org) for a specific team.
  */
 export function useIsTeamAdmin(teamId: string | undefined): boolean {
-  return useMemo(() => {
-    if (!teamId) return false;
-    const user = getUser();
-    if (!user) return false;
-    if (user.is_admin) return true;
-    // Direct team admin
-    if (user.teams?.some((t) => t.id === teamId && t.role === TeamRoleAdmin))
-      return true;
-    // Org admin of the parent org can also manage team members
-    const team = user.teams?.find((t) => t.id === teamId);
-    if (team?.customer_id) {
-      const isOrgAdminOfParent = user.orgs?.some(
-        (o) =>
-          o.id === team.customer_id &&
-          (o.role === OrgRoleAdmin || o.role === OrgRoleOwner),
-      );
-      if (isOrgAdminOfParent) return true;
-    }
-    return false;
-  }, [teamId]);
+	return useMemo(() => {
+		if (!teamId) return false;
+		const user = getUser();
+		if (!user) return false;
+		if (user.is_admin) return true;
+		// Direct team admin
+		if (user.teams?.some((t) => t.id === teamId && t.role === TeamRoleAdmin)) return true;
+		// Org admin of the parent org can also manage team members
+		const team = user.teams?.find((t) => t.id === teamId);
+		if (team?.customer_id) {
+			const isOrgAdminOfParent = user.orgs?.some((o) => o.id === team.customer_id && (o.role === OrgRoleAdmin || o.role === OrgRoleOwner));
+			if (isOrgAdminOfParent) return true;
+		}
+		return false;
+	}, [teamId]);
 }
 
 /**
  * Check if user is a member of a specific org (any role).
  */
 export function useIsOrgMember(orgId: string | undefined): boolean {
-  return useMemo(() => {
-    if (!orgId) return false;
-    const user = getUser();
-    if (!user) return false;
-    return user.orgs?.some((o) => o.id === orgId) ?? false;
-  }, [orgId]);
+	return useMemo(() => {
+		if (!orgId) return false;
+		const user = getUser();
+		if (!user) return false;
+		return user.orgs?.some((o) => o.id === orgId) ?? false;
+	}, [orgId]);
 }
 
 /**
  * Check if user is a member of a specific team (any role).
  */
 export function useIsTeamMember(teamId: string | undefined): boolean {
-  return useMemo(() => {
-    if (!teamId) return false;
-    const user = getUser();
-    if (!user) return false;
-    if (user.is_admin) return true; // admin can see all teams
-    return user.teams?.some((t) => t.id === teamId) ?? false;
-  }, [teamId]);
+	return useMemo(() => {
+		if (!teamId) return false;
+		const user = getUser();
+		if (!user) return false;
+		if (user.is_admin) return true; // admin can see all teams
+		return user.teams?.some((t) => t.id === teamId) ?? false;
+	}, [teamId]);
 }
 
 /**
  * Get all orgs the user belongs to.
  */
 export function useUserOrgs(): PlatformOrg[] {
-  return useMemo(() => {
-    const user = getUser();
-    return user?.orgs ?? [];
-  }, []);
+	return useMemo(() => {
+		const user = getUser();
+		return user?.orgs ?? [];
+	}, []);
 }
 
 /**
  * Get all teams the user belongs to.
  */
 export function useUserTeams(): PlatformTeam[] {
-  return useMemo(() => {
-    const user = getUser();
-    return user?.teams ?? [];
-  }, []);
+	return useMemo(() => {
+		const user = getUser();
+		return user?.teams ?? [];
+	}, []);
 }

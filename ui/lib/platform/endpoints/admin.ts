@@ -8,10 +8,7 @@ const adminApi = platformBaseApi.injectEndpoints({
 	endpoints: (builder) => ({
 		// ── Admin: Organizations ────────────────────────────────────
 		/** List all organizations (system admin only) */
-		platformAdminListOrgs: builder.query<
-			{ items: PlatformOrg[]; total: number },
-			{ limit?: number; offset?: number; search?: string }
-		>({
+		platformAdminListOrgs: builder.query<{ items: PlatformOrg[]; total: number }, { limit?: number; offset?: number; search?: string }>({
 			query: (params) => ({
 				url: "/platform/admin/orgs",
 				method: "GET",
@@ -52,10 +49,7 @@ const adminApi = platformBaseApi.injectEndpoints({
 		}),
 
 		// ── Admin: Users ────────────────────────────────────────────
-		platformListUsers: builder.query<
-			{ items: PlatformUserInfo[]; total: number },
-			{ limit?: number; offset?: number; search?: string }
-		>({
+		platformListUsers: builder.query<{ items: PlatformUserInfo[]; total: number }, { limit?: number; offset?: number; search?: string }>({
 			query: (params) => ({
 				url: "/platform/admin/users",
 				method: "GET",

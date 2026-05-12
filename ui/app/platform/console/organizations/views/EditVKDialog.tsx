@@ -122,11 +122,7 @@ export function EditVKDialog({ open, onOpenChange, vk, teamId, onUpdated }: Edit
 							</Label>
 							<p className="text-muted-foreground text-xs">Inactive keys will be rejected on use</p>
 						</div>
-						<Switch
-							id="edit-vk-active"
-							checked={isActive}
-							onCheckedChange={(checked) => setValue("is_active", checked)}
-						/>
+						<Switch id="edit-vk-active" checked={isActive} onCheckedChange={(checked) => setValue("is_active", checked)} />
 					</div>
 
 					{/* Budget limit */}

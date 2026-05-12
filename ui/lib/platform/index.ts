@@ -20,11 +20,7 @@ export {
 } from "./auth";
 
 // Shared types (single source of truth)
-export type {
-	PlatformUserInfo,
-	PlatformOrg,
-	PlatformTeam,
-} from "./types";
+export type { PlatformUserInfo, PlatformOrg, PlatformTeam } from "./types";
 
 // API slice + full API response types + hooks
 export * from "./platformApi";

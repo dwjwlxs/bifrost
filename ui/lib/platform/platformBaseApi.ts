@@ -6,7 +6,6 @@ import { getApiBaseUrl } from "@/lib/utils/port";
 import { createApi, fetchBaseQuery, BaseQueryFn } from "@reduxjs/toolkit/query/react";
 import { getToken, setLoggedInfo, clearLoggedInfo, isUserLoggedOut } from "./auth";
 import type { FetchArgs, FetchBaseQueryError } from "@reduxjs/toolkit/query";
-import type { Router } from "@tanstack/react-router";
 
 // ─── Global router & store refs ────────────────────────────────────────
 // Injected from main.tsx after creation. Allows baseQuery (a plain
@@ -14,10 +13,16 @@ import type { Router } from "@tanstack/react-router";
 // and dispatch actions on 401 + refresh-failure.
 // We cannot import store directly — that creates a circular dep:
 // store → platformApi (via reducer) → platformBaseApi → store.
-let platformRouter: Router | null = null;
+
+/** Minimal router interface — only the .navigate() method is used by baseQuery */
+interface PlatformRouter {
+	navigate(opts: { to: string; replace?: boolean }): void;
+}
+
+let platformRouter: PlatformRouter | null = null;
 let platformStore: { dispatch: (action: { type: string }) => void } | null = null;
 
-export function setPlatformRouter(router: Router) {
+export function setPlatformRouter(router: PlatformRouter) {
 	if (platformRouter) {
 		console.warn("[platformBaseApi] setPlatformRouter called more than once — overwriting previous reference");
 	}
@@ -171,7 +176,10 @@ export const platformBaseApi = createApi({
 		"Balance",
 		"ModelPrices",
 		"UsageStats",
+		"OrgUsageStats",
+		"Providers",
 		"ProviderKeys",
+		"ProviderModels",
 		"Budgets",
 	],
 	endpoints: () => ({}),

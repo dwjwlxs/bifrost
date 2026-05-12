@@ -46,10 +46,7 @@ const organizationsApi = platformBaseApi.injectEndpoints({
 		}),
 
 		/** Remove a member from an organization (org_admin only) */
-		platformRemoveOrgMember: builder.mutation<
-			{ code: string; message: string },
-			{ org_id: string; user_id: string }
-		>({
+		platformRemoveOrgMember: builder.mutation<{ code: string; message: string }, { org_id: string; user_id: string }>({
 			query: ({ org_id, user_id }) => ({
 				url: `/platform/orgs/${org_id}/members/${user_id}`,
 				method: "DELETE",
