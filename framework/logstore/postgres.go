@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 
 	"gorm.io/driver/postgres"
@@ -58,7 +59,7 @@ func newPostgresLogStore(ctx context.Context, config *PostgresConfig, logger sch
 
 	openPool := func() (*gorm.DB, error) {
 		return gorm.Open(postgres.New(postgres.Config{DSN: dsn}), &gorm.Config{
-			Logger: newGormLogger(logger),
+			Logger: bifrost.NewGormLogger(logger),
 		})
 	}
 

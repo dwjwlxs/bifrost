@@ -516,6 +516,7 @@ func (s *RDBLogStore) getLatencyHistogramFromMatView(ctx context.Context, filter
 		P90Latency      float64 `gorm:"column:p90_lat"`
 		P95Latency      float64 `gorm:"column:p95_lat"`
 		P99Latency      float64 `gorm:"column:p99_lat"`
+		Success         int64   `gorm:"column:success"`
 		TotalRequests   int64   `gorm:"column:total_requests"`
 	}
 	// Weighted average of percentiles across hourly buckets
@@ -527,6 +528,7 @@ func (s *RDBLogStore) getLatencyHistogramFromMatView(ctx context.Context, filter
 		CASE WHEN SUM(count) > 0 THEN SUM(p90_latency * count) / SUM(count) ELSE 0 END AS p90_lat,
 		CASE WHEN SUM(count) > 0 THEN SUM(p95_latency * count) / SUM(count) ELSE 0 END AS p95_lat,
 		CASE WHEN SUM(count) > 0 THEN SUM(p99_latency * count) / SUM(count) ELSE 0 END AS p99_lat,
+		SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success,
 		SUM(count) AS total_requests
 	`, bucketSizeSeconds, bucketSizeSeconds)).
 		Group("bucket_timestamp").
@@ -550,6 +552,7 @@ func (s *RDBLogStore) getLatencyHistogramFromMatView(ctx context.Context, filter
 			b.P90Latency = r.P90Latency
 			b.P95Latency = r.P95Latency
 			b.P99Latency = r.P99Latency
+			b.Success = r.Success
 			b.TotalRequests = r.TotalRequests
 		}
 		buckets = append(buckets, b)

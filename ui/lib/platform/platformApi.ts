@@ -49,18 +49,31 @@ export type {
 	PlatformUserRole,
 	PlatformPackage,
 	PlatformUserPackage,
+	PlatformEntityPackage,
 	PlatformOrder,
+	PlatformRechargeResponse,
+	PlatformPurchaseResponse,
 	PlatformRecharge,
 	PlatformBalance,
 	PlatformBalanceHistoryItem,
 	PlatformUsageStatRow,
 	PlatformUsageStats,
 	PlatformTokenUsage,
-	PlatformModelPrice,
+	PlatformUsageOverviewResponse,
+	PlatformUsageBreakdownResponse,
+	PlatformGateway,
+	PlatformStabilityResponse,
+	PlatformAdminStabilityResponse,
+	PlatformMeStats,
+	PlatformMeHistogram,
+	PlatformMeStabilityResponse,
 } from "./types";
 
+// Re-export Governance types used by Platform model-prices
+export type { PricingOverride, PricingOverridePatch, PricingOverrideScopeKind, PricingOverrideMatchType, CreatePricingOverrideRequest, UpdatePricingOverrideRequest } from "@/lib/types/governance";
+
 // Provider key item type (defined in providers module)
-export type { ProviderKeyItem } from "./endpoints/providers";
+export type { ProviderKeyItem, ProviderResponse } from "./endpoints/providers";
 
 // ─── Re-export the fully-injected API slice ────────────────────────
 export { platformBaseApi as platformApi } from "./platformBaseApi";
@@ -135,24 +148,54 @@ export {
 	usePlatformListPackagesQuery,
 	usePlatformGetBalanceQuery,
 	usePlatformGetBalanceHistoryQuery,
+	usePlatformListEntityPackagesQuery,
 	usePlatformListUserPackagesQuery,
 	usePlatformGetTokenUsageQuery,
 	usePlatformGetUsageStatsQuery,
+	usePlatformCreateRechargeMutation,
+	usePlatformCreatePurchaseMutation,
+	usePlatformListOrdersQuery,
+	usePlatformCancelOrderMutation,
+	usePlatformConfirmOrderMutation,
+	usePlatformRetryPayMutation,
+	usePlatformListGatewaysQuery,
 	usePlatformAdminCreatePackageMutation,
 	usePlatformAdminUpdatePackageMutation,
 	usePlatformAdminDeletePackageMutation,
 	usePlatformAdminListModelPricesQuery,
-	usePlatformAdminUpsertModelPriceMutation,
+	usePlatformAdminCreateModelPriceMutation,
+	usePlatformAdminUpdateModelPriceMutation,
 	usePlatformAdminDeleteModelPriceMutation,
 	usePlatformAdminGetUsageStatsQuery,
+	usePlatformGetUsageStabilityQuery,
+	usePlatformAdminGetUsageStabilityQuery,
 } from "./endpoints/billing";
+
+// Usage Analytics
+export {
+	usePlatformGetOrgUsageOverviewQuery,
+	usePlatformGetOrgUsageBreakdownQuery,
+	usePlatformGetTeamUsageOverviewQuery,
+	usePlatformGetTeamUsageBreakdownQuery,
+	usePlatformGetTeamMyUsageQuery,
+	usePlatformGetMeStatsQuery,
+	usePlatformGetMeStatsTrendQuery,
+	usePlatformGetMeDistributionQuery,
+	usePlatformGetMeStabilityQuery,
+} from "./endpoints/usage";
 
 // Providers
 export {
+	usePlatformAdminListProvidersQuery,
+	usePlatformAdminUpdateProviderMutation,
+	usePlatformAdminCreateProviderMutation,
+	usePlatformAdminDeleteProviderMutation,
 	usePlatformAdminListProviderKeysQuery,
 	usePlatformAdminCreateProviderKeyMutation,
 	usePlatformAdminUpdateProviderKeyMutation,
 	usePlatformAdminDeleteProviderKeyMutation,
+	usePlatformAdminListProviderModelsQuery,
+	usePlatformAdminAddProviderModelMutation,
 } from "./endpoints/providers";
 
 // Invitations

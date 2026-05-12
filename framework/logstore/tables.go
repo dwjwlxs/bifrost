@@ -93,13 +93,13 @@ type SessionSummaryResult struct {
 }
 
 type SearchStats struct {
-	TotalRequests              int64   `json:"total_requests"`
-	SuccessRate                float64 `json:"success_rate"`                          // Percentage of individual attempts that succeeded
-	UserFacingSuccessRate      float64 `json:"user_facing_success_rate"`              // Percentage of user requests that ultimately succeeded (fallback chains counted as one request)
-	UserFacingTotalRequests    int64   `json:"user_facing_total_requests"`            // Count of root requests (fallback_index = 0) used as denominator for UserFacingSuccessRate
-	AverageLatency             float64 `json:"average_latency"`                       // Average latency in milliseconds
-	TotalTokens                int64   `json:"total_tokens"`                          // Total tokens used
-	TotalCost                  float64 `json:"total_cost"`                            // Total cost in dollars
+	TotalRequests           int64   `json:"total_requests"`
+	SuccessRate             float64 `json:"success_rate"`               // Percentage of individual attempts that succeeded
+	UserFacingSuccessRate   float64 `json:"user_facing_success_rate"`   // Percentage of user requests that ultimately succeeded (fallback chains counted as one request)
+	UserFacingTotalRequests int64   `json:"user_facing_total_requests"` // Count of root requests (fallback_index = 0) used as denominator for UserFacingSuccessRate
+	AverageLatency          float64 `json:"average_latency"`            // Average latency in milliseconds
+	TotalTokens             int64   `json:"total_tokens"`               // Total tokens used
+	TotalCost               float64 `json:"total_cost"`                 // Total cost in dollars
 }
 
 // Log represents a complete log entry for a request/response cycle
@@ -1170,6 +1170,13 @@ type HistogramBucket struct {
 	Count     int64     `json:"count"`
 	Success   int64     `json:"success"`
 	Error     int64     `json:"error"`
+
+	PromptTokens     int64 `json:"prompt_tokens"`
+	CompletionTokens int64 `json:"completion_tokens"`
+	TotalTokens      int64 `json:"total_tokens"`
+	CachedReadTokens int64 `json:"cached_read_tokens"`
+
+	TotalCost float64 `json:"total_cost"`
 }
 
 // HistogramResult represents the histogram query result
@@ -1234,6 +1241,7 @@ type LatencyHistogramBucket struct {
 	P90Latency    float64   `json:"p90_latency"`
 	P95Latency    float64   `json:"p95_latency"`
 	P99Latency    float64   `json:"p99_latency"`
+	Success       int64     `json:"success"`
 	TotalRequests int64     `json:"total_requests"`
 }
 
@@ -1304,21 +1312,30 @@ type ProviderLatencyHistogramResult struct {
 // HistogramDimension represents a column that can be used as a grouping dimension in histograms
 type HistogramDimension string
 
+func (d HistogramDimension) Valid() bool {
+	_, ok := ValidHistogramDimensions[d]
+	return ok
+}
+
 const (
-	DimensionProvider     HistogramDimension = "provider"
-	DimensionTeam         HistogramDimension = "team_id"
-	DimensionCustomer     HistogramDimension = "customer_id"
-	DimensionUser         HistogramDimension = "user_id"
-	DimensionBusinessUnit HistogramDimension = "business_unit_id"
+	DimensionProvider       HistogramDimension = "provider"
+	DimensionModel          HistogramDimension = "model"
+	DimensionTeam           HistogramDimension = "team_id"
+	DimensionCustomer       HistogramDimension = "customer_id"
+	DimensionUser           HistogramDimension = "user_id"
+	DimensionBusinessUnit   HistogramDimension = "business_unit_id"
+	DimensionVirtualKeyName HistogramDimension = "virtual_key_name"
 )
 
 // ValidHistogramDimensions is the set of allowed dimension values
 var ValidHistogramDimensions = map[HistogramDimension]bool{
-	DimensionProvider:     true,
-	DimensionTeam:         true,
-	DimensionCustomer:     true,
-	DimensionUser:         true,
-	DimensionBusinessUnit: true,
+	DimensionProvider:       true,
+	DimensionModel:          true,
+	DimensionTeam:           true,
+	DimensionCustomer:       true,
+	DimensionUser:           true,
+	DimensionBusinessUnit:   true,
+	DimensionVirtualKeyName: true,
 }
 
 // Dimension-level histogram types (generic version of Provider histograms)
@@ -1477,4 +1494,39 @@ type UserRankingWithTrend struct {
 // UserRankingResult is the response for the user rankings endpoint.
 type UserRankingResult struct {
 	Rankings []UserRankingWithTrend `json:"rankings"`
+}
+
+// DimensionRankingEntry represents aggregated stats for a single dimension value over a time period.
+type DimensionRankingEntry struct {
+	DimensionValue   string  `json:"dimension_value"`
+	TotalRequests    int64   `json:"total_requests"`
+	SuccessCount     int64   `json:"success_count"`
+	SuccessRate      float64 `json:"success_rate"`
+	PromptTokens     int64   `json:"prompt_tokens"`
+	CompletionTokens int64   `json:"completion_tokens"`
+	CachedReadTokens int64   `json:"cached_read_tokens"`
+	TotalTokens      int64   `json:"total_tokens"`
+	TotalCost        float64 `json:"total_cost"`
+	AvgLatency       float64 `json:"avg_latency"`
+}
+
+// DimensionRankingTrend represents the percentage change compared to the previous period.
+type DimensionRankingTrend struct {
+	HasPreviousPeriod bool    `json:"has_previous_period"`
+	RequestsTrend     float64 `json:"requests_trend"`
+	TokensTrend       float64 `json:"tokens_trend"`
+	CostTrend         float64 `json:"cost_trend"`
+	LatencyTrend      float64 `json:"latency_trend"`
+}
+
+// DimensionRankingWithTrend combines ranking entry with trend data.
+type DimensionRankingWithTrend struct {
+	DimensionRankingEntry
+	Trend DimensionRankingTrend `json:"trend"`
+}
+
+// DimensionRankingResult is the response for the dimension rankings endpoint.
+type DimensionRankingResult struct {
+	Dimension HistogramDimension          `json:"dimension"`
+	Rankings  []DimensionRankingWithTrend `json:"rankings"`
 }

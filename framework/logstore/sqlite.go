@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -29,7 +30,7 @@ func newSqliteLogStore(ctx context.Context, config *SQLiteConfig, logger schemas
 	dsn := fmt.Sprintf("%s?_journal_mode=WAL&_synchronous=NORMAL&_cache_size=10000&_busy_timeout=60000&_wal_autocheckpoint=1000&_foreign_keys=1", config.Path)
 	logger.Debug("opening DB with dsn: %s", dsn)
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		Logger: newGormLogger(logger),
+		Logger: bifrost.NewGormLogger(logger),
 	})
 
 	if err != nil {
