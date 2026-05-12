@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/auth"
 	"gorm.io/driver/postgres"
@@ -34,7 +35,7 @@ func buildPostgresDSN(config *PostgresConfig) string {
 // and the runtime pool.
 func openPostresConnection(dsn string, logger schemas.Logger) (*gorm.DB, error) {
 	return gorm.Open(postgres.New(postgres.Config{DSN: dsn}), &gorm.Config{
-		Logger: newGormLogger(logger),
+		Logger: bifrost.NewGormLogger(logger),
 	})
 }
 

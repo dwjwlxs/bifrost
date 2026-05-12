@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/auth"
 	"gorm.io/driver/mysql"
@@ -54,7 +55,7 @@ func newMySQLConfigStore(ctx context.Context, config *MySQLConfig, logger schema
 	db, err := gorm.Open(mysql.New(mysql.Config{
 		DSN: dsn,
 	}), &gorm.Config{
-		Logger: newGormLogger(logger),
+		Logger: bifrost.NewGormLogger(logger),
 	})
 	if err != nil {
 		return nil, err
