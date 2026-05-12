@@ -381,6 +381,20 @@ func (mc *ModelCatalog) UpsertModelDataForProvider(provider schemas.ModelProvide
 	mc.modelPool[provider] = finalModelList
 }
 
+// AddModelToPool adds a single model to the provider's model pool without rebuilding the full catalog.
+// This is used when a model config is created via the API and needs to be immediately available.
+func (mc *ModelCatalog) AddModelToPool(provider schemas.ModelProvider, modelName string) {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	if mc.modelPool == nil {
+		mc.modelPool = make(map[schemas.ModelProvider][]string)
+	}
+	if !slices.Contains(mc.modelPool[provider], modelName) {
+		mc.modelPool[provider] = append(mc.modelPool[provider], modelName)
+	}
+}
+
 // UpsertUnfilteredModelDataForProvider upserts unfiltered model data for a given provider
 func (mc *ModelCatalog) UpsertUnfilteredModelDataForProvider(provider schemas.ModelProvider, modelData *schemas.BifrostListModelsResponse) {
 	if modelData == nil {

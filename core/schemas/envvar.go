@@ -194,27 +194,35 @@ func (e *EnvVar) UnmarshalJSON(data []byte) error {
 	if sonic.Valid(data) {
 		valueNode, _ := sonic.Get(data, "value")
 		envNode, _ := sonic.Get(data, "env_var")
-		if valueNode.Exists() && envNode.Exists() {
-			// Use a type alias to avoid infinite recursion (alias doesn't inherit methods)
-			type envVarAlias EnvVar
-			var envVar envVarAlias
-			if err := sonic.Unmarshal(data, &envVar); err == nil {
-				e.Val = envVar.Val
-				e.FromEnv = envVar.FromEnv
-				e.EnvVar = envVar.EnvVar
-				// Here we will check if the Val starts with env and is same as the EnvVar
-				if strings.HasPrefix(e.Val, "env.") && e.Val == e.EnvVar {
-					e.Val = ""
-					// Load the environment variable value
-					envValue, ok := os.LookupEnv(strings.TrimPrefix(e.EnvVar, "env."))
-					if ok {
-						e.Val = envValue
+		if valueNode.Exists() {
+			if envNode.Exists() {
+				// Both "value" and "env_var" fields present — full EnvVar unmarshal
+				type envVarAlias EnvVar
+				var envVar envVarAlias
+				if err := sonic.Unmarshal(data, &envVar); err == nil {
+					e.Val = envVar.Val
+					e.FromEnv = envVar.FromEnv
+					e.EnvVar = envVar.EnvVar
+					// Here we will check if the Val starts with env and is same as the EnvVar
+					if strings.HasPrefix(e.Val, "env.") && e.Val == e.EnvVar {
+						e.Val = ""
+						// Load the environment variable value
+						envValue, ok := os.LookupEnv(strings.TrimPrefix(e.EnvVar, "env."))
+						if ok {
+							e.Val = envValue
+						}
+						e.FromEnv = true
 					}
-					e.FromEnv = true
+					return nil
 				}
+			}
+			// Only "value" field present (or full unmarshal failed): extract value directly
+			if s, err := valueNode.String(); err == nil {
+				e.Val = s
+				e.FromEnv = false
+				e.EnvVar = ""
 				return nil
 			}
-			// Else the value is JSON, so we will treat this as a normal value
 		}
 	}
 	if envKey, ok := strings.CutPrefix(val, "env."); ok {
