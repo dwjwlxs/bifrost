@@ -1995,7 +1995,7 @@ func preloadCustomerRelations(db *gorm.DB, prefix string) *gorm.DB {
 	return db.
 		Preload(relation("Teams")).
 		Preload(relation("Teams.Budgets")).
-		Preload(relation("Budget")).
+		Preload(relation("Budgets")).
 		Preload(relation("RateLimit")).
 		Preload(relation("VirtualKeys"))
 }
@@ -2663,6 +2663,19 @@ func (s *RDBConfigStore) DeleteVirtualKeyMCPConfig(ctx context.Context, id uint,
 }
 
 const teamSelectWithVKCount = "governance_teams.*, (SELECT COUNT(*) FROM governance_virtual_keys WHERE team_id = governance_teams.id) AS virtual_key_count"
+
+func (s *RDBConfigStore) GetUserProviderConfigs(ctx context.Context, userID string) ([]tables.TableUserProviderConfig, error) {
+	var userProviderConfigs []tables.TableUserProviderConfig
+
+	query := s.DB().WithContext(ctx)
+	if userID != "" {
+		query = query.Where("user_id = ?", userID)
+	}
+	if err := query.Find(&userProviderConfigs).Error; err != nil {
+		return nil, err
+	}
+	return userProviderConfigs, nil
+}
 
 // GetTeams retrieves all teams from the database.
 func (s *RDBConfigStore) GetTeams(ctx context.Context, customerID string) ([]tables.TableTeam, error) {

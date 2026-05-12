@@ -219,6 +219,7 @@ type TableVirtualKey struct {
 	CalendarAligned bool `gorm:"default:false" json:"calendar_aligned"` // When true, all budgets under this VK reset at clean calendar boundaries
 
 	// Relationships
+	User      *TableUser      `gorm:"foreignKey:UserID" json:"user,omitempty"`
 	Team      *TableTeam      `gorm:"foreignKey:TeamID" json:"team,omitempty"`
 	Customer  *TableCustomer  `gorm:"foreignKey:CustomerID" json:"customer,omitempty"`
 	RateLimit *TableRateLimit `gorm:"foreignKey:RateLimitID;onDelete:CASCADE" json:"rate_limit,omitempty"`
@@ -238,17 +239,10 @@ type TableVirtualKey struct {
 // TableName sets the table name for each model
 func (TableVirtualKey) TableName() string { return "governance_virtual_keys" }
 
-// BeforeSave is a GORM hook that enforces mutual exclusion between team and customer
-// (a VK cannot belong to both team and customer simultaneously, but UserID can coexist
-// with either), computes a SHA-256 hash of the plaintext value for indexed lookups,
-// and encrypts the virtual key value before writing to the database.
+// BeforeSave is a GORM hook that computes a SHA-256 hash of the plaintext
+// value for indexed lookups and encrypts the virtual key value before writing
+// to the database.
 func (vk *TableVirtualKey) BeforeSave(tx *gorm.DB) error {
-	// Enforce mutual exclusion: VK can belong to either Team OR Customer, not both
-	// (UserID can coexist with either TeamID or CustomerID)
-	if vk.TeamID != nil && vk.CustomerID != nil {
-		return fmt.Errorf("virtual key cannot belong to both team and customer")
-	}
-
 	// Hash must be computed before encryption (from plaintext value)
 	if vk.Value != "" {
 		vk.ValueHash = encrypt.HashSHA256(vk.Value)

@@ -156,6 +156,11 @@ func (c *BillingBudgetChecker) flattenAndFilterBudgets(budgets EntityWiseBudgets
 	// Flatten budgets from all entities
 	for _, entityBudgets := range budgets {
 		for _, budget := range entityBudgets {
+			// Skip non-billing budgets
+			if budget.Type != configstoreTables.BudgetTypeBilling {
+				continue
+			}
+
 			// Skip expired budgets (ExpiresAt in past)
 			if budget.ExpiresAt != nil && time.Now().After(*budget.ExpiresAt) {
 				c.logger.Debug("BillingBudgetChecker: Skipping expired budget %s", budget.ID)
@@ -167,11 +172,14 @@ func (c *BillingBudgetChecker) flattenAndFilterBudgets(budgets EntityWiseBudgets
 				baseline = 0
 			}
 
-			isPackage := budget.ResetDuration != "0"
+			isPackage := false
+			if budget.ExpiresAt != nil {
+				isPackage = true
+			}
 
 			// Calculate duration in seconds for sorting
 			var durationSecs float64
-			if isPackage && budget.ResetDuration != "" {
+			if isPackage && budget.ResetDuration != "" && budget.ResetDuration != "0" {
 				if duration, err := configstoreTables.ParseDuration(budget.ResetDuration); err == nil {
 					durationSecs = duration.Seconds()
 				}

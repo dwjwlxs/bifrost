@@ -187,7 +187,7 @@ func (r *BudgetResolver) EvaluateTeamRequest(ctx *schemas.BifrostContext, teamID
 
 }
 
-// EvaluateUserRequest evaluates user-level rate limits and budgets (enterprise-only)
+// EvaluateUserRequest evaluates user-level rate limits, budgets, and model access (enterprise-only)
 // This runs after provider/model checks but before VK checks
 // Returns DecisionAllow if userID is empty or user has no governance configured
 func (r *BudgetResolver) EvaluateUserRequest(ctx *schemas.BifrostContext, userID string, request *EvaluationRequest) *EvaluationResult {
@@ -212,6 +212,20 @@ func (r *BudgetResolver) EvaluateUserRequest(ctx *schemas.BifrostContext, userID
 		return &EvaluationResult{
 			Decision: decision,
 			Reason:   fmt.Sprintf("User-level budget exceeded: %s", reasonFromErr(err, decision)),
+		}
+	}
+
+	// Check user-level model access (UserProviderConfig)
+	// If a UserProviderConfig exists for this user+provider and the model is not allowed, block it.
+	// No UserProviderConfig → allow (no restriction in governance mode).
+	if request != nil && request.Model != "" && request.Provider != "" {
+		if upc, ok := r.store.GetUserProviderConfig(ctx, userID, string(request.Provider)); ok {
+			if !upc.AllowedModels.IsAllowed(request.Model) {
+				return &EvaluationResult{
+					Decision: DecisionModelBlocked,
+					Reason:   fmt.Sprintf("Model '%s' is not allowed for user at provider '%s' (user package restriction)", request.Model, request.Provider),
+				}
+			}
 		}
 	}
 
@@ -246,6 +260,10 @@ func (r *BudgetResolver) EvaluateVirtualKeyRequest(ctx *schemas.BifrostContext, 
 	// Set virtual key id and name in context
 	ctx.SetValue(schemas.BifrostContextKeyGovernanceVirtualKeyID, vk.ID)
 	ctx.SetValue(schemas.BifrostContextKeyGovernanceVirtualKeyName, vk.Name)
+	// Set user ID from virtual key
+	if vk.UserID != nil {
+		ctx.SetValue(schemas.BifrostContextKeyUserID, *vk.UserID)
+	}
 	if vk.Team != nil {
 		ctx.SetValue(schemas.BifrostContextKeyGovernanceTeamID, vk.Team.ID)
 		ctx.SetValue(schemas.BifrostContextKeyGovernanceTeamName, vk.Team.Name)
