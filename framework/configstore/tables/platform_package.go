@@ -37,8 +37,10 @@ type TablePlatformPackage struct {
 
 func (TablePlatformPackage) TableName() string { return "platform_packages" }
 
-// BeforeSave validates the package template before persisting.
-func (p *TablePlatformPackage) BeforeSave(tx *gorm.DB) error {
+// BeforeCreate validates the package template before inserting a new record.
+// It intentionally does NOT run on Update — partial field updates (e.g. changing
+// price alone) must succeed without triggering full-record validation.
+func (p *TablePlatformPackage) BeforeCreate(tx *gorm.DB) error {
 	if p.Name == "" {
 		return fmt.Errorf("package name is required")
 	}

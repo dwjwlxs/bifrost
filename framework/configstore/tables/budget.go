@@ -24,11 +24,11 @@ type TableBudget struct {
 	CurrentUsage  float64   `gorm:"default:0" json:"current_usage"`                  // Current usage in dollars
 
 	// Owner FKs: a budget belongs to at most one of the following entities
-	TeamID           *string `gorm:"type:varchar(255);index" json:"team_id,omitempty"`           // Governance + Billing
-	VirtualKeyID     *string `gorm:"type:varchar(255);index" json:"virtual_key_id,omitempty"`   // Governance only
-	ProviderConfigID *uint   `gorm:"index" json:"provider_config_id,omitempty"`                 // Governance only
-	CustomerID       *string `gorm:"type:varchar(255);index" json:"customer_id,omitempty"`      // Governance + Billing (NEW)
-	UserID           *string `gorm:"type:varchar(255);index" json:"user_id,omitempty"`          // Governance + Billing (NEW)
+	TeamID           *string `gorm:"type:varchar(255);index" json:"team_id,omitempty"`        // Governance + Billing
+	VirtualKeyID     *string `gorm:"type:varchar(255);index" json:"virtual_key_id,omitempty"` // Governance only
+	ProviderConfigID *uint   `gorm:"index" json:"provider_config_id,omitempty"`               // Governance only
+	CustomerID       *string `gorm:"type:varchar(255);index" json:"customer_id,omitempty"`    // Governance + Billing (NEW)
+	UserID           *string `gorm:"type:varchar(255);index" json:"user_id,omitempty"`        // Governance + Billing (NEW)
 
 	// User scope FKs (only valid when UserID != nil)
 	UserScopeTeamID     *string `gorm:"type:varchar(255);index" json:"user_scope_team_id,omitempty"`     // Budget only applies to this User within this Team
@@ -83,6 +83,9 @@ func (b *TableBudget) BeforeSave(tx *gorm.DB) error {
 	}
 
 	// 2. Billing type cannot be attached to VirtualKey or ProviderConfig
+	if b.Type == "" {
+		b.Type = BudgetTypeGovernance
+	}
 	if b.Type == BudgetTypeBilling && (b.VirtualKeyID != nil || b.ProviderConfigID != nil) {
 		return fmt.Errorf("billing budget cannot be attached to virtual key or provider config")
 	}

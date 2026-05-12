@@ -404,8 +404,13 @@ func (p *GovernancePlugin) HTTPTransportPreHook(ctx *schemas.BifrostContext, req
 		}
 	}
 
-	// Attaching team and customer based on the virtual key
+	// Attaching virtual key, user, team and customer based on the virtual key
 	if virtualKey != nil {
+		ctx.SetValue(schemas.BifrostContextKeyGovernanceVirtualKeyID, virtualKey.ID)
+		ctx.SetValue(schemas.BifrostContextKeyGovernanceVirtualKeyName, virtualKey.Name)
+		if virtualKey.UserID != nil {
+			ctx.SetValue(schemas.BifrostContextKeyUserID, *virtualKey.UserID)
+		}
 		if virtualKey.TeamID != nil {
 			ctx.SetValue(schemas.BifrostContextKeyGovernanceTeamID, *virtualKey.TeamID)
 		}
@@ -503,8 +508,13 @@ func (p *GovernancePlugin) governLargePayload(ctx *schemas.BifrostContext, req *
 		virtualKey = vk
 	}
 
-	// Attaching team and customer based on the virtual key
+	// Attaching virtual key, user, team and customer based on the virtual key
 	if virtualKey != nil {
+		ctx.SetValue(schemas.BifrostContextKeyGovernanceVirtualKeyID, virtualKey.ID)
+		ctx.SetValue(schemas.BifrostContextKeyGovernanceVirtualKeyName, virtualKey.Name)
+		if virtualKey.UserID != nil {
+			ctx.SetValue(schemas.BifrostContextKeyUserID, *virtualKey.UserID)
+		}
 		if virtualKey.TeamID != nil {
 			ctx.SetValue(schemas.BifrostContextKeyGovernanceTeamID, *virtualKey.TeamID)
 		}
@@ -1304,8 +1314,11 @@ func (p *GovernancePlugin) isMCPToolAllowedByVKWith(vk *configstoreTables.TableV
 //   - *schemas.LLMPluginShortCircuit: The plugin short circuit if the request is not allowed
 //   - error: Any error that occurred during processing
 func (p *GovernancePlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	// DEBUG: unconditional entry log
+	p.logger.Info("[GOVERNANCE-DEBUG] PreLLMHook ENTERED: skipKeySel=%v\n", bifrost.GetBoolFromContext(ctx, schemas.BifrostContextKeySkipKeySelection))
 	// If its skip key selection - in that case we need to skip virtual key selection too
 	if bifrost.GetBoolFromContext(ctx, schemas.BifrostContextKeySkipKeySelection) {
+		p.logger.Info("[GOVERNANCE-DEBUG] PreLLMHook SKIP: SkipKeySelection=true, returning early")
 		return req, nil, nil
 	}
 	// Validate required headers are present
@@ -1327,6 +1340,15 @@ func (p *GovernancePlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.
 	}
 	// Evaluate governance using common function
 	_, bifrostError := p.EvaluateGovernanceRequest(ctx, evaluationRequest, req.RequestType)
+	// DEBUG: log identity fields after governance evaluation
+	p.logger.Info("[GOVERNANCE-DEBUG] PreLLMHook after EvaluateGovernanceRequest: vkRaw=%s vkID=%s vkName=%s teamID=%s customerID=%s userID=%s",
+		virtualKeyValue,
+		bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceVirtualKeyID),
+		bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceVirtualKeyName),
+		bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceTeamID),
+		bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceCustomerID),
+		bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyUserID),
+	)
 	// Convert BifrostError to LLMPluginShortCircuit if needed
 	if bifrostError != nil {
 		return req, &schemas.LLMPluginShortCircuit{
@@ -1375,7 +1397,7 @@ func (p *GovernancePlugin) PostLLMHook(ctx *schemas.BifrostContext, result *sche
 	// When user auth is present, skip VK usage tracking to avoid double-counting
 	effectiveVK := virtualKey
 	if userID != "" {
-		effectiveVK = ""
+		// effectiveVK = "" // TODO: Revisit after user auth integration
 	}
 	// If effectiveVK is empty, it will be passed as empty string to postHookWorker
 	// The tracker will handle empty virtual keys gracefully by only updating provider-level and model-level usage
@@ -1487,7 +1509,7 @@ func (p *GovernancePlugin) PostMCPHook(ctx *schemas.BifrostContext, resp *schema
 
 	// When user auth is present, skip VK usage tracking to avoid double-counting
 	if userID != "" {
-		virtualKey = ""
+		// virtualKey = "" // TODO: Revisit after user auth integration
 	}
 
 	// Skip if no virtual key

@@ -20,8 +20,8 @@ const (
 type EntityPackageSource string
 
 const (
-	EntityPackageSourceOrder     EntityPackageSource = "order"
-	EntityPackageSourceAdmin     EntityPackageSource = "admin"
+	EntityPackageSourceOrder      EntityPackageSource = "order"
+	EntityPackageSourceAdmin      EntityPackageSource = "admin"
 	EntityPackageSourceRedemption EntityPackageSource = "redemption"
 )
 
@@ -29,8 +29,11 @@ const (
 type TableEntityPackage struct {
 	ID string `gorm:"type:varchar(36);primaryKey" json:"id"`
 
-	UserID     *string `gorm:"type:varchar(255);index" json:"user_id,omitempty"`
-	CustomerID *string `gorm:"type:varchar(255);index" json:"customer_id,omitempty"`
+	UserID *string `gorm:"type:varchar(255);index" json:"user_id,omitempty"`
+
+	// Tenant info: personal or organization
+	TenantType TenantType `gorm:"type:varchar(20);not null;default:'personal'" json:"tenant_type"`
+	TenantID   string     `gorm:"type:varchar(255)" json:"tenant_id"`
 
 	PackageID string `gorm:"type:varchar(36);not null;index" json:"package_id"`
 
@@ -60,16 +63,10 @@ func (TableEntityPackage) TableName() string { return "platform_entity_packages"
 
 // BeforeSave validates the entity package before persisting.
 func (ep *TableEntityPackage) BeforeSave(tx *gorm.DB) error {
-	owners := 0
-	if ep.UserID != nil {
-		owners++
+	if ep.TenantID == "" || ep.TenantType == "" {
+		return fmt.Errorf("entity package must have TenantID and TenantType")
 	}
-	if ep.CustomerID != nil {
-		owners++
-	}
-	if owners != 1 {
-		return fmt.Errorf("entity package must have exactly one owner (user_id or customer_id)")
-	}
+
 	if ep.StartedAt.IsZero() {
 		return fmt.Errorf("started_at is required")
 	}

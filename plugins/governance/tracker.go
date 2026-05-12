@@ -98,7 +98,7 @@ func (t *UsageTracker) UpdateUsage(ctx context.Context, update *UsageUpdate) {
 	}
 
 	// 3. Update user-level governance (enterprise-only, before VK-level)
-	if update.UserID != "" {
+	if update.UserID != "" && false {
 		// Update user rate limit usage
 		if err := t.store.UpdateUserRateLimitUsageInMemory(ctx, update.UserID, update.TokensUsed, shouldUpdateTokens, shouldUpdateRequests); err != nil {
 			t.logger.Error("failed to update user rate limit usage for user %s: %v", update.UserID, err)

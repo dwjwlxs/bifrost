@@ -24,15 +24,16 @@ type EntityWiseRateLimits map[string][]*configstoreTables.TableRateLimit
 // LocalGovernanceStore provides in-memory cache for governance data with fast, non-blocking access
 type LocalGovernanceStore struct {
 	// Core data maps using sync.Map for lock-free reads
-	virtualKeys      sync.Map // string -> *VirtualKey (VK value -> VirtualKey with preloaded relationships)
-	teams            sync.Map // string -> *Team (Team ID -> Team)
-	customers        sync.Map // string -> *Customer (Customer ID -> Customer)
-	userGovernance   sync.Map // string -> *UserGovernance (User ID -> UserGovernance)
-	budgets          sync.Map // string -> *Budget (Budget ID -> Budget)
-	rateLimits       sync.Map // string -> *RateLimit (RateLimit ID -> RateLimit)
-	modelConfigs     sync.Map // string -> *ModelConfig (key: "modelName" or "modelName:provider" -> ModelConfig)
-	providers        sync.Map // string -> *Provider (Provider name -> Provider with preloaded relationships)
-	routingRules     sync.Map // string -> []*TableRoutingRule (key: "scope:scopeID" -> rules, scopeID="" for global)
+	virtualKeys         sync.Map // string -> *VirtualKey (VK value -> VirtualKey with preloaded relationships)
+	teams               sync.Map // string -> *Team (Team ID -> Team)
+	customers           sync.Map // string -> *Customer (Customer ID -> Customer)
+	userGovernance      sync.Map // string -> *UserGovernance (User ID -> UserGovernance)
+	budgets             sync.Map // string -> *Budget (Budget ID -> Budget)
+	rateLimits          sync.Map // string -> *RateLimit (RateLimit ID -> RateLimit)
+	modelConfigs        sync.Map // string -> *ModelConfig (key: "modelName" or "modelName:provider" -> ModelConfig)
+	providers           sync.Map // string -> *Provider (Provider name -> Provider with preloaded relationships)
+	routingRules        sync.Map // string -> []*TableRoutingRule (key: "scope:scopeID" -> rules, scopeID="" for global)
+	userProviderConfigs sync.Map // string -> *configstoreTables.TableUserProviderConfig (key: "userID:provider" -> UPC)
 
 	// Last DB usages for budgets and rate limits
 	LastDBUsagesBudgetsMu            sync.RWMutex       // Last DB usages for budgets
@@ -188,6 +189,14 @@ type GovernanceStore interface {
 	CollectBillingBudgets(ctx context.Context, vk *configstoreTables.TableVirtualKey, provider schemas.ModelProvider) EntityWiseBudgets
 	CheckBillingBudgets(ctx context.Context, vk *configstoreTables.TableVirtualKey, request *EvaluationRequest, baselines map[string]float64) (Decision, error)
 	DeductBillingBudgets(ctx context.Context, vk *configstoreTables.TableVirtualKey, provider schemas.ModelProvider, cost float64) (map[string]float64, error)
+	// StoreBudget makes a newly-created billing budget visible in the in-memory
+	// budgets map so that DeductBillingBudgets can find it immediately without
+	// waiting for the next periodic reload.
+	StoreBudget(ctx context.Context, budget *configstoreTables.TableBudget)
+	// User-level model access (UserProviderConfig)
+	GetUserProviderConfig(ctx context.Context, userID string, provider string) (*configstoreTables.TableUserProviderConfig, bool)
+	UpsertUserProviderConfigInMemory(ctx context.Context, upc *configstoreTables.TableUserProviderConfig)
+	DeleteUserProviderConfigInMemory(ctx context.Context, userID string, provider string)
 }
 
 // NewLocalGovernanceStore creates a new in-memory governance store
@@ -942,6 +951,47 @@ func (gs *LocalGovernanceStore) DeductBillingBudgets(ctx context.Context, vk *co
 	return gs.billingChecker.Deduct(ctx, billingBudgets, cost)
 }
 
+// StoreBudget makes a newly-created budget visible in the in-memory budgets map.
+// This is called by BillingService after provisionPackage persists a billing budget
+// to the database, so that subsequent DeductBillingBudgets calls can find it without
+// waiting for the next periodic load-from-database cycle.
+func (gs *LocalGovernanceStore) StoreBudget(_ context.Context, budget *configstoreTables.TableBudget) {
+	if budget == nil {
+		return
+	}
+	gs.budgets.Store(budget.ID, budget)
+}
+
+// GetUserProviderConfig returns the UserProviderConfig for a user+provider pair.
+// Returns (nil, false) if no config exists — meaning no model restrictions apply.
+func (gs *LocalGovernanceStore) GetUserProviderConfig(_ context.Context, userID string, provider string) (*configstoreTables.TableUserProviderConfig, bool) {
+	key := userID + ":" + provider
+	value, ok := gs.userProviderConfigs.Load(key)
+	if !ok || value == nil {
+		return nil, false
+	}
+	upc, ok := value.(*configstoreTables.TableUserProviderConfig)
+	if !ok {
+		return nil, false
+	}
+	return upc, true
+}
+
+// UpsertUserProviderConfigInMemory adds or updates a UserProviderConfig in the in-memory store.
+func (gs *LocalGovernanceStore) UpsertUserProviderConfigInMemory(_ context.Context, upc *configstoreTables.TableUserProviderConfig) {
+	if upc == nil {
+		return
+	}
+	key := upc.UserID + ":" + upc.Provider
+	gs.userProviderConfigs.Store(key, upc)
+}
+
+// DeleteUserProviderConfigInMemory removes a UserProviderConfig from the in-memory store.
+func (gs *LocalGovernanceStore) DeleteUserProviderConfigInMemory(_ context.Context, userID string, provider string) {
+	key := userID + ":" + provider
+	gs.userProviderConfigs.Delete(key)
+}
+
 // CheckProviderBudget performs budget checking for provider-level configs (lock-free for high performance)
 func (gs *LocalGovernanceStore) CheckProviderBudget(ctx context.Context, request *EvaluationRequest, baselines map[string]float64) (Decision, error) {
 	// This is to prevent nil pointer dereference
@@ -1461,7 +1511,8 @@ func (gs *LocalGovernanceStore) ResetExpiredBudgetsInMemory(ctx context.Context)
 				gs.logger.Error("invalid budget reset duration %s: %v", budget.ResetDuration, err)
 				return true
 			}
-			if now.Sub(budget.LastReset) >= duration {
+			// Skip reset for budgets with ResetDuration="0" (balance-type, e.g. billing budgets)
+			if duration > 0 && now.Sub(budget.LastReset) >= duration {
 				shouldReset = true
 				newLastReset = now
 			}
@@ -1883,8 +1934,14 @@ func (gs *LocalGovernanceStore) loadFromDatabase(ctx context.Context) error {
 		return fmt.Errorf("failed to load routing rules: %w", err)
 	}
 
+	// Load user provider configs (for model access control)
+	userProviderConfigs, err := gs.configStore.GetUserProviderConfigs(ctx, "")
+	if err != nil {
+		return fmt.Errorf("failed to load user provider configs: %w", err)
+	}
+
 	// Rebuild in-memory structures (lock-free)
-	gs.rebuildInMemoryStructures(ctx, customers, teams, virtualKeys, budgets, rateLimits, modelConfigs, providers, routingRules)
+	gs.rebuildInMemoryStructures(ctx, customers, teams, virtualKeys, budgets, rateLimits, modelConfigs, providers, routingRules, userProviderConfigs)
 
 	return nil
 }
@@ -2016,13 +2073,13 @@ func (gs *LocalGovernanceStore) loadFromConfigMemory(ctx context.Context, config
 	}
 
 	// Rebuild in-memory structures (lock-free)
-	gs.rebuildInMemoryStructures(ctx, customers, teams, virtualKeys, budgets, rateLimits, modelConfigs, providers, routingRules)
+	gs.rebuildInMemoryStructures(ctx, customers, teams, virtualKeys, budgets, rateLimits, modelConfigs, providers, routingRules, nil)
 
 	return nil
 }
 
 // rebuildInMemoryStructures rebuilds all in-memory data structures (lock-free)
-func (gs *LocalGovernanceStore) rebuildInMemoryStructures(ctx context.Context, customers []configstoreTables.TableCustomer, teams []configstoreTables.TableTeam, virtualKeys []configstoreTables.TableVirtualKey, budgets []configstoreTables.TableBudget, rateLimits []configstoreTables.TableRateLimit, modelConfigs []configstoreTables.TableModelConfig, providers []configstoreTables.TableProvider, routingRules []configstoreTables.TableRoutingRule) {
+func (gs *LocalGovernanceStore) rebuildInMemoryStructures(ctx context.Context, customers []configstoreTables.TableCustomer, teams []configstoreTables.TableTeam, virtualKeys []configstoreTables.TableVirtualKey, budgets []configstoreTables.TableBudget, rateLimits []configstoreTables.TableRateLimit, modelConfigs []configstoreTables.TableModelConfig, providers []configstoreTables.TableProvider, routingRules []configstoreTables.TableRoutingRule, userProviderConfigs []configstoreTables.TableUserProviderConfig) {
 	// Clear existing data by creating new sync.Maps
 	gs.virtualKeys = sync.Map{}
 	gs.teams = sync.Map{}
@@ -2032,6 +2089,7 @@ func (gs *LocalGovernanceStore) rebuildInMemoryStructures(ctx context.Context, c
 	gs.modelConfigs = sync.Map{}
 	gs.providers = sync.Map{}
 	gs.routingRules = sync.Map{}
+	gs.userProviderConfigs = sync.Map{}
 
 	// Build customers map
 	for i := range customers {
@@ -2147,6 +2205,13 @@ func (gs *LocalGovernanceStore) rebuildInMemoryStructures(ctx context.Context, c
 	}
 	gs.LastDBUsagesRateLimitsTokensMu.Unlock()
 	gs.LastDBUsagesRateLimitsRequestsMu.Unlock()
+
+	// Build user provider configs map — key: "userID:provider"
+	for i := range userProviderConfigs {
+		upc := &userProviderConfigs[i]
+		key := upc.UserID + ":" + upc.Provider
+		gs.userProviderConfigs.Store(key, upc)
+	}
 }
 
 // collectRateLimitsFromHierarchy collects rate limits and their metadata from the hierarchy (Provider Configs → VK → Team → Customer)
@@ -2308,23 +2373,58 @@ func (gs *LocalGovernanceStore) collectBudgetsFromHierarchy(_ context.Context, v
 		}
 	}
 
-	// User-level budgets
-	if vk.UserID != nil {
-		if userGovValue, exists := gs.userGovernance.Load(*vk.UserID); exists && userGovValue != nil {
-			if userGov, ok := userGovValue.(*UserGovernance); ok && userGov != nil && userGov.BudgetID != nil {
-				if budgetValue, exists := gs.budgets.Load(*userGov.BudgetID); exists && budgetValue != nil {
-					if budget, ok := budgetValue.(*configstoreTables.TableBudget); ok && budget != nil {
-						if !seen[budget.ID] {
-							if categoryBudgets := entityWiseBudgets["User"]; categoryBudgets == nil {
-								entityWiseBudgets["User"] = []*configstoreTables.TableBudget{}
-							}
-							entityWiseBudgets["User"] = append(entityWiseBudgets["User"], budget)
-							seen[budget.ID] = true
-						}
-					}
+	// get the customer by vk.TeamID for compatibility
+	if vk.TeamID != nil && vk.CustomerID == nil {
+		if teamValue, exists := gs.teams.Load(*vk.TeamID); exists && teamValue != nil {
+			if team, ok := teamValue.(*configstoreTables.TableTeam); ok && team != nil {
+				if team.CustomerID != nil {
+					vk.CustomerID = team.CustomerID
 				}
 			}
 		}
+	}
+
+	// User-level budgets: scan all budgets in memory to find ones owned by this user.
+	// This correctly picks up billing Budgets (Type=billing, UserID set) created by
+	// provisionPackage, which are stored in gs.budgets but not referenced by governance_users.
+	if vk.UserID != nil {
+		gs.budgets.Range(func(key, value any) bool {
+			budgetValue, ok := value.(*configstoreTables.TableBudget)
+			if !ok || budgetValue == nil {
+				return true
+			}
+			if budgetValue.UserID == nil || *budgetValue.UserID != *vk.UserID {
+				return true
+			}
+			if seen[budgetValue.ID] {
+				return true
+			}
+
+			// Apply UserScope filter (per billing-dual-track.md §5.3):
+			// - nil scope  → personal User Budget, only matches personal VK
+			// - TeamID set → matches VK with matching TeamID
+			// - CustomerID set → matches VK with matching CustomerID
+			hasTeamScope := budgetValue.UserScopeTeamID != nil
+			hasCustomerScope := budgetValue.UserScopeCustomerID != nil
+
+			if hasTeamScope && (vk.TeamID == nil || *budgetValue.UserScopeTeamID != *vk.TeamID) {
+				return true
+			}
+			if hasCustomerScope && (vk.CustomerID == nil || *budgetValue.UserScopeCustomerID != *vk.CustomerID) {
+				return true
+			}
+			if !hasTeamScope && !hasCustomerScope && (vk.TeamID != nil || vk.CustomerID != nil) {
+				// Personal-only User Budget, skip for org VKs
+				return true
+			}
+
+			if _, ok := entityWiseBudgets["User"]; !ok {
+				entityWiseBudgets["User"] = []*configstoreTables.TableBudget{}
+			}
+			entityWiseBudgets["User"] = append(entityWiseBudgets["User"], budgetValue)
+			seen[budgetValue.ID] = true
+			return true
+		})
 	}
 
 	var teamCustomerID string
@@ -2402,12 +2502,12 @@ func filterBudgetsByType(entityWise EntityWiseBudgets, budgetType configstoreTab
 	for entity, budgets := range entityWise {
 		for _, b := range budgets {
 			// Empty Type defaults to governance for backward compatibility
-		// (budgets created before the billing dual-track feature have no Type set).
-		effectiveType := b.Type
-		if effectiveType == "" {
-			effectiveType = configstoreTables.BudgetTypeGovernance
-		}
-		if effectiveType == budgetType {
+			// (budgets created before the billing dual-track feature have no Type set).
+			effectiveType := b.Type
+			if effectiveType == "" {
+				effectiveType = configstoreTables.BudgetTypeGovernance
+			}
+			if effectiveType == budgetType {
 				if filtered[entity] == nil {
 					filtered[entity] = []*configstoreTables.TableBudget{}
 				}
@@ -2429,7 +2529,8 @@ func (gs *LocalGovernanceStore) CollectBillingBudgets(ctx context.Context, vk *c
 
 // collectBudgetIDsFromMemory collects budget IDs from in-memory store data (lock-free)
 func (gs *LocalGovernanceStore) collectBudgetIDsFromMemory(ctx context.Context, vk *configstoreTables.TableVirtualKey, provider schemas.ModelProvider) []string {
-	budgetsWithCategory := gs.collectBudgetsFromHierarchy(ctx, vk, provider)
+	allBudgets := gs.collectBudgetsFromHierarchy(ctx, vk, provider)
+	budgetsWithCategory := filterBudgetsByType(allBudgets, configstoreTables.BudgetTypeGovernance)
 	budgetIDs := []string{}
 	for _, budgets := range budgetsWithCategory {
 		for _, budget := range budgets {
