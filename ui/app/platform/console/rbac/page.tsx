@@ -7,9 +7,8 @@ import {
 	usePlatformDeleteRoleMutation,
 	usePlatformListUsersQuery,
 	usePlatformSetUserRoleMutation,
-	usePlatformAssignUserRoleMutation,
 } from "@/lib/platform/platformApi";
-import type { PlatformCustomRole } from "@/lib/platform/platformApi";
+import type { PlatformCustomRole } from "@/lib/platform/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -159,7 +158,9 @@ function RoleDialog({
 			if (isEditing && role) {
 				await updateRole({
 					id: role.id,
-					data: { name, permissions, description: description || undefined },
+					name,
+					permissions,
+					description: description || undefined,
 				}).unwrap();
 				toast.success("Role updated successfully");
 			} else {
@@ -283,11 +284,11 @@ function AssignRoleDialog({
 }: {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
-	userId: number;
+	userId: string;
 	username: string;
 }) {
 	const [selectedRoleId, setSelectedRoleId] = useState("");
-	const [assignRole, { isLoading }] = usePlatformAssignUserRoleMutation();
+	const [assignRole, { isLoading }] = usePlatformSetUserRoleMutation();
 	const { data: roles } = usePlatformListRolesQuery();
 
 	const handleSubmit = async () => {
@@ -298,7 +299,7 @@ function AssignRoleDialog({
 		try {
 			await assignRole({
 				user_id: userId,
-				role_id: selectedRoleId,
+				role: selectedRoleId,
 			}).unwrap();
 			toast.success(`Role assigned to ${username}`);
 			onOpenChange(false);
@@ -358,17 +359,17 @@ export default function RbacPage() {
 	const [editingRole, setEditingRole] = useState<PlatformCustomRole | null>(null);
 	const [assignDialogOpen, setAssignDialogOpen] = useState(false);
 	const [assignTarget, setAssignTarget] = useState<{
-		userId: number;
+		userId: string;
 		username: string;
 	} | null>(null);
 
 	const { data: roles, isLoading: rolesLoading, error: rolesError, refetch: refetchRoles } = usePlatformListRolesQuery();
-	const { data: usersData, isLoading: usersLoading, error: usersError, refetch: refetchUsers } = usePlatformListUsersQuery();
+	const { data: usersData, isLoading: usersLoading, error: usersError, refetch: refetchUsers } = usePlatformListUsersQuery({});
 
 	const [deleteRole] = usePlatformDeleteRoleMutation();
 	const [setUserRole] = usePlatformSetUserRoleMutation();
 
-	const users = usersData?.users ?? [];
+	const users = usersData?.items ?? [];
 
 	// Check if user has admin access
 	const hasAccess = !rolesError && !usersError;
@@ -399,9 +400,9 @@ export default function RbacPage() {
 		setRoleDialogOpen(true);
 	};
 
-	const handlePresetRoleChange = async (userId: number, role: string) => {
+	const handlePresetRoleChange = async (userId: string, role: string) => {
 		try {
-			await setUserRole({ user_id: userId, role }).unwrap();
+			await setUserRole({ user_id: String(userId), role }).unwrap();
 			toast.success("Preset role updated");
 			refetchUsers();
 		} catch (err: any) {
@@ -409,7 +410,7 @@ export default function RbacPage() {
 		}
 	};
 
-	const handleOpenAssignDialog = (userId: number, username: string) => {
+	const handleOpenAssignDialog = (userId: string, username: string) => {
 		setAssignTarget({ userId, username });
 		setAssignDialogOpen(true);
 	};

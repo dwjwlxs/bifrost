@@ -9,8 +9,7 @@ const invitationsApi = platformBaseApi.injectEndpoints({
 		/** Get invitation details by token (public, no auth required) */
 		platformGetInvitation: builder.query<PlatformInvitationDetails, string>({
 			query: (token) => ({ url: `/platform/invitations/${token}`, method: "GET" }),
-			transformResponse: (response: { data?: PlatformInvitationDetails }) =>
-				response.data ?? ({} as PlatformInvitationDetails),
+			transformResponse: (response: { data?: PlatformInvitationDetails }) => response.data ?? ({} as PlatformInvitationDetails),
 		}),
 
 		/** Accept an invitation (requires auth — email verified server-side) */
@@ -27,7 +26,4 @@ const invitationsApi = platformBaseApi.injectEndpoints({
 	}),
 });
 
-export const {
-	usePlatformGetInvitationQuery,
-	usePlatformAcceptInvitationMutation,
-} = invitationsApi;
+export const { usePlatformGetInvitationQuery, usePlatformAcceptInvitationMutation } = invitationsApi;

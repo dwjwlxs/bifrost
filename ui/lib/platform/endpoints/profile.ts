@@ -22,8 +22,4 @@ const profileApi = platformBaseApi.injectEndpoints({
 	}),
 });
 
-export const {
-	usePlatformGetProfileQuery,
-	usePlatformUpdateProfileMutation,
-	usePlatformChangePasswordMutation,
-} = profileApi;
+export const { usePlatformGetProfileQuery, usePlatformUpdateProfileMutation, usePlatformChangePasswordMutation } = profileApi;

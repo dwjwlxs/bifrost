@@ -73,15 +73,15 @@ export default function LoginPage() {
 					<form onSubmit={handleSubmit} className="space-y-4">
 						{error && <div className="bg-destructive/10 text-destructive rounded-md p-3 text-sm">{error}</div>}
 						<div className="space-y-2">
-						<Label htmlFor="login">Email</Label>
-						<Input
-							id="login"
-							type="email"
-							value={login}
-							onChange={(e) => setLogin(e.target.value)}
-							placeholder="Enter your email"
-							required
-						/>
+							<Label htmlFor="login">Email</Label>
+							<Input
+								id="login"
+								type="email"
+								value={login}
+								onChange={(e) => setLogin(e.target.value)}
+								placeholder="Enter your email"
+								required
+							/>
 						</div>
 						<div className="space-y-2">
 							<Label htmlFor="password">Password</Label>

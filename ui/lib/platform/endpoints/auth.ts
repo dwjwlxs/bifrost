@@ -29,7 +29,6 @@ const authApi = platformBaseApi.injectEndpoints({
 		platformResendVerification: builder.mutation<{ code: string; message: string; data: { success: boolean } }, { email: string }>({
 			query: (body) => ({ url: "/auth/resend-verification", method: "POST", body }),
 		}),
-
 	}),
 });
 

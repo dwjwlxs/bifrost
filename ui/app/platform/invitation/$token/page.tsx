@@ -74,7 +74,9 @@ export default function InvitationPage() {
 					</CardHeader>
 					<CardContent className="text-center">
 						<Link to="/platform/login">
-							<Button variant="outline" className="w-full">Sign in to your account</Button>
+							<Button variant="outline" className="w-full">
+								Sign in to your account
+							</Button>
 						</Link>
 					</CardContent>
 				</Card>
@@ -87,8 +89,8 @@ export default function InvitationPage() {
 			<div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4">
 				<Card className="w-full max-w-md">
 					<CardHeader className="text-center">
-						<div className="bg-green-100 mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full">
-							<CheckCircle2 className="text-green-600 h-7 w-7" />
+						<div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100">
+							<CheckCircle2 className="h-7 w-7 text-green-600" />
 						</div>
 						<CardTitle className="text-2xl">You're in!</CardTitle>
 						<CardDescription>You've joined {invitation.org_name}. Redirecting to your dashboard...</CardDescription>
@@ -131,8 +133,7 @@ export default function InvitationPage() {
 							<div className="space-y-1 text-sm text-blue-800">
 								<div className="flex items-center gap-2">
 									<Building2 className="h-4 w-4 opacity-70" />
-									<span>{invitation.org_name}
-									</span>
+									<span>{invitation.org_name}</span>
 								</div>
 								{invitation.team_name && invitation.team_name !== invitation.org_name && (
 									<div className="flex items-center gap-2">
@@ -154,7 +155,7 @@ export default function InvitationPage() {
 						</p>
 
 						{errorMessage && (
-							<div className="mb-6 rounded-lg bg-red-50 p-3 text-sm text-red-600 flex items-center gap-2">
+							<div className="mb-6 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-600">
 								<AlertCircle className="h-4 w-4 shrink-0" />
 								{errorMessage}
 							</div>
@@ -163,26 +164,26 @@ export default function InvitationPage() {
 						<div className="space-y-4">
 							{notAuthenticated ? (
 								<>
-									<p className="text-sm text-gray-600">
-										Sign in or create an account to accept this invitation.
-									</p>
+									<p className="text-sm text-gray-600">Sign in or create an account to accept this invitation.</p>
 									<Button onClick={handleAccept} className="w-full">
 										Sign in to Accept
 									</Button>
 									<Link to="/platform/register" search={{ redirect: `/platform/invitation/${token}` }} className="block">
-										<Button variant="outline" className="w-full">Create an account</Button>
+										<Button variant="outline" className="w-full">
+											Create an account
+										</Button>
 									</Link>
 								</>
 							) : (
 								<>
-									<p className="text-sm text-gray-600">
-										You're signed in. Click below to accept this invitation.
-									</p>
+									<p className="text-sm text-gray-600">You're signed in. Click below to accept this invitation.</p>
 									<Button onClick={handleAccept} disabled={accepting} className="w-full">
 										{accepting ? "Accepting..." : "Accept & Join"}
 									</Button>
 									<Link to="/platform/console/organizations" className="block">
-										<Button variant="ghost" className="w-full">Cancel</Button>
+										<Button variant="ghost" className="w-full">
+											Cancel
+										</Button>
 									</Link>
 								</>
 							)}
@@ -190,9 +191,13 @@ export default function InvitationPage() {
 					</div>
 
 					<p className="mt-6 text-center text-xs text-gray-500">
-						<a href="#" className="underline">Terms of Service</a>
+						<a href="#" className="underline">
+							Terms of Service
+						</a>
 						{" · "}
-						<a href="#" className="underline">Privacy Policy</a>
+						<a href="#" className="underline">
+							Privacy Policy
+						</a>
 					</p>
 				</div>
 			</div>

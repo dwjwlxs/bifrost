@@ -15,15 +15,7 @@ interface TeamVKsDialogProps {
 	isTeamAdmin: boolean;
 }
 
-function VKRow({
-	vk,
-	isTeamAdmin,
-	onEdit,
-}: {
-	vk: PlatformVirtualKey;
-	isTeamAdmin: boolean;
-	onEdit: (vk: PlatformVirtualKey) => void;
-}) {
+function VKRow({ vk, isTeamAdmin, onEdit }: { vk: PlatformVirtualKey; isTeamAdmin: boolean; onEdit: (vk: PlatformVirtualKey) => void }) {
 	const [revealed, setRevealed] = useState(false);
 
 	const maskKey = (value: string) => {
