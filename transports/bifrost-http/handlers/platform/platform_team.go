@@ -9,7 +9,6 @@ import (
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
-	"github.com/maximhq/bifrost/framework/messenger"
 	"github.com/maximhq/bifrost/framework/model"
 	"github.com/maximhq/bifrost/framework/platform"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
@@ -25,13 +24,11 @@ type PlatformTeamHandler struct {
 }
 
 // NewPlatformTeamHandler creates a new PlatformTeamHandler.
-func NewPlatformTeamHandler(db *gorm.DB, configStore configstore.ConfigStore, logger schemas.Logger,
-	messenger messenger.Sender, platformURL string,
-) *PlatformTeamHandler {
-	invitationSvc := platform.NewInvitationService(db, messenger, platformURL, logger)
+func NewPlatformTeamHandler(config *lib.Config) *PlatformTeamHandler {
+	invitationSvc := platform.NewInvitationService(config.ConfigStore.DB(), config.Messenger, config.PlatformURL, config.Logger)
 	return &PlatformTeamHandler{
-		db:            db,
-		configStore:   configStore,
+		db:            config.ConfigStore.DB(),
+		configStore:   config.ConfigStore,
 		invitationSvc: invitationSvc,
 	}
 }

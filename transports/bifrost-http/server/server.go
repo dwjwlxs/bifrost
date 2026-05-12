@@ -21,6 +21,7 @@ import (
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
 	"github.com/maximhq/bifrost/framework/logstore"
+	fpayment "github.com/maximhq/bifrost/framework/payment"
 	dynamicPlugins "github.com/maximhq/bifrost/framework/plugins"
 	"github.com/maximhq/bifrost/framework/tracing"
 	"github.com/maximhq/bifrost/plugins/governance"
@@ -29,7 +30,6 @@ import (
 	"github.com/maximhq/bifrost/plugins/semanticcache"
 	"github.com/maximhq/bifrost/plugins/telemetry"
 	"github.com/maximhq/bifrost/transports/bifrost-http/handlers"
-	auth_handlers "github.com/maximhq/bifrost/transports/bifrost-http/handlers/auth"
 	platform_handlers "github.com/maximhq/bifrost/transports/bifrost-http/handlers/platform"
 	"github.com/maximhq/bifrost/transports/bifrost-http/integrations"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
@@ -87,6 +87,7 @@ type ServerCallbacks interface {
 	RemoveModelConfig(ctx context.Context, id string) error
 	ReloadProvider(ctx context.Context, provider schemas.ModelProvider) (*tables.TableProvider, error)
 	RemoveProvider(ctx context.Context, provider schemas.ModelProvider) error
+	AddModelToModelCatalog(ctx context.Context, provider schemas.ModelProvider, modelName string) error
 	ReloadRoutingRule(ctx context.Context, id string) error
 	RemoveRoutingRule(ctx context.Context, id string) error
 	// MCP related callbacks
@@ -641,6 +642,15 @@ func (s *BifrostHTTPServer) RemoveProvider(ctx context.Context, provider schemas
 	return nil
 }
 
+// AddModelToModelCatalog adds a model to the provider's model pool in the model catalog.
+func (s *BifrostHTTPServer) AddModelToModelCatalog(ctx context.Context, provider schemas.ModelProvider, modelName string) error {
+	if s.Config == nil || s.Config.ModelCatalog == nil {
+		return fmt.Errorf("model catalog not found")
+	}
+	s.Config.ModelCatalog.AddModelToPool(provider, modelName)
+	return nil
+}
+
 // GetGovernanceData returns the governance data
 func (s *BifrostHTTPServer) GetGovernanceData(ctx context.Context) *governance.GovernanceData {
 	// Use type-safe finder from Config
@@ -1117,37 +1127,43 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	configHandler.RegisterRoutes(s.Router, middlewares...)
 	oauthHandler.RegisterRoutes(s.Router, middlewares...)
 
-	// Consumer auth service routes (/api/auth/*)
-	if s.Config != nil && s.Config.ConsumerAuthService != nil {
-		consumerAuthHandler := auth_handlers.NewAuthHandler(s.Config.ConsumerAuthService)
-		consumerAuthHandler.RegisterRoutes(s.Router, middlewares...)
-	}
-
 	// Platform multi-tenant handlers
-	db := s.Config.ConfigStore.DB()
-	if err := tables.PlatformMigrate(db); err != nil {
-		return fmt.Errorf("failed to migrate platform tables: %v", err)
+	platformAuthHandler := platform_handlers.NewPlatformAuthHandler(s.Config)
+	platformAdminHandler := platform_handlers.NewPlatformAdminHandler(s.Config)
+	platformOrgHandler := platform_handlers.NewPlatformOrgHandler(s.Config)
+	platformTeamHandler := platform_handlers.NewPlatformTeamHandler(s.Config)
+	platformVKHandler := platform_handlers.NewPlatformVKHandler(s.Config)
+	platformInvitationHandler := platform_handlers.NewPlatformInvitationHandler(s.Config)
+	govPlugin, _ := s.getGovernancePlugin()
+	var governanceStore governance.GovernanceStore
+	if govPlugin != nil {
+		governanceStore = govPlugin.GetGovernanceStore()
 	}
-	platformAuthHandler := platform_handlers.NewPlatformAuthHandler(db, s.Config.ConsumerAuthService, s.Config.ConfigStore)
-	platformAdminHandler := platform_handlers.NewPlatformAdminHandler(db, s.Config.ConfigStore, s.Config.ConsumerAuthService)
-	platformOrgHandler := platform_handlers.NewPlatformOrgHandler(db, s.Config.ConfigStore, logger, s.Config.Messenger, s.Config.PlatformURL)
-	platformTeamHandler := platform_handlers.NewPlatformTeamHandler(db, s.Config.ConfigStore, logger, s.Config.Messenger, s.Config.PlatformURL)
-	platformVKHandler := platform_handlers.NewPlatformVKHandler(db, s.Config.ConfigStore)
-	platformInvitationHandler := platform_handlers.NewPlatformInvitationHandler(db, logger, s.Config.Messenger, s.Config.PlatformURL)
-	billingHandler := platform_handlers.NewBillingHandler(db, s.Config.ConfigStore)
+	registry, err := fpayment.NewGatewayRegistry(s.Config.BillingConfig)
+	if err != nil {
+		logger.Error("failed to create payment gateway registry: %v", err)
+		return err
+	}
+	billingHandler := platform_handlers.NewBillingHandler(s.Config.ConfigStore, registry, governanceStore, governanceHandler)
+	priceHandler := platform_handlers.NewPlatformPriceHandler(governanceHandler)
+	platformProviderHandler := platform_handlers.NewProviderHandler(governanceHandler, providerHandler)
+	platformUsageHandler := platform_handlers.NewPlatformUsageHandler(s.Config)
 	// Platform protected routes need PlatformAuthMiddleware
 	var platformProtectedMw = make([]schemas.BifrostHTTPMiddleware, len(middlewares), len(middlewares)+1)
 	copy(platformProtectedMw, middlewares)
-	platformProtectedMw = append(platformProtectedMw, platform_handlers.PlatformAuthMiddleware(db, s.Config.ConsumerAuthService))
+	platformProtectedMw = append(platformProtectedMw, platform_handlers.PlatformAuthMiddleware(s.Config))
 
 	// Platform multi-tenant routes
-	platformAuthHandler.RegisterRoutes(s.Router, middlewares...)                    // login/register are public
-	platformAdminHandler.RegisterRoutes(s.Router, platformProtectedMw...)           // admin needs auth
-	platformOrgHandler.RegisterRoutes(s.Router, platformProtectedMw...)             // org needs auth
-	platformTeamHandler.RegisterRoutes(s.Router, platformProtectedMw...)            // team needs auth
-	platformVKHandler.RegisterRoutes(s.Router, platformProtectedMw...)              // VK needs auth
-	platformInvitationHandler.RegisterRoutes(s.Router)                              // GET /invitations/:token (public)
-	billingHandler.RegisterRoutes(s.Router, platformProtectedMw...)                 // Billing needs auth
+	platformAuthHandler.RegisterRoutes(s.Router, middlewares...)          // login/register are public
+	platformAdminHandler.RegisterRoutes(s.Router, platformProtectedMw...) // admin needs auth
+	platformOrgHandler.RegisterRoutes(s.Router, platformProtectedMw...)   // org needs auth
+	platformTeamHandler.RegisterRoutes(s.Router, platformProtectedMw...)  // team needs auth
+	platformVKHandler.RegisterRoutes(s.Router, platformProtectedMw...)    // VK needs auth
+	platformInvitationHandler.RegisterRoutes(s.Router)                    // GET /invitations/:token (public)
+	billingHandler.RegisterRoutes(s.Router, platformProtectedMw...)       // Billing needs auth
+	priceHandler.RegisterRoutes(s.Router, platformProtectedMw...)
+	platformProviderHandler.RegisterRoutes(s.Router, platformProtectedMw...)
+	platformUsageHandler.RegisterRoutes(s.Router, platformProtectedMw...)           // Usage needs auth
 	platformInvitationHandler.RegisterAcceptRoute(s.Router, platformProtectedMw...) // POST /invitations/:token/accept (auth required)
 
 	// OAuth metadata + per-user OAuth endpoints (no auth middleware — must be publicly accessible)
@@ -1286,6 +1302,10 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load config %v", err)
 	}
+	if s.Config.PlatformURL == "" {
+		s.Config.PlatformURL = fmt.Sprintf("http://%s:%v", s.Host, s.Port)
+	}
+	s.Config.Logger = logger
 	if s.Config.KVStore != nil {
 		integrations.RegisterKVDecoders(s.Config.KVStore)
 	}

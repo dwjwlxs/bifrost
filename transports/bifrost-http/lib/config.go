@@ -35,6 +35,7 @@ import (
 	"github.com/maximhq/bifrost/framework/messenger"
 	"github.com/maximhq/bifrost/framework/modelcatalog"
 	"github.com/maximhq/bifrost/framework/oauth2"
+	fpayment "github.com/maximhq/bifrost/framework/payment"
 	plugins "github.com/maximhq/bifrost/framework/plugins"
 	"github.com/maximhq/bifrost/framework/vectorstore"
 	"github.com/maximhq/bifrost/plugins/compat"
@@ -147,6 +148,7 @@ type ConfigData struct {
 	// Used for generating invitation accept links. Falls back to the host/port from the HTTP listener.
 	PlatformURL        string                  `json:"platform_url,omitempty"`
 	ConsumerAuthConfig *ConsumerAuthConfigData `json:"consumer_auth_config,omitempty"`
+	BillingConfig      *fpayment.BillingConfig `json:"billing,omitempty"`
 }
 
 // UnmarshalJSON unmarshals the ConfigData from JSON using internal unmarshallers
@@ -169,7 +171,9 @@ func (cd *ConfigData) UnmarshalJSON(data []byte) error {
 		Plugins            []*schemas.PluginConfig               `json:"plugins,omitempty"`
 		WebSocket          *schemas.WebSocketConfig              `json:"websocket,omitempty"`
 		EmailConfig        json.RawMessage                       `json:"email_config,omitempty"`
+		PlatformURL        string                                `json:"platform_url,omitempty"`
 		ConsumerAuthConfig json.RawMessage                       `json:"consumer_auth_config,omitempty"`
+		BillingConfig      *fpayment.BillingConfig               `json:"billing,omitempty"`
 	}
 
 	var temp TempConfigData
@@ -187,6 +191,7 @@ func (cd *ConfigData) UnmarshalJSON(data []byte) error {
 	cd.Governance = temp.Governance
 	cd.Plugins = temp.Plugins
 	cd.WebSocket = temp.WebSocket
+	cd.BillingConfig = temp.BillingConfig
 	// Initialize providers map if nil
 	if cd.Providers == nil {
 		cd.Providers = make(map[string]configstore.ProviderConfig)
@@ -264,6 +269,8 @@ type Config struct {
 	muMCP  sync.RWMutex
 	client *bifrost.Bifrost
 
+	Logger schemas.Logger
+
 	configPath string
 
 	// Stores
@@ -323,6 +330,9 @@ type Config struct {
 	// generating absolute callback/invitation links. Set from config.json
 	// "platform_url" or derived from HTTP listener host/port during initialization.
 	PlatformURL string
+
+	// BillingConfig holds the billing/payment gateway configuration.
+	BillingConfig *fpayment.BillingConfig
 
 	// PlatformAuth holds configuration for platform multi-tenant authentication.
 	// If ConsumerAuthService is nil, platform auth is disabled.
@@ -566,6 +576,9 @@ func LoadConfig(ctx context.Context, configDirPath string) (*Config, error) {
 	loadMessenger(ctx, config, &configData)
 	// Set PlatformURL on the shared config
 	config.PlatformURL = configData.PlatformURL
+
+	// Set BillingConfig on the shared config
+	config.BillingConfig = configData.BillingConfig
 
 	// 8b. Consumer auth service (C-end user accounts)
 	if err := loadConsumerAuthConfig(ctx, config, &configData); err != nil {

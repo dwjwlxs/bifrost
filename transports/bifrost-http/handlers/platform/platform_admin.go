@@ -22,17 +22,19 @@ import (
 
 // PlatformAdminHandler handles system admin API operations.
 type PlatformAdminHandler struct {
-	db           *gorm.DB
-	configStore  configstore.ConfigStore
-	consumerAuth fauth.AuthService
+	db            *gorm.DB
+	configStore   configstore.ConfigStore
+	consumerAuth  fauth.AuthService
+	inMemoryStore *lib.Config
 }
 
 // NewPlatformAdminHandler creates a new PlatformAdminHandler.
-func NewPlatformAdminHandler(db *gorm.DB, configStore configstore.ConfigStore, consumerAuth fauth.AuthService) *PlatformAdminHandler {
+func NewPlatformAdminHandler(config *lib.Config) *PlatformAdminHandler {
 	return &PlatformAdminHandler{
-		db:           db,
-		configStore:  configStore,
-		consumerAuth: consumerAuth,
+		db:            config.ConfigStore.DB(),
+		configStore:   config.ConfigStore,
+		consumerAuth:  config.ConsumerAuthService,
+		inMemoryStore: config,
 	}
 }
 
@@ -187,7 +189,7 @@ func (h *PlatformAdminHandler) getOrg(ctx *fasthttp.RequestCtx) {
 			"id":            customer.ID,
 			"name":          customer.Name,
 			"owner_user_id": customer.OwnerUserID,
-			"budgets":     customer.Budgets,
+			"budgets":       customer.Budgets,
 			"created_at":    customer.CreatedAt,
 			"updated_at":    customer.UpdatedAt,
 		},

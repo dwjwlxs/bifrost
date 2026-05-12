@@ -9,7 +9,6 @@ import (
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
-	"github.com/maximhq/bifrost/framework/messenger"
 	"github.com/maximhq/bifrost/framework/model"
 	"github.com/maximhq/bifrost/framework/platform"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
@@ -25,13 +24,11 @@ type PlatformOrgHandler struct {
 }
 
 // NewPlatformOrgHandler creates a new PlatformOrgHandler.
-func NewPlatformOrgHandler(db *gorm.DB, configStore configstore.ConfigStore, logger schemas.Logger,
-	messenger messenger.Sender, platformURL string,
-) *PlatformOrgHandler {
-	invitationSvc := platform.NewInvitationService(db, messenger, platformURL, logger)
+func NewPlatformOrgHandler(config *lib.Config) *PlatformOrgHandler {
+	invitationSvc := platform.NewInvitationService(config.ConfigStore.DB(), config.Messenger, config.PlatformURL, config.Logger)
 	return &PlatformOrgHandler{
-		db:            db,
-		configStore:   configStore,
+		db:            config.ConfigStore.DB(),
+		configStore:   config.ConfigStore,
 		invitationSvc: invitationSvc,
 	}
 }
@@ -224,7 +221,7 @@ func (h *PlatformOrgHandler) getOrg(ctx *fasthttp.RequestCtx) {
 	data := map[string]any{
 		"id":         customer.ID,
 		"name":       customer.Name,
-		"budgets":  customer.Budgets,
+		"budgets":    customer.Budgets,
 		"role":       role,
 		"created_at": customer.CreatedAt,
 		"updated_at": customer.UpdatedAt,

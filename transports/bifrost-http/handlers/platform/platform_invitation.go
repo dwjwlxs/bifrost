@@ -7,7 +7,6 @@ import (
 	"github.com/fasthttp/router"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
-	"github.com/maximhq/bifrost/framework/messenger"
 	"github.com/maximhq/bifrost/framework/platform"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
@@ -21,11 +20,9 @@ type PlatformInvitationHandler struct {
 }
 
 // NewPlatformInvitationHandler creates a new PlatformInvitationHandler.
-func NewPlatformInvitationHandler(db *gorm.DB, logger schemas.Logger,
-	messenger messenger.Sender, platformURL string,
-) *PlatformInvitationHandler {
-	svc := platform.NewInvitationService(db, messenger, platformURL, logger)
-	return &PlatformInvitationHandler{db: db, svc: svc}
+func NewPlatformInvitationHandler(config *lib.Config) *PlatformInvitationHandler {
+	svc := platform.NewInvitationService(config.ConfigStore.DB(), config.Messenger, config.PlatformURL, config.Logger)
+	return &PlatformInvitationHandler{db: config.ConfigStore.DB(), svc: svc}
 }
 
 // RegisterRoutes registers public invitation routes (no platform auth middleware).

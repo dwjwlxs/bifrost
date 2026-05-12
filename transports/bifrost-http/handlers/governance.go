@@ -238,7 +238,7 @@ type UpdateTeamRequest struct {
 // CreateCustomerRequest represents the request body for creating a customer
 type CreateCustomerRequest struct {
 	Name      string                  `json:"name" validate:"required"`
-	Budgets   []CreateBudgetRequest   `json:"budgets,omitempty"` // Multi-budget: each must have a unique reset_duration
+	Budgets   []CreateBudgetRequest   `json:"budgets,omitempty"`    // Multi-budget: each must have a unique reset_duration
 	RateLimit *CreateRateLimitRequest `json:"rate_limit,omitempty"` // Customer can have its own rate limit
 }
 

@@ -146,6 +146,9 @@ func (p *LoggerPlugin) updateLogEntry(
 	numberOfRetries int,
 	cacheDebug *schemas.BifrostCacheDebug,
 	routingEngineLogs string,
+	teamID string,
+	customerID string,
+	userID string,
 	data *UpdateLogData,
 ) error {
 	updates := make(map[string]interface{})
@@ -176,6 +179,15 @@ func (p *LoggerPlugin) updateLogEntry(
 	}
 	if routingEngineLogs != "" {
 		updates["routing_engine_logs"] = routingEngineLogs
+	}
+	if teamID != "" {
+		updates["team_id"] = teamID
+	}
+	if customerID != "" {
+		updates["customer_id"] = customerID
+	}
+	if userID != "" {
+		updates["user_id"] = userID
 	}
 	contentLoggingEnabled := p.disableContentLogging == nil || !*p.disableContentLogging
 	tempEntry := &logstore.Log{}

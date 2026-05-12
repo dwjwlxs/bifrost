@@ -11,6 +11,7 @@ import (
 
 	"github.com/fasthttp/router"
 	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
@@ -20,14 +21,14 @@ import (
 // PlatformVKHandler handles platform virtual key CRUD operations.
 type PlatformVKHandler struct {
 	db          *gorm.DB
-	configStore interface{} // unused but kept for future extensibility
+	configStore configstore.ConfigStore // unused but kept for future extensibility
 }
 
 // NewPlatformVKHandler creates a new PlatformVKHandler.
-func NewPlatformVKHandler(db *gorm.DB, configStore interface{}) *PlatformVKHandler {
+func NewPlatformVKHandler(config *lib.Config) *PlatformVKHandler {
 	return &PlatformVKHandler{
-		db:          db,
-		configStore: configStore,
+		db:          config.ConfigStore.DB(),
+		configStore: config.ConfigStore,
 	}
 }
 
