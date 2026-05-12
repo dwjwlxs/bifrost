@@ -1,253 +1,333 @@
-import { useState } from "react";
+"use client";
+
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/ui/alertDialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "@/components/ui/table";
+import { ModelPriceSheet } from "./views/ModelPriceSheet";
 import {
 	usePlatformAdminListModelPricesQuery,
-	usePlatformAdminUpsertModelPriceMutation,
 	usePlatformAdminDeleteModelPriceMutation,
-	type PlatformModelPrice,
-} from "@/lib/platform/platformApi";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { DollarSign, Plus, Pencil, Trash2 } from "lucide-react";
+} from "@//lib/platform/endpoints/billing";
+import type { PricingOverride } from "@//lib/types/governance";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ChevronLeft, ChevronRight, Edit, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { useState } from "react";
 
-interface ModelPriceFormData {
-	model: string;
-	provider: string;
-	input_token_price: number;
-	output_token_price: number;
-}
+const PAGE_SIZE = 20;
 
-const defaultFormData: ModelPriceFormData = {
-	model: "",
-	provider: "",
-	input_token_price: 0,
-	output_token_price: 0,
+/** 人类可读的 scope_kind 标签 */
+const SCOPE_LABELS: Record<string, string> = {
+	global: "Global",
+	provider: "Provider",
+	provider_key: "Provider Key",
+	virtual_key: "Virtual Key",
+	virtual_key_provider: "VK + Provider",
+	virtual_key_provider_key: "VK + Key",
 };
 
 export default function ModelPricesPage() {
-	const { data: prices, isLoading } = usePlatformAdminListModelPricesQuery();
-	const [upsertPrice] = usePlatformAdminUpsertModelPriceMutation();
-	const [deletePrice] = usePlatformAdminDeleteModelPriceMutation();
+	const [page, setPage] = useState(0);
+	const [searchFilter, setSearchFilter] = useState("");
+	const [scopeFilter, setScopeFilter] = useState<string>("");
+	const [sheetOpen, setSheetOpen] = useState(false);
+	const [editingOverride, setEditingOverride] = useState<PricingOverride | null>(null);
+	const [deleteTarget, setDeleteTarget] = useState<PricingOverride | null>(null);
 
-	const [dialogOpen, setDialogOpen] = useState(false);
-	const [editingPrice, setEditingPrice] = useState<PlatformModelPrice | null>(null);
-	const [formData, setFormData] = useState<ModelPriceFormData>(defaultFormData);
-	const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-	const [deletingPrice, setDeletingPrice] = useState<PlatformModelPrice | null>(null);
+	// ---- Delete mutation ----
+	const [deleteMutation, { isLoading: isDeleting }] =
+		usePlatformAdminDeleteModelPriceMutation();
 
-	const openCreateDialog = () => {
-		setEditingPrice(null);
-		setFormData(defaultFormData);
-		setDialogOpen(true);
+	const handleDeleteConfirm = async () => {
+		if (!deleteTarget) return;
+		try {
+			await deleteMutation(deleteTarget.id).unwrap();
+			toast.success("Pricing override deleted");
+			setDeleteTarget(null);
+			refetch();
+		} catch (err: unknown) {
+			const msg = (err as { data?: { message?: string } })?.data?.message ?? "Delete failed";
+			toast.error(msg);
+		}
 	};
 
-	const openEditDialog = (price: PlatformModelPrice) => {
-		setEditingPrice(price);
-		setFormData({
-			model: price.model,
-			provider: price.provider,
-			input_token_price: price.input_token_price,
-			output_token_price: price.output_token_price,
+	const offset = page * PAGE_SIZE;
+
+	const { data, isLoading, isFetching, refetch } =
+		usePlatformAdminListModelPricesQuery({
+			offset,
+			limit: PAGE_SIZE,
+			search: searchFilter || undefined,
+			scope_kind: scopeFilter || undefined,
 		});
-		setDialogOpen(true);
+
+	const items = data?.items ?? [];
+	const total = data?.total ?? 0;
+	const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+	const handleAdd = () => {
+		setEditingOverride(null);
+		setSheetOpen(true);
 	};
 
-	const handleSubmit = async () => {
-		try {
-			await upsertPrice(formData).unwrap();
-			toast.success(editingPrice ? "Model price updated" : "Model price created");
-			setDialogOpen(false);
-		} catch (err) {
-			toast.error("Failed to save model price");
-		}
+	const handleEdit = (override: PricingOverride) => {
+		setEditingOverride(override);
+		setSheetOpen(true);
 	};
 
-	const handleDelete = async () => {
-		if (!deletingPrice) return;
-		try {
-			await deletePrice(deletingPrice.id).unwrap();
-			toast.success("Model price deleted");
-			setDeleteDialogOpen(false);
-			setDeletingPrice(null);
-		} catch (err) {
-			toast.error("Failed to delete model price");
-		}
+	const handleSheetClose = (open: boolean) => {
+		setSheetOpen(open);
+		if (!open) setEditingOverride(null);
 	};
+
+	const handleSearchChange = (val: string) => {
+		setSearchFilter(val);
+		setPage(0);
+	};
+
+	const handleScopeChange = (val: string) => {
+		setScopeFilter(val);
+		setPage(0);
+	};
+
+	const clearFilters = () => {
+		setSearchFilter("");
+		setScopeFilter("");
+		setPage(0);
+	};
+
+	const hasFilters = searchFilter || scopeFilter;
 
 	return (
-		<div className="space-y-6">
-			<div className="flex items-center justify-between">
-				<div>
-					<h1 className="text-2xl font-bold tracking-tight">Model Price Management</h1>
-					<p className="text-muted-foreground">Configure per-model token pricing for cost calculation.</p>
-				</div>
-				<Button onClick={openCreateDialog} data-testid="admin-model-prices-create-btn">
-					<Plus className="mr-2 h-4 w-4" />
-					Add Price
+		<div className="flex flex-col gap-4">
+			{/* Header */}
+			<div>
+				<h1 className="text-2xl font-semibold">Model Price Management</h1>
+				<p className="text-muted-foreground text-sm">
+					Configure pricing overrides for model cost calculation.
+				</p>
+			</div>
+
+			{/* Toolbar */}
+			<div className="flex items-center justify-between gap-3">
+				<Button
+					data-testid="admin-model-prices-create-btn"
+					onClick={handleAdd}
+					className="gap-2"
+				>
+					<Plus className="h-4 w-4" />
+					Add Override
+				</Button>
+				<Button
+					variant="outline"
+					size="sm"
+					onClick={() => refetch()}
+					disabled={isFetching}
+				>
+					<RefreshCw className="h-4 w-4" />
+					Refresh
 				</Button>
 			</div>
 
-			<Card>
-				<CardHeader>
-					<CardTitle className="flex items-center gap-2">
-						<DollarSign className="h-5 w-5" />
-						Model Prices
-					</CardTitle>
-					<CardDescription>{prices?.length ?? 0} model pricing entries</CardDescription>
-				</CardHeader>
-				<CardContent>
-					{isLoading ? (
-						<div className="flex items-center justify-center py-10">
-							<div className="border-primary h-8 w-8 animate-spin rounded-full border-4 border-t-transparent" />
-						</div>
-					) : (
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>Model</TableHead>
-									<TableHead>Provider</TableHead>
-									<TableHead>Input Price (per 1K tokens)</TableHead>
-									<TableHead>Output Price (per 1K tokens)</TableHead>
-									<TableHead>Updated</TableHead>
-									<TableHead className="text-right">Actions</TableHead>
+			{/* Filters */}
+			<div className="flex items-center gap-3">
+				<div className="relative flex-1">
+					<Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
+					<Input
+						placeholder="Search by name or pattern..."
+						value={searchFilter}
+						onChange={(e) => handleSearchChange(e.target.value)}
+						className="pl-9"
+					/>
+				</div>
+				<select
+					value={scopeFilter}
+					onChange={(e) => handleScopeChange(e.target.value)}
+					className="border rounded-md px-3 py-2 text-sm bg-background"
+				>
+					<option value="">All Scopes</option>
+					<option value="global">Global</option>
+					<option value="provider">Provider</option>
+					<option value="provider_key">Provider Key</option>
+					<option value="virtual_key">Virtual Key</option>
+					<option value="virtual_key_provider">VK + Provider</option>
+					<option value="virtual_key_provider_key">VK + Key</option>
+				</select>
+				{hasFilters && (
+					<Button
+						variant="ghost"
+						size="sm"
+						onClick={clearFilters}
+					>
+						<X className="h-4 w-4" />
+						Clear
+					</Button>
+				)}
+			</div>
+
+			{/* Table */}
+			<div className="rounded-md border">
+				<Table>
+					<TableHeader>
+						<TableRow className="bg-muted/50">
+							<TableHead className="font-semibold">Name</TableHead>
+							<TableHead className="font-semibold">Scope</TableHead>
+							<TableHead className="font-semibold">Model Pattern</TableHead>
+							<TableHead className="font-semibold">Match</TableHead>
+							<TableHead className="font-semibold">Request Types</TableHead>
+							<TableHead className="w-[100px] text-right font-semibold">Actions</TableHead>
+						</TableRow>
+					</TableHeader>
+					<TableBody>
+						{isLoading ? (
+							Array.from({ length: PAGE_SIZE }).map((_, i) => (
+								<TableRow key={i}>
+									<TableCell><Skeleton className="h-4 w-full" /></TableCell>
+									<TableCell><Skeleton className="h-4 w-16" /></TableCell>
+									<TableCell><Skeleton className="h-4 w-32" /></TableCell>
+									<TableCell><Skeleton className="h-4 w-16" /></TableCell>
+									<TableCell><Skeleton className="h-4 w-20" /></TableCell>
+									<TableCell><Skeleton className="h-4 w-16" /></TableCell>
 								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{(!prices || prices.length === 0) && (
-									<TableRow>
-										<TableCell colSpan={6} className="text-muted-foreground text-center">
-											No model prices configured. Add your first pricing entry.
-										</TableCell>
-									</TableRow>
-								)}
-								{prices?.map((price) => (
-									<TableRow key={price.id}>
-										<TableCell className="font-mono text-sm font-medium">{price.model}</TableCell>
-										<TableCell className="text-sm">{price.provider}</TableCell>
-										<TableCell>${price.input_token_price.toFixed(6)}</TableCell>
-										<TableCell>${price.output_token_price.toFixed(6)}</TableCell>
-										<TableCell className="text-muted-foreground text-sm">{new Date(price.updated_at).toLocaleDateString()}</TableCell>
-										<TableCell className="text-right">
-											<div className="flex items-center justify-end gap-1">
-												<Button
-													variant="ghost"
-													size="sm"
-													onClick={() => openEditDialog(price)}
-													data-testid={`admin-model-prices-edit-${price.id}`}
-												>
-													<Pencil className="h-4 w-4" />
-												</Button>
-												<Button
-													variant="ghost"
-													size="sm"
-													onClick={() => {
-														setDeletingPrice(price);
-														setDeleteDialogOpen(true);
-													}}
-													data-testid={`admin-model-prices-delete-${price.id}`}
-												>
-													<Trash2 className="text-destructive h-4 w-4" />
-												</Button>
-											</div>
-										</TableCell>
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					)}
-				</CardContent>
-			</Card>
+							))
+						) : items.length === 0 ? (
+							<TableRow>
+								<TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+									{hasFilters ? "No pricing overrides match the current filters." : "No pricing overrides yet. Click \"Add Override\" to create one."}
+								</TableCell>
+							</TableRow>
+						) : (
+							items.map((item) => (
+								<TableRow key={item.id}>
+									<TableCell className="font-medium">{item.name || "-"}</TableCell>
+									<TableCell>
+										<Badge variant="secondary">
+											{SCOPE_LABELS[item.scope_kind] ?? item.scope_kind}
+										</Badge>
+									</TableCell>
+									<TableCell className="font-mono text-xs">{item.pattern}</TableCell>
+									<TableCell>
+										<Badge variant="outline" className="text-xs">
+											{item.match_type}
+										</Badge>
+									</TableCell>
+									<TableCell className="text-xs text-muted-foreground">
+										{item.request_types?.join(", ") ?? "all"}
+									</TableCell>
+									<TableCell className="text-right">
+										<div className="flex items-center justify-end gap-1">
+											<Button
+												variant="ghost"
+												size="sm"
+												onClick={() => handleEdit(item)}
+												aria-label="Edit pricing override"
+											>
+												<Edit className="h-4 w-4" />
+											</Button>
+											<Button
+												variant="ghost"
+												size="sm"
+												className="text-destructive"
+												onClick={() => setDeleteTarget(item)}
+												aria-label="Delete pricing override"
+											>
+												<Trash2 className="h-4 w-4" />
+											</Button>
+										</div>
+									</TableCell>
+								</TableRow>
+							))
+						)}
+					</TableBody>
+				</Table>
+			</div>
 
-			{/* Create / Edit Dialog */}
-			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-				<DialogContent>
-					<DialogHeader>
-						<DialogTitle>{editingPrice ? "Edit Model Price" : "Add Model Price"}</DialogTitle>
-						<DialogDescription>
-							{editingPrice ? "Update token pricing for this model." : "Set token pricing for a model/provider combination."}
-						</DialogDescription>
-					</DialogHeader>
-					<div className="grid gap-4 py-4">
-						<div className="grid gap-2">
-							<Label htmlFor="mp-model">Model</Label>
-							<Input
-								id="mp-model"
-								value={formData.model}
-								onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-								placeholder="gpt-4"
-								data-testid="admin-model-prices-form-model"
-							/>
-						</div>
-						<div className="grid gap-2">
-							<Label htmlFor="mp-provider">Provider</Label>
-							<Input
-								id="mp-provider"
-								value={formData.provider}
-								onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
-								placeholder="openai"
-								data-testid="admin-model-prices-form-provider"
-							/>
-						</div>
-						<div className="grid grid-cols-2 gap-4">
-							<div className="grid gap-2">
-								<Label htmlFor="mp-input-price">Input Price (per 1K tokens)</Label>
-								<Input
-									id="mp-input-price"
-									type="number"
-									step="0.000001"
-									value={formData.input_token_price}
-									onChange={(e) => setFormData({ ...formData, input_token_price: Number(e.target.value) })}
-									data-testid="admin-model-prices-form-input-price"
-								/>
-							</div>
-							<div className="grid gap-2">
-								<Label htmlFor="mp-output-price">Output Price (per 1K tokens)</Label>
-								<Input
-									id="mp-output-price"
-									type="number"
-									step="0.000001"
-									value={formData.output_token_price}
-									onChange={(e) => setFormData({ ...formData, output_token_price: Number(e.target.value) })}
-									data-testid="admin-model-prices-form-output-price"
-								/>
-							</div>
-						</div>
-					</div>
-					<DialogFooter>
-						<Button variant="outline" onClick={() => setDialogOpen(false)}>
-							Cancel
-						</Button>
-						<Button onClick={handleSubmit} data-testid="admin-model-prices-form-submit">
-							{editingPrice ? "Update" : "Create"}
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
+			{/* Pagination */}
+			<div className="flex items-center justify-between">
+				<p className="text-muted-foreground text-sm">
+					{isLoading
+						? "Loading..."
+						: `${total} record${total !== 1 ? "s" : ""} total`}
+				</p>
+				<div className="flex items-center gap-2">
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={() => setPage((p) => Math.max(0, p - 1))}
+						disabled={page === 0 || isLoading}
+					>
+						<ChevronLeft className="mr-1 h-4 w-4" />
+						Prev
+					</Button>
+					<span className="text-muted-foreground text-sm">
+						{page + 1} / {totalPages}
+					</span>
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={() => setPage((p) => p + 1)}
+						disabled={page >= totalPages - 1 || isLoading}
+					>
+						Next
+						<ChevronRight className="ml-1 h-4 w-4" />
+					</Button>
+				</div>
+			</div>
 
-			{/* Delete Confirmation Dialog */}
-			<Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-				<DialogContent>
-					<DialogHeader>
-						<DialogTitle>Delete Model Price</DialogTitle>
-						<DialogDescription>
-							Are you sure you want to delete the pricing for &quot;{deletingPrice?.model}&quot; ({deletingPrice?.provider})? This action
-							cannot be undone.
-						</DialogDescription>
-					</DialogHeader>
-					<DialogFooter>
-						<Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+			{/* Create / Edit Sheet */}
+			<ModelPriceSheet
+				open={sheetOpen}
+				onOpenChange={handleSheetClose}
+				editingOverride={editingOverride}
+				onSaved={() => {
+					refetch();
+				}}
+			/>
+
+			{/* Delete confirmation */}
+			<AlertDialog open={!!deleteTarget} onOpenChange={(open) => (!open ? setDeleteTarget(null) : undefined)}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Delete Pricing Override</AlertDialogTitle>
+						<AlertDialogDescription>
+							Are you sure you want to delete &quot;{deleteTarget?.name}&quot;? This action cannot be undone.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel disabled={isDeleting}>
 							Cancel
-						</Button>
-						<Button variant="destructive" onClick={handleDelete} data-testid="admin-model-prices-delete-confirm">
-							Delete
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
+						</AlertDialogCancel>
+						<AlertDialogAction
+							onClick={(e) => {
+								e.preventDefault();
+								void handleDeleteConfirm();
+							}}
+							disabled={isDeleting}
+							className="bg-destructive hover:bg-destructive/90"
+						>
+							{isDeleting ? "Deleting..." : "Delete"}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</div>
 	);
 }

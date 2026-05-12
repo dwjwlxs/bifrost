@@ -78,7 +78,7 @@ function UsersTab() {
 	const [editAdmin, setEditAdmin] = useState(false);
 
 	const { data, isLoading } = usePlatformListUsersQuery({
-		search: search || undefined,
+		...(search && { search }),
 		limit: PAGE_SIZE,
 		offset: page * PAGE_SIZE,
 	});
@@ -334,7 +334,7 @@ function OrganizationsTab() {
 	const [editOwnerId, setEditOwnerId] = useState("");
 
 	const { data: orgsData, isLoading } = usePlatformAdminListOrgsQuery({
-		search: search || undefined,
+		...(search && { search }),
 		limit: PAGE_SIZE,
 		offset: page * PAGE_SIZE,
 	});
@@ -490,8 +490,8 @@ function OrganizationsTab() {
 														size="sm"
 														onClick={() => {
 															setEditingOrg(org);
-															setEditOrgName(org.name);
-															setEditOwnerId(org.owner_user_id?.toString() ?? "");
+															setEditOrgName(org.name ?? "");
+															setEditOwnerId(org.owner_user_id ?? "");
 														}}
 													>
 														<Pencil className="h-4 w-4" />

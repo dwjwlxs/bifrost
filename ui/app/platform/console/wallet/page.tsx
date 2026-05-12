@@ -128,7 +128,7 @@ export default function WalletPage() {
 					<CardDescription>A record of all your balance changes.</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{!historyData?.list || historyData.list.length === 0 ? (
+					{!historyData?.items || historyData.items.length === 0 ? (
 						<div className="flex flex-col items-center justify-center py-8 text-center" data-testid="wallet-transactions-empty">
 							<Receipt className="text-muted-foreground/40 mb-3 h-8 w-8" />
 							<p className="text-muted-foreground text-sm">No transactions yet</p>
@@ -148,7 +148,7 @@ export default function WalletPage() {
 								</TableRow>
 							</TableHeader>
 							<TableBody>
-								{historyData.list.map((item) => (
+								{historyData.items.map((item) => (
 									<TableRow key={`${item.type}-${item.id}`}>
 										<TableCell className="text-muted-foreground text-sm">{new Date(item.created_at).toLocaleDateString()}</TableCell>
 										<TableCell>

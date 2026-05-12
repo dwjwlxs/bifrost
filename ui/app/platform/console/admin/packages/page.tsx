@@ -15,36 +15,53 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Pencil, Trash2, Package } from "lucide-react";
 import { toast } from "sonner";
 
 interface PackageFormData {
 	name: string;
 	description: string;
-	token_amount: number;
-	credits: number;
+	quota: number;
 	price: number;
-	currency: string;
-	package_type: string;
-	duration_days: number | null;
-	features: string[];
-	is_active: boolean;
+	duration: number; // 0 = no expiry
+	rate_limit_config: string; // JSON string
+	allowed_models: string; // JSON string
+	off_peak_discount: string; // JSON string
+	auto_renew: boolean;
+	target_type: "user" | "customer" | "both";
+	max_purchase_per_user: number;
 	sort_order: number;
+	stripe_price_id?: string; // optional: undefined means omit
+	is_active: boolean;
 }
 
 const defaultFormData: PackageFormData = {
 	name: "",
 	description: "",
-	token_amount: 0,
-	credits: 0,
+	quota: 0,
 	price: 0,
-	currency: "USD",
-	package_type: "token",
-	duration_days: null,
-	features: [],
-	is_active: true,
+	duration: 30,
+	rate_limit_config: "",
+	allowed_models: "",
+	off_peak_discount: "",
+	auto_renew: false,
+	target_type: "both",
+	max_purchase_per_user: 0,
 	sort_order: 0,
+	stripe_price_id: undefined,
+	is_active: true,
 };
+
+function parseJSONField(raw: string | undefined, fallback: unknown): string {
+	if (!raw) return "";
+	try {
+		JSON.parse(raw); // validate
+		return raw;
+	} catch {
+		return fallback as string;
+	}
+}
 
 export default function PackagesPage() {
 	const { data: packages, isLoading } = usePlatformListPackagesQuery();
@@ -55,14 +72,16 @@ export default function PackagesPage() {
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editingPkg, setEditingPkg] = useState<PlatformPackage | null>(null);
 	const [formData, setFormData] = useState<PackageFormData>(defaultFormData);
-	const [featuresInput, setFeaturesInput] = useState("");
+	const [rateLimitInput, setRateLimitInput] = useState("");
+	const [modelsInput, setModelsInput] = useState("");
 	const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 	const [deletingPkg, setDeletingPkg] = useState<PlatformPackage | null>(null);
 
 	const openCreateDialog = () => {
 		setEditingPkg(null);
 		setFormData(defaultFormData);
-		setFeaturesInput("");
+		setRateLimitInput("");
+		setModelsInput("");
 		setDialogOpen(true);
 	};
 
@@ -71,26 +90,71 @@ export default function PackagesPage() {
 		setFormData({
 			name: pkg.name,
 			description: pkg.description,
-			token_amount: pkg.token_amount,
-			credits: pkg.credits,
+			quota: pkg.quota,
 			price: pkg.price,
-			currency: pkg.currency,
-			package_type: pkg.package_type,
-			duration_days: pkg.duration_days,
-			features: pkg.features ?? [],
-			is_active: pkg.is_active,
+			duration: pkg.duration,
+			rate_limit_config: pkg.rate_limit_config ?? "",
+			allowed_models: pkg.allowed_models ?? "",
+			off_peak_discount: pkg.off_peak_discount ?? "",
+			auto_renew: pkg.auto_renew,
+			target_type: pkg.target_type ?? "both",
+			max_purchase_per_user: pkg.max_purchase_per_user,
 			sort_order: pkg.sort_order,
+			stripe_price_id: pkg.stripe_price_id,
+			is_active: pkg.is_active,
 		});
-		setFeaturesInput((pkg.features ?? []).join(", "));
+		// Parse JSON fields for editing convenience
+		try {
+			const rlc = pkg.rate_limit_config ? JSON.parse(pkg.rate_limit_config) : {};
+			setRateLimitInput(
+				Object.entries(rlc)
+					.map(([k, v]) => `${k}=${v}`)
+					.join(", ") || "",
+			);
+		} catch {
+			setRateLimitInput("");
+		}
+		try {
+			const am = pkg.allowed_models ? JSON.parse(pkg.allowed_models) : [];
+			setModelsInput(Array.isArray(am) ? am.join(", ") : "");
+		} catch {
+			setModelsInput("");
+		}
 		setDialogOpen(true);
 	};
 
 	const handleSubmit = async () => {
-		const features = featuresInput
-			.split(",")
-			.map((f) => f.trim())
-			.filter(Boolean);
-		const payload = { ...formData, features };
+		// Build JSON strings from comma-separated inputs
+		const rateLimitConfig = rateLimitInput
+			? (() => {
+					const obj: Record<string, number> = {};
+					rateLimitInput.split(",").forEach((pair) => {
+						const [k, v] = pair.split("=").map((s) => s.trim());
+						if (k && v) obj[k] = Number(v);
+					});
+					return Object.keys(obj).length > 0 ? JSON.stringify(obj) : "";
+				})()
+			: "";
+
+		const allowedModels = modelsInput
+			? JSON.stringify(
+					modelsInput
+						.split(",")
+						.map((m) => m.trim())
+						.filter(Boolean),
+				)
+			: "";
+
+		const offPeakDiscountRaw = formData.off_peak_discount;
+		const offPeakDiscount = offPeakDiscountRaw ? JSON.stringify(Number(offPeakDiscountRaw)) : "";
+
+		const payload = {
+			...formData,
+			rate_limit_config: rateLimitConfig,
+			allowed_models: allowedModels,
+			off_peak_discount: offPeakDiscount,
+			stripe_price_id: formData.stripe_price_id || undefined,
+		};
 
 		try {
 			if (editingPkg) {
@@ -101,8 +165,12 @@ export default function PackagesPage() {
 				toast.success("Package created successfully");
 			}
 			setDialogOpen(false);
-		} catch (err) {
-			toast.error("Failed to save package");
+		} catch (err: unknown) {
+			const msg =
+				(err as { data?: { message?: string }; message?: string })?.data?.message ||
+				(err as { message?: string })?.message ||
+				"Failed to save package";
+			toast.error(msg);
 		}
 	};
 
@@ -113,59 +181,51 @@ export default function PackagesPage() {
 			toast.success("Package deleted successfully");
 			setDeleteDialogOpen(false);
 			setDeletingPkg(null);
-		} catch (err) {
+		} catch (err: unknown) {
 			toast.error("Failed to delete package");
 		}
 	};
 
-	if (isLoading) {
-		return (
-			<div className="flex items-center justify-center py-20">
-				<div className="border-primary h-8 w-8 animate-spin rounded-full border-4 border-t-transparent" />
-			</div>
-		);
-	}
-
 	return (
 		<div className="space-y-6">
+			{/* Header */}
 			<div className="flex items-center justify-between">
 				<div>
-					<h1 className="text-2xl font-bold tracking-tight">Package Management</h1>
-					<p className="text-muted-foreground">Create and manage subscription packages for users.</p>
+					<h1 className="text-2xl font-bold tracking-tight">Packages</h1>
+					<p className="text-muted-foreground text-sm">Manage subscription packages available for purchase.</p>
 				</div>
-				<Button onClick={openCreateDialog} data-testid="admin-packages-create-btn">
+				<Button onClick={openCreateDialog}>
 					<Plus className="mr-2 h-4 w-4" />
-					Create Package
+					New Package
 				</Button>
 			</div>
 
 			<Card>
-				<CardHeader>
-					<CardTitle className="flex items-center gap-2">
-						<Package className="h-5 w-5" />
-						Packages
-					</CardTitle>
-					<CardDescription>{packages?.length ?? 0} packages configured</CardDescription>
-				</CardHeader>
-				<CardContent>
+				<CardContent className="p-0">
 					<Table>
 						<TableHeader>
 							<TableRow>
 								<TableHead>Name</TableHead>
-								<TableHead>Type</TableHead>
-								<TableHead>Tokens</TableHead>
-								<TableHead>Credits</TableHead>
+								<TableHead>Target</TableHead>
+								<TableHead>Quota (credits)</TableHead>
 								<TableHead>Price</TableHead>
 								<TableHead>Duration</TableHead>
+								<TableHead>Auto-Renew</TableHead>
 								<TableHead>Status</TableHead>
-								<TableHead>Sort</TableHead>
 								<TableHead className="text-right">Actions</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{(!packages || packages.length === 0) && (
+							{isLoading && (
 								<TableRow>
-									<TableCell colSpan={9} className="text-muted-foreground text-center">
+									<TableCell colSpan={8} className="text-muted-foreground py-8 text-center">
+										Loading...
+									</TableCell>
+								</TableRow>
+							)}
+							{!isLoading && (!packages || packages.length === 0) && (
+								<TableRow>
+									<TableCell colSpan={8} className="text-muted-foreground py-8 text-center">
 										No packages found. Create your first package.
 									</TableCell>
 								</TableRow>
@@ -174,21 +234,18 @@ export default function PackagesPage() {
 								<TableRow key={pkg.id}>
 									<TableCell className="font-medium">{pkg.name}</TableCell>
 									<TableCell>
-										<Badge variant="outline">{pkg.package_type}</Badge>
+										<Badge variant="outline">{pkg.target_type ?? "both"}</Badge>
 									</TableCell>
-									<TableCell>{pkg.token_amount.toLocaleString()}</TableCell>
-									<TableCell>{pkg.credits.toLocaleString()}</TableCell>
-									<TableCell>
-										{pkg.currency} {pkg.price.toFixed(2)}
-									</TableCell>
-									<TableCell>{pkg.duration_days ? `${pkg.duration_days}d` : "—"}</TableCell>
+									<TableCell>{pkg.quota.toLocaleString()}</TableCell>
+									<TableCell>${pkg.price.toFixed(2)}</TableCell>
+									<TableCell>{pkg.duration === 0 ? "No expiry" : `${pkg.duration}d`}</TableCell>
+									<TableCell>{pkg.auto_renew ? <Badge variant="secondary">Yes</Badge> : <Badge variant="outline">No</Badge>}</TableCell>
 									<TableCell>
 										<Badge variant={pkg.is_active ? "default" : "secondary"}>{pkg.is_active ? "Active" : "Inactive"}</Badge>
 									</TableCell>
-									<TableCell>{pkg.sort_order}</TableCell>
 									<TableCell className="text-right">
 										<div className="flex items-center justify-end gap-1">
-											<Button variant="ghost" size="sm" onClick={() => openEditDialog(pkg)} data-testid={`admin-packages-edit-${pkg.id}`}>
+											<Button variant="ghost" size="sm" onClick={() => openEditDialog(pkg)}>
 												<Pencil className="h-4 w-4" />
 											</Button>
 											<Button
@@ -198,7 +255,6 @@ export default function PackagesPage() {
 													setDeletingPkg(pkg);
 													setDeleteDialogOpen(true);
 												}}
-												data-testid={`admin-packages-delete-${pkg.id}`}
 											>
 												<Trash2 className="text-destructive h-4 w-4" />
 											</Button>
@@ -213,7 +269,7 @@ export default function PackagesPage() {
 
 			{/* Create / Edit Dialog */}
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-				<DialogContent className="sm:max-w-lg">
+				<DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg" disableOutsideClick={false}>
 					<DialogHeader>
 						<DialogTitle>{editingPkg ? "Edit Package" : "Create Package"}</DialogTitle>
 						<DialogDescription>{editingPkg ? "Update package details." : "Configure a new subscription package."}</DialogDescription>
@@ -221,12 +277,7 @@ export default function PackagesPage() {
 					<div className="grid gap-4 py-4">
 						<div className="grid gap-2">
 							<Label htmlFor="pkg-name">Name</Label>
-							<Input
-								id="pkg-name"
-								value={formData.name}
-								onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-								data-testid="admin-packages-form-name"
-							/>
+							<Input id="pkg-name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
 						</div>
 						<div className="grid gap-2">
 							<Label htmlFor="pkg-description">Description</Label>
@@ -234,73 +285,57 @@ export default function PackagesPage() {
 								id="pkg-description"
 								value={formData.description}
 								onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-								data-testid="admin-packages-form-description"
 							/>
 						</div>
 						<div className="grid grid-cols-2 gap-4">
 							<div className="grid gap-2">
-								<Label htmlFor="pkg-tokens">Token Amount</Label>
+								<Label htmlFor="pkg-quota">Quota (credits)</Label>
 								<Input
-									id="pkg-tokens"
+									id="pkg-quota"
 									type="number"
-									value={formData.token_amount}
-									onChange={(e) => setFormData({ ...formData, token_amount: Number(e.target.value) })}
-									data-testid="admin-packages-form-tokens"
+									value={formData.quota}
+									onChange={(e) => setFormData({ ...formData, quota: Number(e.target.value) })}
 								/>
 							</div>
 							<div className="grid gap-2">
-								<Label htmlFor="pkg-credits">Credits</Label>
-								<Input
-									id="pkg-credits"
-									type="number"
-									value={formData.credits}
-									onChange={(e) => setFormData({ ...formData, credits: Number(e.target.value) })}
-									data-testid="admin-packages-form-credits"
-								/>
-							</div>
-						</div>
-						<div className="grid grid-cols-3 gap-4">
-							<div className="grid gap-2">
-								<Label htmlFor="pkg-price">Price</Label>
+								<Label htmlFor="pkg-price">Price (USD)</Label>
 								<Input
 									id="pkg-price"
 									type="number"
 									step="0.01"
 									value={formData.price}
 									onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
-									data-testid="admin-packages-form-price"
-								/>
-							</div>
-							<div className="grid gap-2">
-								<Label htmlFor="pkg-currency">Currency</Label>
-								<Input
-									id="pkg-currency"
-									value={formData.currency}
-									onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-									data-testid="admin-packages-form-currency"
-								/>
-							</div>
-							<div className="grid gap-2">
-								<Label htmlFor="pkg-type">Type</Label>
-								<Input
-									id="pkg-type"
-									value={formData.package_type}
-									onChange={(e) => setFormData({ ...formData, package_type: e.target.value })}
-									data-testid="admin-packages-form-type"
 								/>
 							</div>
 						</div>
 						<div className="grid grid-cols-2 gap-4">
 							<div className="grid gap-2">
-								<Label htmlFor="pkg-duration">Duration (days)</Label>
+								<Label htmlFor="pkg-duration">Duration (days, 0=no expiry)</Label>
 								<Input
 									id="pkg-duration"
 									type="number"
-									value={formData.duration_days ?? ""}
-									onChange={(e) => setFormData({ ...formData, duration_days: e.target.value ? Number(e.target.value) : null })}
-									data-testid="admin-packages-form-duration"
+									value={formData.duration}
+									onChange={(e) => setFormData({ ...formData, duration: Number(e.target.value) })}
 								/>
 							</div>
+							<div className="grid gap-2">
+								<Label htmlFor="pkg-target">Target Type</Label>
+								<Select
+									value={formData.target_type}
+									onValueChange={(v) => setFormData({ ...formData, target_type: v as "user" | "customer" | "both" })}
+								>
+									<SelectTrigger id="pkg-target">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="both">Both (User & Org)</SelectItem>
+										<SelectItem value="user">User only</SelectItem>
+										<SelectItem value="customer">Org only</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+						</div>
+						<div className="grid grid-cols-2 gap-4">
 							<div className="grid gap-2">
 								<Label htmlFor="pkg-sort">Sort Order</Label>
 								<Input
@@ -308,25 +343,62 @@ export default function PackagesPage() {
 									type="number"
 									value={formData.sort_order}
 									onChange={(e) => setFormData({ ...formData, sort_order: Number(e.target.value) })}
-									data-testid="admin-packages-form-sort"
+								/>
+							</div>
+							<div className="grid gap-2">
+								<Label htmlFor="pkg-max-purchase">Max Purchase Per User</Label>
+								<Input
+									id="pkg-max-purchase"
+									type="number"
+									value={formData.max_purchase_per_user}
+									onChange={(e) => setFormData({ ...formData, max_purchase_per_user: Number(e.target.value) })}
 								/>
 							</div>
 						</div>
 						<div className="grid gap-2">
-							<Label htmlFor="pkg-features">Features (comma-separated)</Label>
+							<Label htmlFor="pkg-models">Allowed Models (comma-separated)</Label>
 							<Input
-								id="pkg-features"
-								value={featuresInput}
-								onChange={(e) => setFeaturesInput(e.target.value)}
-								data-testid="admin-packages-form-features"
+								id="pkg-models"
+								placeholder="gpt-4o, claude-3-5-sonnet, gemini-2.0-flash"
+								value={modelsInput}
+								onChange={(e) => setModelsInput(e.target.value)}
+							/>
+						</div>
+						<div className="grid gap-2">
+							<Label htmlFor="pkg-rate-limit">Rate Limit (comma-separated, e.g. requests_per_minute=60)</Label>
+							<Input
+								id="pkg-rate-limit"
+								placeholder="requests_per_minute=60, requests_per_day=1000"
+								value={rateLimitInput}
+								onChange={(e) => setRateLimitInput(e.target.value)}
+							/>
+						</div>
+						<div className="grid gap-2">
+							<Label htmlFor="pkg-offpeak">Off-Peak Discount (e.g. 0.2 for 20% off)</Label>
+							<Input
+								id="pkg-offpeak"
+								type="number"
+								step="0.01"
+								placeholder="0.2"
+								value={formData.off_peak_discount}
+								onChange={(e) => setFormData({ ...formData, off_peak_discount: e.target.value })}
+							/>
+						</div>
+						<div className="grid gap-2">
+							<Label htmlFor="pkg-stripe-price">Stripe Price ID (optional)</Label>
+							<Input
+								id="pkg-stripe-price"
+								placeholder="price_xxx..."
+								value={formData.stripe_price_id}
+								onChange={(e) => setFormData({ ...formData, stripe_price_id: e.target.value })}
 							/>
 						</div>
 						<div className="flex items-center gap-2">
-							<Switch
-								checked={formData.is_active}
-								onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
-								data-testid="admin-packages-form-active"
-							/>
+							<Switch checked={formData.auto_renew} onCheckedChange={(checked) => setFormData({ ...formData, auto_renew: checked })} />
+							<Label>Auto-Renew</Label>
+						</div>
+						<div className="flex items-center gap-2">
+							<Switch checked={formData.is_active} onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })} />
 							<Label>Active</Label>
 						</div>
 					</div>
@@ -334,16 +406,14 @@ export default function PackagesPage() {
 						<Button variant="outline" onClick={() => setDialogOpen(false)}>
 							Cancel
 						</Button>
-						<Button onClick={handleSubmit} data-testid="admin-packages-form-submit">
-							{editingPkg ? "Update" : "Create"}
-						</Button>
+						<Button onClick={handleSubmit}>{editingPkg ? "Update" : "Create"}</Button>
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
 
 			{/* Delete Confirmation Dialog */}
 			<Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-				<DialogContent>
+				<DialogContent disableOutsideClick={false}>
 					<DialogHeader>
 						<DialogTitle>Delete Package</DialogTitle>
 						<DialogDescription>
@@ -354,7 +424,7 @@ export default function PackagesPage() {
 						<Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
 							Cancel
 						</Button>
-						<Button variant="destructive" onClick={handleDelete} data-testid="admin-packages-delete-confirm">
+						<Button variant="destructive" onClick={handleDelete}>
 							Delete
 						</Button>
 					</DialogFooter>
