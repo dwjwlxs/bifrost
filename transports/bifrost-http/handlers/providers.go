@@ -621,6 +621,35 @@ func (h *ProviderHandler) listModels(ctx *fasthttp.RequestCtx) {
 	SendJSON(ctx, response)
 }
 
+// listProviderModels handles GET /api/platform/admin/providers/{provider}/models - List all models for a provider (no limit).
+func (h *ProviderHandler) listProviderModels(ctx *fasthttp.RequestCtx) {
+	query := parseModelListQuery(ctx, 0)
+	allModels, total, err := h.listManagementModels(query)
+	if err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to get providers: %v", err))
+		return
+	}
+
+	responseModels := make([]ModelResponse, 0, len(allModels))
+	for _, model := range allModels {
+		entry := ModelResponse{
+			Name:     model.Name,
+			Provider: string(model.Provider),
+		}
+		if len(model.AccessibleByKeys) > 0 {
+			entry.AccessibleByKeys = model.AccessibleByKeys
+		}
+		responseModels = append(responseModels, entry)
+	}
+
+	response := ListModelsResponse{
+		Models: responseModels,
+		Total:  total,
+	}
+
+	SendJSON(ctx, response)
+}
+
 // listModelDetails handles GET /api/models/details - List models with capability metadata.
 // Query parameters:
 //   - query: Filter models by name (case-insensitive partial match)
