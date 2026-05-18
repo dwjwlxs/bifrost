@@ -33,12 +33,12 @@ export default function DashboardPage() {
 		<div className="space-y-8">
 			{/* Welcome Header */}
 			<div>
-				<h1 className="text-2xl font-bold tracking-tight">Welcome back, {user?.nickname || user?.username}</h1>
+				<h1 className="text-2xl font-bold tracking-tight">Welcome back {user?.username || user?.email}</h1>
 				<p className="text-muted-foreground">Here&apos;s an overview of your platform account.</p>
 			</div>
 
 			{/* Stats Grid */}
-			<div className="grid gap-4 md:grid-cols-4">
+			<div className="grid gap-4 md:grid-cols-4 hidden">
 				<Card>
 					<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
 						<CardTitle className="text-sm font-medium">Balance</CardTitle>
@@ -80,7 +80,7 @@ export default function DashboardPage() {
 			</div>
 
 			{/* Profile & Quick Actions */}
-			<div className={`grid gap-4 ${isPrivileged ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+			<div className={`hidden grid gap-4 ${isPrivileged ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
 				{/* Profile Card */}
 				<Card>
 					<CardHeader>
@@ -194,7 +194,7 @@ export default function DashboardPage() {
 			</div>
 
 			{/* Recent Activity Placeholder */}
-			<Card>
+			<Card className="hidden">
 				<CardHeader>
 					<CardTitle className="flex items-center gap-2">
 						<Activity className="h-5 w-5" />
