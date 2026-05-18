@@ -56,9 +56,8 @@ type LocalGovernanceStore struct {
 	// Logger
 	logger schemas.Logger
 
-	// Budget checkers for dual-track system
+	// Budget checker for governance budgets (AND logic)
 	governanceChecker *GovernanceBudgetChecker
-	billingChecker    *BillingBudgetChecker
 }
 
 type GovernanceData struct {
@@ -185,18 +184,6 @@ type GovernanceStore interface {
 	GetScopedRoutingRules(ctx context.Context, scope string, scopeID string) []*configstoreTables.TableRoutingRule
 	UpdateRoutingRuleInMemory(ctx context.Context, rule *configstoreTables.TableRoutingRule) error
 	DeleteRoutingRuleInMemory(ctx context.Context, id string) error
-	// Billing budget operations (dual-track system)
-	CollectBillingBudgets(ctx context.Context, vk *configstoreTables.TableVirtualKey, provider schemas.ModelProvider) EntityWiseBudgets
-	CheckBillingBudgets(ctx context.Context, vk *configstoreTables.TableVirtualKey, request *EvaluationRequest, baselines map[string]float64) (Decision, error)
-	DeductBillingBudgets(ctx context.Context, vk *configstoreTables.TableVirtualKey, provider schemas.ModelProvider, cost float64) (map[string]float64, error)
-	// StoreBudget makes a newly-created billing budget visible in the in-memory
-	// budgets map so that DeductBillingBudgets can find it immediately without
-	// waiting for the next periodic reload.
-	StoreBudget(ctx context.Context, budget *configstoreTables.TableBudget)
-	// User-level model access (UserProviderConfig)
-	GetUserProviderConfig(ctx context.Context, userID string, provider string) (*configstoreTables.TableUserProviderConfig, bool)
-	UpsertUserProviderConfigInMemory(ctx context.Context, upc *configstoreTables.TableUserProviderConfig)
-	DeleteUserProviderConfigInMemory(ctx context.Context, userID string, provider string)
 }
 
 // NewLocalGovernanceStore creates a new in-memory governance store
@@ -219,9 +206,8 @@ func NewLocalGovernanceStore(ctx context.Context, logger schemas.Logger, configS
 		LastDBUsagesTokensRateLimits:   make(map[string]int64),
 	}
 
-	// Initialize budget checkers for dual-track system
+	// Initialize budget checker for governance budgets
 	store.governanceChecker = NewGovernanceBudgetChecker(store, logger)
-	store.billingChecker = NewBillingBudgetChecker(store, logger)
 
 	if configStore != nil {
 		// Load initial data from database
@@ -907,89 +893,7 @@ func (gs *LocalGovernanceStore) CheckVirtualKeyBudget(ctx context.Context, vk *c
 		return decision, err
 	}
 
-	// Then run billing budget checks (OR logic), if there are any billing budgets
-	billingBudgets := filterBudgetsByType(allBudgetsByEntity, configstoreTables.BudgetTypeBilling)
-	if len(billingBudgets) > 0 {
-		if gs.billingChecker == nil {
-			gs.logger.Debug("LocalStore CheckVirtualKeyBudget: billingChecker not initialized, skipping billing checks")
-		} else {
-			decision, err := gs.billingChecker.Check(ctx, billingBudgets, baselines)
-			if err != nil || isBudgetViolation(decision) {
-				return decision, err
-			}
-		}
-	}
-
 	return DecisionAllow, nil
-}
-
-// CheckBillingBudgets checks only billing budgets (OR logic)
-func (gs *LocalGovernanceStore) CheckBillingBudgets(ctx context.Context, vk *configstoreTables.TableVirtualKey, request *EvaluationRequest, baselines map[string]float64) (Decision, error) {
-	if vk == nil {
-		return DecisionVirtualKeyNotFound, fmt.Errorf("virtual key cannot be nil")
-	}
-	if baselines == nil {
-		baselines = map[string]float64{}
-	}
-	var provider schemas.ModelProvider
-	if request != nil {
-		provider = request.Provider
-	}
-	billingBudgets := gs.CollectBillingBudgets(ctx, vk, provider)
-	if gs.billingChecker == nil {
-		return DecisionAllow, nil
-	}
-	return gs.billingChecker.Check(ctx, billingBudgets, baselines)
-}
-
-// DeductBillingBudgets deducts cost from billing budgets (hybrid logic)
-func (gs *LocalGovernanceStore) DeductBillingBudgets(ctx context.Context, vk *configstoreTables.TableVirtualKey, provider schemas.ModelProvider, cost float64) (map[string]float64, error) {
-	if vk == nil || cost <= 0 || gs.billingChecker == nil {
-		return map[string]float64{}, nil
-	}
-	billingBudgets := gs.CollectBillingBudgets(ctx, vk, provider)
-	return gs.billingChecker.Deduct(ctx, billingBudgets, cost)
-}
-
-// StoreBudget makes a newly-created budget visible in the in-memory budgets map.
-// This is called by BillingService after provisionPackage persists a billing budget
-// to the database, so that subsequent DeductBillingBudgets calls can find it without
-// waiting for the next periodic load-from-database cycle.
-func (gs *LocalGovernanceStore) StoreBudget(_ context.Context, budget *configstoreTables.TableBudget) {
-	if budget == nil {
-		return
-	}
-	gs.budgets.Store(budget.ID, budget)
-}
-
-// GetUserProviderConfig returns the UserProviderConfig for a user+provider pair.
-// Returns (nil, false) if no config exists — meaning no model restrictions apply.
-func (gs *LocalGovernanceStore) GetUserProviderConfig(_ context.Context, userID string, provider string) (*configstoreTables.TableUserProviderConfig, bool) {
-	key := userID + ":" + provider
-	value, ok := gs.userProviderConfigs.Load(key)
-	if !ok || value == nil {
-		return nil, false
-	}
-	upc, ok := value.(*configstoreTables.TableUserProviderConfig)
-	if !ok {
-		return nil, false
-	}
-	return upc, true
-}
-
-// UpsertUserProviderConfigInMemory adds or updates a UserProviderConfig in the in-memory store.
-func (gs *LocalGovernanceStore) UpsertUserProviderConfigInMemory(_ context.Context, upc *configstoreTables.TableUserProviderConfig) {
-	if upc == nil {
-		return
-	}
-	key := upc.UserID + ":" + upc.Provider
-	gs.userProviderConfigs.Store(key, upc)
-}
-
-// DeleteUserProviderConfigInMemory removes a UserProviderConfig from the in-memory store.
-func (gs *LocalGovernanceStore) DeleteUserProviderConfigInMemory(_ context.Context, userID string, provider string) {
-	key := userID + ":" + provider
-	gs.userProviderConfigs.Delete(key)
 }
 
 // CheckProviderBudget performs budget checking for provider-level configs (lock-free for high performance)
@@ -1904,8 +1808,8 @@ func (gs *LocalGovernanceStore) loadFromDatabase(ctx context.Context) error {
 		return fmt.Errorf("failed to load virtual keys: %w", err)
 	}
 
-	// Load budgets
-	budgets, err := gs.configStore.GetBudgets(ctx)
+	// Load budgets (governance type only — billing budgets are handled by the billing plugin)
+	budgets, err := gs.configStore.GetBudgetsByType(ctx, configstoreTables.BudgetTypeGovernance)
 	if err != nil {
 		return fmt.Errorf("failed to load budgets: %w", err)
 	}
@@ -1934,14 +1838,8 @@ func (gs *LocalGovernanceStore) loadFromDatabase(ctx context.Context) error {
 		return fmt.Errorf("failed to load routing rules: %w", err)
 	}
 
-	// Load user provider configs (for model access control)
-	userProviderConfigs, err := gs.configStore.GetUserProviderConfigs(ctx, "")
-	if err != nil {
-		return fmt.Errorf("failed to load user provider configs: %w", err)
-	}
-
 	// Rebuild in-memory structures (lock-free)
-	gs.rebuildInMemoryStructures(ctx, customers, teams, virtualKeys, budgets, rateLimits, modelConfigs, providers, routingRules, userProviderConfigs)
+	gs.rebuildInMemoryStructures(ctx, customers, teams, virtualKeys, budgets, rateLimits, modelConfigs, providers, routingRules)
 
 	return nil
 }
@@ -1958,8 +1856,15 @@ func (gs *LocalGovernanceStore) loadFromConfigMemory(ctx context.Context, config
 	// Load teams with their budgets
 	teams := config.Teams
 
-	// Load budgets
-	budgets := config.Budgets
+	// Load budgets (filter to governance type only — billing budgets are handled by the billing plugin)
+	allBudgets := config.Budgets
+	budgets := make([]configstoreTables.TableBudget, 0, len(allBudgets))
+	for _, b := range allBudgets {
+		// Empty Type defaults to governance for backward compatibility
+		if b.Type == "" || b.Type == configstoreTables.BudgetTypeGovernance {
+			budgets = append(budgets, b)
+		}
+	}
 
 	// Load virtual keys with all relationships
 	virtualKeys := config.VirtualKeys
@@ -2073,13 +1978,13 @@ func (gs *LocalGovernanceStore) loadFromConfigMemory(ctx context.Context, config
 	}
 
 	// Rebuild in-memory structures (lock-free)
-	gs.rebuildInMemoryStructures(ctx, customers, teams, virtualKeys, budgets, rateLimits, modelConfigs, providers, routingRules, nil)
+	gs.rebuildInMemoryStructures(ctx, customers, teams, virtualKeys, budgets, rateLimits, modelConfigs, providers, routingRules)
 
 	return nil
 }
 
 // rebuildInMemoryStructures rebuilds all in-memory data structures (lock-free)
-func (gs *LocalGovernanceStore) rebuildInMemoryStructures(ctx context.Context, customers []configstoreTables.TableCustomer, teams []configstoreTables.TableTeam, virtualKeys []configstoreTables.TableVirtualKey, budgets []configstoreTables.TableBudget, rateLimits []configstoreTables.TableRateLimit, modelConfigs []configstoreTables.TableModelConfig, providers []configstoreTables.TableProvider, routingRules []configstoreTables.TableRoutingRule, userProviderConfigs []configstoreTables.TableUserProviderConfig) {
+func (gs *LocalGovernanceStore) rebuildInMemoryStructures(ctx context.Context, customers []configstoreTables.TableCustomer, teams []configstoreTables.TableTeam, virtualKeys []configstoreTables.TableVirtualKey, budgets []configstoreTables.TableBudget, rateLimits []configstoreTables.TableRateLimit, modelConfigs []configstoreTables.TableModelConfig, providers []configstoreTables.TableProvider, routingRules []configstoreTables.TableRoutingRule) {
 	// Clear existing data by creating new sync.Maps
 	gs.virtualKeys = sync.Map{}
 	gs.teams = sync.Map{}
@@ -2206,12 +2111,6 @@ func (gs *LocalGovernanceStore) rebuildInMemoryStructures(ctx context.Context, c
 	gs.LastDBUsagesRateLimitsTokensMu.Unlock()
 	gs.LastDBUsagesRateLimitsRequestsMu.Unlock()
 
-	// Build user provider configs map — key: "userID:provider"
-	for i := range userProviderConfigs {
-		upc := &userProviderConfigs[i]
-		key := upc.UserID + ":" + upc.Provider
-		gs.userProviderConfigs.Store(key, upc)
-	}
 }
 
 // collectRateLimitsFromHierarchy collects rate limits and their metadata from the hierarchy (Provider Configs → VK → Team → Customer)
@@ -2516,15 +2415,6 @@ func filterBudgetsByType(entityWise EntityWiseBudgets, budgetType configstoreTab
 		}
 	}
 	return filtered
-}
-
-// CollectBillingBudgets collects all billing-type budgets from the hierarchy for a given VK and provider.
-// This is the entry point for the billing check path — the BudgetChecker (Epic I-B) will call this
-// to obtain billing budgets and then apply OR-logic hybrid deduction.
-// Returns EntityWiseBudgets containing only budgets with Type == BudgetTypeBilling.
-func (gs *LocalGovernanceStore) CollectBillingBudgets(ctx context.Context, vk *configstoreTables.TableVirtualKey, provider schemas.ModelProvider) EntityWiseBudgets {
-	allBudgets := gs.collectBudgetsFromHierarchy(ctx, vk, provider)
-	return filterBudgetsByType(allBudgets, configstoreTables.BudgetTypeBilling)
 }
 
 // collectBudgetIDsFromMemory collects budget IDs from in-memory store data (lock-free)

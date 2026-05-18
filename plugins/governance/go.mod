@@ -3,8 +3,8 @@ module github.com/maximhq/bifrost/plugins/governance
 go 1.26.1
 
 replace (
-	github.com/maximhq/bifrost/core => github.com/dwjwlxs/bifrost/core v1.5.3
-	github.com/maximhq/bifrost/framework => github.com/dwjwlxs/bifrost/framework v1.3.3
+	github.com/maximhq/bifrost/core => ../../core
+	github.com/maximhq/bifrost/framework => ../../framework
 )
 
 require gorm.io/gorm v1.31.1

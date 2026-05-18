@@ -2664,19 +2664,6 @@ func (s *RDBConfigStore) DeleteVirtualKeyMCPConfig(ctx context.Context, id uint,
 
 const teamSelectWithVKCount = "governance_teams.*, (SELECT COUNT(*) FROM governance_virtual_keys WHERE team_id = governance_teams.id) AS virtual_key_count"
 
-func (s *RDBConfigStore) GetUserProviderConfigs(ctx context.Context, userID string) ([]tables.TableUserProviderConfig, error) {
-	var userProviderConfigs []tables.TableUserProviderConfig
-
-	query := s.DB().WithContext(ctx)
-	if userID != "" {
-		query = query.Where("user_id = ?", userID)
-	}
-	if err := query.Find(&userProviderConfigs).Error; err != nil {
-		return nil, err
-	}
-	return userProviderConfigs, nil
-}
-
 // GetTeams retrieves all teams from the database.
 func (s *RDBConfigStore) GetTeams(ctx context.Context, customerID string) ([]tables.TableTeam, error) {
 	// Preload relationships for complete information
@@ -3033,6 +3020,15 @@ func (s *RDBConfigStore) DeleteRateLimit(ctx context.Context, id string, tx ...*
 func (s *RDBConfigStore) GetBudgets(ctx context.Context) ([]tables.TableBudget, error) {
 	var budgets []tables.TableBudget
 	if err := s.DB().WithContext(ctx).Order("created_at ASC").Find(&budgets).Error; err != nil {
+		return nil, err
+	}
+	return budgets, nil
+}
+
+// GetBudgetsByType returns only budgets of the specified type.
+func (s *RDBConfigStore) GetBudgetsByType(ctx context.Context, budgetType tables.BudgetType) ([]tables.TableBudget, error) {
+	var budgets []tables.TableBudget
+	if err := s.DB().WithContext(ctx).Order("created_at ASC").Find(&budgets, "type = ?", budgetType).Error; err != nil {
 		return nil, err
 	}
 	return budgets, nil

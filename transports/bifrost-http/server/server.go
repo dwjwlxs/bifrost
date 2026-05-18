@@ -21,7 +21,6 @@ import (
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
 	"github.com/maximhq/bifrost/framework/logstore"
-	fpayment "github.com/maximhq/bifrost/framework/payment"
 	dynamicPlugins "github.com/maximhq/bifrost/framework/plugins"
 	"github.com/maximhq/bifrost/framework/tracing"
 	"github.com/maximhq/bifrost/plugins/governance"
@@ -30,7 +29,6 @@ import (
 	"github.com/maximhq/bifrost/plugins/semanticcache"
 	"github.com/maximhq/bifrost/plugins/telemetry"
 	"github.com/maximhq/bifrost/transports/bifrost-http/handlers"
-	platform_handlers "github.com/maximhq/bifrost/transports/bifrost-http/handlers/platform"
 	"github.com/maximhq/bifrost/transports/bifrost-http/integrations"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	bfws "github.com/maximhq/bifrost/transports/bifrost-http/websocket"
@@ -1127,44 +1125,21 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	configHandler.RegisterRoutes(s.Router, middlewares...)
 	oauthHandler.RegisterRoutes(s.Router, middlewares...)
 
-	// Platform multi-tenant handlers
-	platformAuthHandler := platform_handlers.NewPlatformAuthHandler(s.Config)
-	platformAdminHandler := platform_handlers.NewPlatformAdminHandler(s.Config)
-	platformOrgHandler := platform_handlers.NewPlatformOrgHandler(s.Config)
-	platformTeamHandler := platform_handlers.NewPlatformTeamHandler(s.Config)
-	platformVKHandler := platform_handlers.NewPlatformVKHandler(s.Config)
-	platformInvitationHandler := platform_handlers.NewPlatformInvitationHandler(s.Config)
-	govPlugin, _ := s.getGovernancePlugin()
-	var governanceStore governance.GovernanceStore
-	if govPlugin != nil {
-		governanceStore = govPlugin.GetGovernanceStore()
+	// billing 插件在LoadPlugins()中加载
+	pluginStatusMap := s.Config.GetPluginStatus()
+	for name, status := range pluginStatusMap {
+		if status.Status != schemas.PluginStatusActive {
+			continue
+		}
+		pluginIns, err := s.Config.FindPluginByName(name)
+		if err != nil {
+			logger.Warn("failed to register api for plugin %s: %v", name, err)
+			continue
+		}
+		if pluginHandler, ok := pluginIns.(integrations.ExtensionRouter); ok {
+			pluginHandler.RegisterRoutes(s.Router, middlewares...)
+		}
 	}
-	registry, err := fpayment.NewGatewayRegistry(s.Config.BillingConfig)
-	if err != nil {
-		logger.Error("failed to create payment gateway registry: %v", err)
-		return err
-	}
-	billingHandler := platform_handlers.NewBillingHandler(s.Config.ConfigStore, registry, governanceStore, governanceHandler)
-	priceHandler := platform_handlers.NewPlatformPriceHandler(governanceHandler)
-	platformProviderHandler := platform_handlers.NewProviderHandler(governanceHandler, providerHandler)
-	platformUsageHandler := platform_handlers.NewPlatformUsageHandler(s.Config)
-	// Platform protected routes need PlatformAuthMiddleware
-	var platformProtectedMw = make([]schemas.BifrostHTTPMiddleware, len(middlewares), len(middlewares)+1)
-	copy(platformProtectedMw, middlewares)
-	platformProtectedMw = append(platformProtectedMw, platform_handlers.PlatformAuthMiddleware(s.Config))
-
-	// Platform multi-tenant routes
-	platformAuthHandler.RegisterRoutes(s.Router, middlewares...)          // login/register are public
-	platformAdminHandler.RegisterRoutes(s.Router, platformProtectedMw...) // admin needs auth
-	platformOrgHandler.RegisterRoutes(s.Router, platformProtectedMw...)   // org needs auth
-	platformTeamHandler.RegisterRoutes(s.Router, platformProtectedMw...)  // team needs auth
-	platformVKHandler.RegisterRoutes(s.Router, platformProtectedMw...)    // VK needs auth
-	platformInvitationHandler.RegisterRoutes(s.Router)                    // GET /invitations/:token (public)
-	billingHandler.RegisterRoutes(s.Router, platformProtectedMw...)       // Billing needs auth
-	priceHandler.RegisterRoutes(s.Router, platformProtectedMw...)
-	platformProviderHandler.RegisterRoutes(s.Router, platformProtectedMw...)
-	platformUsageHandler.RegisterRoutes(s.Router, platformProtectedMw...)           // Usage needs auth
-	platformInvitationHandler.RegisterAcceptRoute(s.Router, platformProtectedMw...) // POST /invitations/:token/accept (auth required)
 
 	// OAuth metadata + per-user OAuth endpoints (no auth middleware — must be publicly accessible)
 	oauthMetadataHandler := handlers.NewOAuthMetadataHandler(s.Config)
@@ -1301,9 +1276,6 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	s.Config, err = lib.LoadConfig(ctx, configDir)
 	if err != nil {
 		return fmt.Errorf("failed to load config %v", err)
-	}
-	if s.Config.PlatformURL == "" {
-		s.Config.PlatformURL = fmt.Sprintf("http://%s:%v", s.Host, s.Port)
 	}
 	s.Config.Logger = logger
 	if s.Config.KVStore != nil {

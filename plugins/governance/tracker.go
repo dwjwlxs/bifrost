@@ -139,12 +139,6 @@ func (t *UsageTracker) UpdateUsage(ctx context.Context, update *UsageUpdate) {
 		if err := t.store.UpdateVirtualKeyBudgetUsageInMemory(ctx, vk, update.Provider, update.Cost); err != nil {
 			t.logger.Error("failed to update budget hierarchy atomically for VK %s: %v", vk.ID, err)
 		}
-		// Also deduct from billing budgets (hybrid OR logic) - this will only apply if there are billing budgets
-		if charged, err := t.store.DeductBillingBudgets(ctx, vk, update.Provider, update.Cost); err != nil {
-			t.logger.Error("failed to deduct from billing budgets for VK %s: %v", vk.ID, err)
-		} else if len(charged) > 0 {
-			t.logger.Debug("successfully deducted from %d billing budgets for VK %s", len(charged), vk.ID)
-		}
 	}
 }
 

@@ -118,7 +118,7 @@ install-junit-viewer: ## Install junit-viewer for HTML report generation (if not
 		$(ECHO) "$(YELLOW)CI environment detected, skipping junit-viewer installation$(NC)"; \
 	fi
 
-dev: install-ui install-air setup-workspace $(if $(DEBUG),install-delve) ## Start complete development environment (UI + API with proxy)
+dev: install-ui install-air $(if $(DEBUG),install-delve) ## Start complete development environment (UI + API with proxy)
 	@$(ECHO) "$(GREEN)Starting Bifrost complete development environment...$(NC)"
 	@$(ECHO) "$(YELLOW)This will start:$(NC)"
 	@$(ECHO) "  1. UI development server (localhost:3000)"
@@ -142,7 +142,7 @@ dev: install-ui install-air setup-workspace $(if $(DEBUG),install-delve) ## Star
 	fi
 	@sleep 3
 	@$(ECHO) "$(YELLOW)Starting API server with UI proxy...$(NC)"
-	@$(MAKE) setup-workspace >/dev/null
+# 	@$(MAKE) setup-workspace >/dev/null
 	@if [ -f .env ]; then \
 		$(ECHO) "$(YELLOW)Loading environment variables from .env...$(NC)"; \
 		set -a; . ./.env; set +a; \

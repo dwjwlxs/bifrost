@@ -207,7 +207,7 @@ type TableVirtualKey struct {
 
 	// Foreign key relationships
 	// TeamID and CustomerID are mutually exclusive with each other, but UserID can coexist with either.
-	UserID      *string `gorm:"index" json:"user_id,omitempty"`
+	UserID      *string `gorm:"index" json:"user_id,omitempty"` // must not nil when billing is enabled
 	TeamID      *string `gorm:"type:varchar(255);index" json:"team_id,omitempty"`
 	CustomerID  *string `gorm:"type:varchar(255);index" json:"customer_id,omitempty"`
 	RateLimitID *string `gorm:"type:varchar(255);index" json:"rate_limit_id,omitempty"`
@@ -219,7 +219,7 @@ type TableVirtualKey struct {
 	CalendarAligned bool `gorm:"default:false" json:"calendar_aligned"` // When true, all budgets under this VK reset at clean calendar boundaries
 
 	// Relationships
-	User      *TableUser      `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	// User      *TableUser      `gorm:"foreignKey:UserID" json:"user,omitempty"`
 	Team      *TableTeam      `gorm:"foreignKey:TeamID" json:"team,omitempty"`
 	Customer  *TableCustomer  `gorm:"foreignKey:CustomerID" json:"customer,omitempty"`
 	RateLimit *TableRateLimit `gorm:"foreignKey:RateLimitID;onDelete:CASCADE" json:"rate_limit,omitempty"`
