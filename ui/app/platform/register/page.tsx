@@ -72,7 +72,7 @@ export default function RegisterPage() {
 				<Card className="w-full max-w-md">
 					<CardHeader className="text-center">
 						<CardTitle className="text-2xl">Create an account</CardTitle>
-						<CardDescription>Get started with Bifrost for free</CardDescription>
+						<CardDescription>Get started with EcerAI for free</CardDescription>
 					</CardHeader>
 					<CardContent>
 						<form onSubmit={handleSubmit} className="space-y-4">

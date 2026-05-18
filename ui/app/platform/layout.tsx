@@ -13,6 +13,9 @@ const PUBLIC_ROUTES = [
 	"/platform/verify-email",
 ];
 
+// Prefixes that are always public (auth not required)
+const PUBLIC_PREFIXES = ["/platform/docs"];
+
 export const Route = createFileRoute("/platform")({
 	beforeLoad: ({ location }) => {
 		const pathname = location.pathname;
@@ -23,7 +26,10 @@ export const Route = createFileRoute("/platform")({
 		}
 
 		// Allow public routes without auth
-		if (PUBLIC_ROUTES.some((route) => pathname === route)) {
+		if (
+			PUBLIC_ROUTES.some((route) => pathname === route) ||
+			PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+		) {
 			return;
 		}
 

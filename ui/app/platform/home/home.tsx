@@ -69,7 +69,7 @@ export default function HomePage() {
 			{/* Features Section */}
 			<section className="bg-gray-50 px-4 py-24">
 				<div className="container mx-auto">
-					<h2 className="mb-16 text-center text-3xl font-bold">Why Bifrost?</h2>
+					<h2 className="mb-16 text-center text-3xl font-bold">Why EcerAI?</h2>
 					<div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
 						{features.map((feature, index) => (
 							<div key={index} className="rounded-xl bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
@@ -103,7 +103,7 @@ export default function HomePage() {
 			<section className="bg-blue-600 px-4 py-24 text-white">
 				<div className="container mx-auto text-center">
 					<h2 className="mb-4 text-3xl font-bold">Ready to simplify your AI infrastructure?</h2>
-					<p className="mx-auto mb-8 max-w-2xl text-blue-100">Join thousands of teams using Bifrost to build faster with AI.</p>
+					<p className="mx-auto mb-8 max-w-2xl text-blue-100">Join thousands of teams using EcerAI to build faster with AI.</p>
 					<Link to="/platform/register">
 						<Button size="lg" variant="secondary" className="gap-2">
 							Get Started Free <ArrowRightIcon />

@@ -36,14 +36,14 @@ export interface NavItem {
 export const consoleNavItems: NavItem[] = [
 	{ label: "Dashboard", to: "/platform/console/dashboard", icon: LayoutDashboard },
 	{ label: "Virtual Keys", to: "/platform/console/virtual-keys", icon: KeyRound },
-	{ label: "Organizations", to: "/platform/console/organizations", icon: Building2 },
+	// { label: "Organizations", to: "/platform/console/organizations", icon: Building2 },
 	{ label: "Usage", to: "/platform/console/usage", icon: Activity },
 	// { label: "Org Usage", to: "/platform/console/organization/usage", icon: LayoutDashboard, requireOrgOrTeamAdmin: true },
 	// { label: "RBAC", to: "/platform/console/rbac", icon: ShieldCheck, requireOrgOrTeamAdmin: true },
 	{ label: "Billing", to: "/platform/console/billing", icon: CreditCard },
 	// { label: "Wallet", to: "/platform/console/wallet", icon: Wallet },
 	{ label: "Package Marketplace", to: "/platform/console/packages", icon: ShoppingCart },
-	{ label: "My Packages", to: "/platform/console/entity-packages", icon: Boxes },
+	// { label: "My Packages", to: "/platform/console/entity-packages", icon: Boxes },
 ];
 
 export const adminNavItems: NavItem[] = [

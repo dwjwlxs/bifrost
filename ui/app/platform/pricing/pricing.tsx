@@ -29,11 +29,12 @@ const plans: Plan[] = [
 	{
 		name: "Free",
 		price: 0,
-		description: "For developers exploring Bifrost",
+		description: "For developers exploring EcerAI",
 		cta: "Start for Free",
 		ctaVariant: "outline",
 		highlight: false,
 		features: [
+			"100 credits",
 			"1,000 requests / day",
 			"3 AI providers",
 			"5 virtual API keys",
@@ -61,6 +62,7 @@ const plans: Plan[] = [
 		ctaVariant: "default",
 		highlight: true,
 		features: [
+			"4,900 credits",
 			"50,000 requests / day",
 			"All 20+ providers",
 			"100 virtual API keys",
@@ -69,8 +71,7 @@ const plans: Plan[] = [
 			"Budget controls & alerts",
 			"Team management",
 			"Rate limit configuration",
-			"MCP gateway access",
-			"Plugin system",
+			"Free plan included",
 		],
 		limits: {
 			requests: "50,000 / day",
@@ -88,18 +89,16 @@ const plans: Plan[] = [
 		ctaVariant: "outline",
 		highlight: false,
 		features: [
+			"Unlimited credits",
 			"Unlimited requests",
 			"All providers + custom",
 			"Unlimited API keys",
 			"Dedicated support & SLA",
 			"Full audit logs",
-			"SSO & SAML",
-			"RBAC & multi-tenant",
-			"Custom plugins",
-			"On-premise deployment",
 			"99.99% uptime SLA",
 			"Custom rate limits",
 			"Invoice billing",
+			"Pro plan included",
 		],
 		limits: {
 			requests: "Unlimited",
@@ -160,15 +159,15 @@ const comparisonFeatures: Array<{
 const faqs = [
 	{
 		q: "Do I need a credit card to start?",
-		a: "No. The Free plan requires no credit card. You can upgrade to Pro at any time when you need higher limits.",
+		a: "No. Alipay is accepted for all plans.",
 	},
 	{
 		q: "What counts as a 'request'?",
-		a: "Each call to the Bifrost inference API counts as one request, regardless of the number of tokens or the provider used. Streaming responses count as a single request.",
+		a: "Each call to the EcerAI inference API counts as one request, regardless of the number of tokens or the provider used. Streaming responses count as a single request.",
 	},
 	{
 		q: "Can I bring my own provider API keys?",
-		a: "Yes. Bifrost is a routing layer—you configure your own provider API keys (OpenAI, Anthropic, etc.) in your Bifrost instance. We don't bill per-token; providers bill you directly.",
+		a: "Not now.",
 	},
 	{
 		q: "Can I switch plans or cancel anytime?",
@@ -213,7 +212,7 @@ export default function PricingPage() {
 						<span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">you actually use</span>
 					</h1>
 					<p className="mx-auto mb-6 max-w-2xl text-xl text-slate-300">
-						No per-token billing. No hidden provider markups. You use your own API keys— Bifrost just routes and manages them.
+						No hidden provider markups.
 					</p>
 					<p className="text-sm text-slate-400">All plans include the full OpenAI-compatible API · No credit card for Free plan</p>
 				</div>
@@ -277,7 +276,7 @@ export default function PricingPage() {
 			</section>
 
 			{/* Feature Comparison Table */}
-			<section className="bg-slate-50 px-4 py-20">
+			<section className="bg-slate-50 px-4 py-20 hidden">
 				<div className="container mx-auto max-w-5xl">
 					<h2 className="mb-4 text-center text-3xl font-bold text-slate-900">Full Feature Comparison</h2>
 					<p className="mb-12 text-center text-slate-500">Everything you need to choose the right plan</p>
@@ -329,7 +328,7 @@ export default function PricingPage() {
 					<h2 className="mb-4 text-center text-3xl font-bold text-slate-900">Frequently Asked Questions</h2>
 					<p className="mb-12 text-center text-slate-500">
 						Still have questions?{" "}
-						<a href="mailto:support@getbifrost.ai" className="text-blue-600 hover:underline">
+						<a href="/platform/contact" className="text-blue-600 hover:underline">
 							Contact us
 						</a>
 					</p>
@@ -375,7 +374,7 @@ export default function PricingPage() {
 							<Button
 								size="lg"
 								variant="outline"
-								className="gap-2 border-white/30 text-white hover:bg-white/10"
+								className="gap-2 border-white/30 text-black hover:bg-white/30"
 								data-testid="pricing-final-cta-enterprise"
 							>
 								Talk to Sales
