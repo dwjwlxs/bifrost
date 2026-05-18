@@ -733,10 +733,6 @@ func (m *MockConfigStore) GetCustomersPaginated(ctx context.Context, params conf
 	return nil, 0, nil
 }
 
-func (s *MockConfigStore) GetUserProviderConfigs(ctx context.Context, userID string) ([]tables.TableUserProviderConfig, error) {
-	return nil, nil
-}
-
 func (m *MockConfigStore) CreateTeam(ctx context.Context, team *tables.TableTeam, tx ...*gorm.DB) error {
 	if m.governanceConfig == nil {
 		m.governanceConfig = &configstore.GovernanceConfig{}

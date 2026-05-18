@@ -106,7 +106,7 @@ func (g *GatewayConfig) AliPayConfig() *AliPayConfig {
 // GatewayConfigs returns the enabled gateway configs as a flat map.
 // It merges the legacy single-gateway format into the new map format for uniform handling.
 func (c *BillingConfig) GatewayConfigs() map[string]*GatewayConfig {
-	if c.Gateways != nil && len(c.Gateways) > 0 {
+	if len(c.Gateways) > 0 {
 		result := make(map[string]*GatewayConfig, len(c.Gateways))
 		for k, v := range c.Gateways {
 			result[k] = &v

@@ -169,9 +169,6 @@ type ConfigStore interface {
 	UpdateVirtualKeyMCPConfig(ctx context.Context, virtualKeyMCPConfig *tables.TableVirtualKeyMCPConfig, tx ...*gorm.DB) error
 	DeleteVirtualKeyMCPConfig(ctx context.Context, id uint, tx ...*gorm.DB) error
 
-	// User Provider Config CRUD
-	GetUserProviderConfigs(ctx context.Context, userID string) ([]tables.TableUserProviderConfig, error)
-
 	// Team CRUD
 	GetTeams(ctx context.Context, customerID string) ([]tables.TableTeam, error)
 	GetTeamsPaginated(ctx context.Context, params TeamsQueryParams) ([]tables.TableTeam, int64, error)
@@ -198,6 +195,7 @@ type ConfigStore interface {
 
 	// Budget CRUD
 	GetBudgets(ctx context.Context) ([]tables.TableBudget, error)
+	GetBudgetsByType(ctx context.Context, budgetType tables.BudgetType) ([]tables.TableBudget, error)
 	GetBudget(ctx context.Context, id string, tx ...*gorm.DB) (*tables.TableBudget, error)
 	CreateBudget(ctx context.Context, budget *tables.TableBudget, tx ...*gorm.DB) error
 	UpdateBudget(ctx context.Context, budget *tables.TableBudget, tx ...*gorm.DB) error

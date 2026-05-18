@@ -3,18 +3,17 @@ module github.com/maximhq/bifrost/transports
 go 1.26.1
 
 replace (
-	github.com/maximhq/bifrost/core => github.com/dwjwlxs/bifrost/core v1.5.3
-	github.com/maximhq/bifrost/framework => github.com/dwjwlxs/bifrost/framework v1.3.3
+	github.com/maximhq/bifrost/core => ../core
+	github.com/maximhq/bifrost/framework => ../framework
+	github.com/maximhq/bifrost/plugins/billing => ../plugins/billing
 	github.com/maximhq/bifrost/plugins/compat => github.com/dwjwlxs/bifrost/plugins/compat v0.1.2
-	github.com/maximhq/bifrost/plugins/governance => github.com/dwjwlxs/bifrost/plugins/governance v1.5.3
+	github.com/maximhq/bifrost/plugins/governance => ../plugins/governance
 	github.com/maximhq/bifrost/plugins/logging => github.com/dwjwlxs/bifrost/plugins/logging v1.5.3
 	github.com/maximhq/bifrost/plugins/maxim => github.com/dwjwlxs/bifrost/plugins/maxim v1.6.3
 	github.com/maximhq/bifrost/plugins/otel => github.com/dwjwlxs/bifrost/plugins/otel v1.2.3
 	github.com/maximhq/bifrost/plugins/prompts => github.com/dwjwlxs/bifrost/plugins/prompts v1.0.3
 	github.com/maximhq/bifrost/plugins/semanticcache => github.com/dwjwlxs/bifrost/plugins/semanticcache v1.5.3
 	github.com/maximhq/bifrost/plugins/telemetry => github.com/dwjwlxs/bifrost/plugins/telemetry v1.5.3
-
-	github.com/maximhq/bifrost/transports => ./
 )
 
 require (
@@ -23,13 +22,13 @@ require (
 	github.com/bytedance/sonic v1.15.0
 	github.com/fasthttp/router v1.5.4
 	github.com/fasthttp/websocket v1.5.12
-	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/pprof v0.0.0-20251213031049-b05bdaca462f
 	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.18.2
 	github.com/mark3labs/mcp-go v0.43.2
 	github.com/maximhq/bifrost/core v1.5.3
 	github.com/maximhq/bifrost/framework v1.3.3
+	github.com/maximhq/bifrost/plugins/billing v0.0.0-00010101000000-000000000000
 	github.com/maximhq/bifrost/plugins/compat v0.1.2
 	github.com/maximhq/bifrost/plugins/governance v1.5.3
 	github.com/maximhq/bifrost/plugins/logging v1.5.3
@@ -60,6 +59,7 @@ require (
 	cloud.google.com/go/iam v1.5.3 // indirect
 	cloud.google.com/go/monitoring v1.24.3 // indirect
 	cloud.google.com/go/storage v1.61.3 // indirect
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.20.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.2 // indirect
@@ -127,6 +127,7 @@ require (
 	github.com/go-openapi/swag/typeutils v0.25.4 // indirect
 	github.com/go-openapi/swag/yamlutils v0.25.4 // indirect
 	github.com/go-openapi/validate v0.25.1 // indirect
+	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 	github.com/google/cel-go v0.26.1 // indirect
@@ -223,6 +224,8 @@ require (
 	google.golang.org/grpc v1.80.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
+	gopkg.in/mail.v2 v2.3.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	gorm.io/driver/mysql v1.6.0 // indirect
 	gorm.io/driver/postgres v1.6.0 // indirect
 )

@@ -1,6 +1,6 @@
 import FullPageLoader from "@/components/fullPageLoader";
 import { useDebouncedValue } from "@/hooks/useDebounce";
-import { getErrorMessage, useGetCustomersQuery, useGetTeamsQuery, useGetVirtualKeysQuery, useGetCurrentUserQuery } from "@/lib/store";
+import { getErrorMessage, useGetCustomersQuery, useGetTeamsQuery, useGetVirtualKeysQuery } from "@/lib/store";
 import { parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -10,7 +10,7 @@ const POLLING_INTERVAL = 5000;
 const PAGE_SIZE = 25;
 
 export default function MyKeysPage() {
-	const { data: currentUser } = useGetCurrentUserQuery();
+	const { data: currentUser } = {data: {}};
 	const shownErrorsRef = useRef(new Set<string>());
 
 	const [urlState, setUrlState] = useQueryStates(
@@ -35,8 +35,7 @@ export default function MyKeysPage() {
 			limit: PAGE_SIZE,
 			offset: urlState.offset,
 			search: debouncedSearch || undefined,
-			customer_id: currentUser?.customer_id || undefined,
-			team_id: currentUser?.team_id || undefined,
+
 			sort_by: (urlState.sort_by as "name" | "budget_spent" | "created_at" | "status") || undefined,
 			order: (urlState.order as "asc" | "desc") || undefined,
 		},

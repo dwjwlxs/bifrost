@@ -4,11 +4,8 @@ set -eu
 # ===================== 配置区：在这里配置需要清理的目录 =====================
 # 目录路径 相对于【脚本执行目录】（即你运行 sh scripts/clean_mod.sh 时所在的目录）
 # 多个目录用空格分隔，路径中不能含空格
-CLEAN_DIRS="./cli ./core ./framework \
-    ./plugins/compat ./plugins/governance ./plugins/jsonparser \
-    ./plugins/logging ./plugins/maxim ./plugins/mocker \
-    ./plugins/otel ./plugins/prompts ./plugins/semanticcache \
-    ./plugins/telemetry ./transports"
+CLEAN_DIRS="./cli ./core ./framework ./transports"
+
 # 如需添加更多目录，在上面的字符串末尾以空格追加即可
 # ==========================================================================
 
@@ -85,6 +82,10 @@ clean_mod() {
         clean_single_mod "$dir"
     done
 
+    for plugin_dir in ./plugins/*; do
+        clean_single_mod "$plugin_dir"
+    done
+
     echo ""
     echo "🎉 所有目录清理完成！"
     echo "如需批量还原：sh $0 restore"
@@ -98,6 +99,10 @@ restore_mod() {
 
     for dir in $CLEAN_DIRS; do
         restore_single_mod "$dir"
+    done
+
+    for plugin_dir in ./plugins/*; do
+        restore_single_mod "$plugin_dir"
     done
 
     echo ""

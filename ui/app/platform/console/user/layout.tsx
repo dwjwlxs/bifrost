@@ -1,11 +1,10 @@
 import { Outlet, createFileRoute } from "@tanstack/react-router";
-import { useGetCurrentUserQuery } from "@/lib/store";
 import FullPageLoader from "@/components/fullPageLoader";
 import { NoPermissionView } from "@/components/noPermissionView";
 import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
 
 function UserLayout() {
-	const { data: currentUser } = useGetCurrentUserQuery();
+	const { data: currentUser } = {data: {}};
 
 	if (!currentUser) {
 		return <FullPageLoader />;

@@ -1669,10 +1669,23 @@
     },
     "consumer_auth_config": {
       "$ref": "#/$defs/consumer_auth_config"
+    },
+    "cache": {
+      "$ref": "#/$defs/cache_config"
     }
   },
   "additionalProperties": false,
   "$defs": {
+    "cache_config": {
+      "type": "object",
+      "description": "Shared cache configuration used by built-in plugins (e.g., billing budget caching).",
+      "properties": {
+        "redis": {
+          "$ref": "#/$defs/cache_redis_config"
+        }
+      },
+      "additionalProperties": false
+    },
     "routing_target": {
       "type": "object",
       "description": "A single weighted routing target within a rule. All fields except weight are optional; omitting provider or model means use the incoming request value. Weights across all targets in a rule must sum to 1.",
@@ -2916,6 +2929,45 @@
         }
       },
       "required": ["scheme", "host"],
+      "additionalProperties": false
+    },
+    "cache_redis_config": {
+      "type": "object",
+      "description": "Redis configuration for cache layer (billing budget caching).",
+      "properties": {
+        "addr": {
+          "type": "string",
+          "description": "Redis/Valkey server address (host:port) - REQUIRED"
+        },
+        "username": {
+          "type": "string",
+          "description": "Username for Redis AUTH (optional)"
+        },
+        "password": {
+          "type": "string",
+          "description": "Password for Redis AUTH (optional)"
+        },
+        "db": {
+          "type": "integer",
+          "description": "Redis database number (default: 0)",
+          "default": 0
+        },
+        "use_tls": {
+          "type": "boolean",
+          "description": "Use TLS for the Redis/Valkey connection (optional)",
+          "default": false
+        },
+        "insecure_skip_verify": {
+          "type": "boolean",
+          "description": "Skip TLS certificate verification (optional)",
+          "default": false
+        },
+        "pool_size": {
+          "type": "integer",
+          "description": "Maximum number of socket connections (optional)"
+        }
+      },
+      "required": ["addr"],
       "additionalProperties": false
     },
     "redis_config": {

@@ -61,33 +61,23 @@ func (TableBudget) TableName() string { return "governance_budgets" }
 
 // BeforeSave hook for Budget to validate owner constraints, type rules, scope rules, and reset duration
 func (b *TableBudget) BeforeSave(tx *gorm.DB) error {
-	// 1. A budget belongs to at most one owner type (five-way exclusive)
-	owners := 0
-	if b.TeamID != nil {
-		owners++
-	}
-	if b.VirtualKeyID != nil {
-		owners++
-	}
-	if b.ProviderConfigID != nil {
-		owners++
-	}
-	if b.CustomerID != nil {
-		owners++
-	}
-	if b.UserID != nil {
-		owners++
-	}
-	if owners > 1 {
-		return fmt.Errorf("budget cannot have more than one owner")
-	}
-
-	// 2. Billing type cannot be attached to VirtualKey or ProviderConfig
 	if b.Type == "" {
 		b.Type = BudgetTypeGovernance
 	}
-	if b.Type == BudgetTypeBilling && (b.VirtualKeyID != nil || b.ProviderConfigID != nil) {
-		return fmt.Errorf("billing budget cannot be attached to virtual key or provider config")
+
+	// 1. A budget owner check
+
+	// 2. Billing type cannot be attached to VirtualKey or ProviderConfig
+	if b.Type == BudgetTypeBilling {
+		// legal cases:
+		// 1、userid not nil && teamid nil && customerid nil, user-wise budget
+		// 2、customerid not nil && teamid nil && userid nil, org-wise budget
+		if b.UserID == nil && b.CustomerID == nil {
+			return fmt.Errorf("billing budget must have either user_id or customer_id set")
+		}
+		if b.VirtualKeyID != nil || b.ProviderConfigID != nil {
+			return fmt.Errorf("billing budget cannot be attached to virtual key or provider config")
+		}
 	}
 
 	// 3. Validate BudgetType value
@@ -96,6 +86,14 @@ func (b *TableBudget) BeforeSave(tx *gorm.DB) error {
 	}
 
 	// 4. User scope validation: scope fields are only valid when UserID is set
+	if b.Type == BudgetTypeGovernance {
+		// legal cases:
+		// 1、userid not nil && teamid nil && customerid nil, user-wise budget
+		// 2、customerid not nil && teamid nil && userid nil, org-wise budget
+		// 3、teamid not nil && userid nil && customerid nil, team-wise budget
+		// 4、userid not nil && teamid not nil, user-in-team-wise budget
+		// 5、userid not nil && teamid nil && customerid not nil, user-in-org-wise budget
+	}
 	if b.UserID != nil {
 		// UserScopeTeamID and UserScopeCustomerID are mutually exclusive
 		if b.UserScopeTeamID != nil && b.UserScopeCustomerID != nil {
@@ -110,7 +108,9 @@ func (b *TableBudget) BeforeSave(tx *gorm.DB) error {
 
 	// 5. Validate ResetDuration format (d == 0 is allowed for balance type; d < 0 is not)
 	if d, err := ParseDuration(b.ResetDuration); err != nil {
-		return fmt.Errorf("invalid reset duration format: %s", b.ResetDuration)
+		if b.Type == BudgetTypeGovernance {
+			return fmt.Errorf("invalid reset duration format: %s", b.ResetDuration)
+		}
 	} else if d < 0 {
 		return fmt.Errorf("reset duration cannot be negative: %s", b.ResetDuration)
 	}

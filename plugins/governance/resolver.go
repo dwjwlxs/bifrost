@@ -215,20 +215,6 @@ func (r *BudgetResolver) EvaluateUserRequest(ctx *schemas.BifrostContext, userID
 		}
 	}
 
-	// Check user-level model access (UserProviderConfig)
-	// If a UserProviderConfig exists for this user+provider and the model is not allowed, block it.
-	// No UserProviderConfig → allow (no restriction in governance mode).
-	if request != nil && request.Model != "" && request.Provider != "" {
-		if upc, ok := r.store.GetUserProviderConfig(ctx, userID, string(request.Provider)); ok {
-			if !upc.AllowedModels.IsAllowed(request.Model) {
-				return &EvaluationResult{
-					Decision: DecisionModelBlocked,
-					Reason:   fmt.Sprintf("Model '%s' is not allowed for user at provider '%s' (user package restriction)", request.Model, request.Provider),
-				}
-			}
-		}
-	}
-
 	return &EvaluationResult{
 		Decision: DecisionAllow,
 		Reason:   "User-level checks passed",
