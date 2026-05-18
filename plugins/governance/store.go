@@ -24,16 +24,14 @@ type EntityWiseRateLimits map[string][]*configstoreTables.TableRateLimit
 // LocalGovernanceStore provides in-memory cache for governance data with fast, non-blocking access
 type LocalGovernanceStore struct {
 	// Core data maps using sync.Map for lock-free reads
-	virtualKeys         sync.Map // string -> *VirtualKey (VK value -> VirtualKey with preloaded relationships)
-	teams               sync.Map // string -> *Team (Team ID -> Team)
-	customers           sync.Map // string -> *Customer (Customer ID -> Customer)
-	userGovernance      sync.Map // string -> *UserGovernance (User ID -> UserGovernance)
-	budgets             sync.Map // string -> *Budget (Budget ID -> Budget)
-	rateLimits          sync.Map // string -> *RateLimit (RateLimit ID -> RateLimit)
-	modelConfigs        sync.Map // string -> *ModelConfig (key: "modelName" or "modelName:provider" -> ModelConfig)
-	providers           sync.Map // string -> *Provider (Provider name -> Provider with preloaded relationships)
-	routingRules        sync.Map // string -> []*TableRoutingRule (key: "scope:scopeID" -> rules, scopeID="" for global)
-	userProviderConfigs sync.Map // string -> *configstoreTables.TableUserProviderConfig (key: "userID:provider" -> UPC)
+	virtualKeys  sync.Map // string -> *VirtualKey (VK value -> VirtualKey with preloaded relationships)
+	teams        sync.Map // string -> *Team (Team ID -> Team)
+	customers    sync.Map // string -> *Customer (Customer ID -> Customer)
+	budgets      sync.Map // string -> *Budget (Budget ID -> Budget)
+	rateLimits   sync.Map // string -> *RateLimit (RateLimit ID -> RateLimit)
+	modelConfigs sync.Map // string -> *ModelConfig (key: "modelName" or "modelName:provider" -> ModelConfig)
+	providers    sync.Map // string -> *Provider (Provider name -> Provider with preloaded relationships)
+	routingRules sync.Map // string -> []*TableRoutingRule (key: "scope:scopeID" -> rules, scopeID="" for global)
 
 	// Last DB usages for budgets and rate limits
 	LastDBUsagesBudgetsMu            sync.RWMutex       // Last DB usages for budgets
@@ -55,9 +53,6 @@ type LocalGovernanceStore struct {
 
 	// Logger
 	logger schemas.Logger
-
-	// Budget checker for governance budgets (AND logic)
-	governanceChecker *GovernanceBudgetChecker
 }
 
 type GovernanceData struct {
@@ -205,9 +200,6 @@ func NewLocalGovernanceStore(ctx context.Context, logger schemas.Logger, configS
 		LastDBUsagesRequestsRateLimits: make(map[string]int64),
 		LastDBUsagesTokensRateLimits:   make(map[string]int64),
 	}
-
-	// Initialize budget checker for governance budgets
-	store.governanceChecker = NewGovernanceBudgetChecker(store, logger)
 
 	if configStore != nil {
 		// Load initial data from database
@@ -859,8 +851,34 @@ func (gs *LocalGovernanceStore) CheckRateLimit(ctx context.Context, entityWiseRa
 // Generic check budget method
 // The idea is to keep this as a common method for checking all budgets. The entire business logic resides in here
 func (gs *LocalGovernanceStore) CheckBudget(ctx context.Context, entityWiseBudgets EntityWiseBudgets, baselines map[string]float64) (Decision, error) {
-	// Delegate to GovernanceBudgetChecker for existing behavior
-	return gs.governanceChecker.Check(ctx, entityWiseBudgets, baselines)
+	// Check each budget in hierarchy order using in-memory data
+	for entity, budgets := range entityWiseBudgets {
+		for _, budget := range budgets { // Check if budget needs reset (in-memory check)
+			if budget.ResetDuration != "" {
+				if duration, err := configstoreTables.ParseDuration(budget.ResetDuration); err == nil {
+					if time.Since(budget.LastReset) >= duration {
+						// Budget expired but hasn't been reset yet - treat as reset
+						// Note: actual reset will happen in post-hook via AtomicBudgetUpdate
+						gs.logger.Debug("LocalStore CheckBudget: Budget %s (%s) expired, skipping check", budget.ID, entity)
+						continue // Skip budget check for expired budgets
+					}
+				}
+			}
+			baseline, exists := baselines[budget.ID]
+			if !exists {
+				baseline = 0
+			}
+			gs.logger.Debug("LocalStore CheckBudget: Checking %s budget %s: local=%.4f, remote=%.4f, total=%.4f, limit=%.4f",
+				entity, budget.ID, budget.CurrentUsage, baseline, budget.CurrentUsage+baseline, budget.MaxLimit)
+			// Check if current usage (local + remote baseline) exceeds budget limit
+			if budget.CurrentUsage+baseline >= budget.MaxLimit {
+				gs.logger.Debug("LocalStore CheckBudget: Budget %s EXCEEDED", budget.ID)
+				return DecisionBudgetExceeded, fmt.Errorf("%s budget exceeded: %.4f >= %.4f dollars",
+					entity, budget.CurrentUsage+baseline, budget.MaxLimit)
+			}
+		}
+	}
+	return DecisionAllow, nil
 }
 
 // CheckVirtualKeyBudget performs virtual key level budget checking using in-memory store data (lock-free for high performance)
@@ -887,13 +905,7 @@ func (gs *LocalGovernanceStore) CheckVirtualKeyBudget(ctx context.Context, vk *c
 		gs.logger.Debug("  - Baseline for budget %s: %.4f", budgetID, baseline)
 	}
 
-	// First run governance budget checks (AND logic)
-	decision, err := gs.CheckBudget(ctx, governanceBudgets, baselines)
-	if err != nil || isBudgetViolation(decision) {
-		return decision, err
-	}
-
-	return DecisionAllow, nil
+	return gs.CheckBudget(ctx, governanceBudgets, baselines)
 }
 
 // CheckProviderBudget performs budget checking for provider-level configs (lock-free for high performance)
@@ -1131,28 +1143,10 @@ func (gs *LocalGovernanceStore) CheckCustomerRateLimit(ctx context.Context, cust
 	return gs.CheckRateLimit(ctx, entityWiseRateLimits, tokensBaselines, requestsBaselines)
 }
 
-// CheckUserBudget checks if user's budget allows the request
+// CheckUserBudget checks if user's budget allows the request (enterprise-only)
+// Community build: silent no-op so user-governance absence never silently denies requests.
 func (gs *LocalGovernanceStore) CheckUserBudget(ctx context.Context, userID string, request *EvaluationRequest, baselines map[string]float64) (Decision, error) {
-	if userID == "" {
-		return DecisionAllow, nil
-	}
-	if baselines == nil {
-		baselines = map[string]float64{}
-	}
-	userGovValue, exists := gs.userGovernance.Load(userID)
-	if !exists || userGovValue == nil {
-		return DecisionAllow, nil
-	}
-	userGov, ok := userGovValue.(*UserGovernance)
-	if !ok || userGov == nil || userGov.BudgetID == nil {
-		return DecisionAllow, nil
-	}
-	userBudget := gs.LoadBudget(ctx, *userGov.BudgetID)
-	if userBudget == nil {
-		return DecisionAllow, nil
-	}
-	key := fmt.Sprintf("User:%s", userID)
-	return gs.CheckBudget(ctx, EntityWiseBudgets{key: {userBudget}}, baselines)
+	return DecisionAllow, nil
 }
 
 // CheckModelRateLimit checks model-level rate limits and returns evaluation result if violated
@@ -1198,32 +1192,10 @@ func (gs *LocalGovernanceStore) CheckModelRateLimit(ctx context.Context, request
 	return gs.CheckRateLimit(ctx, entityWiseRateLimits, tokensBaselines, requestsBaselines)
 }
 
-// CheckUserRateLimit checks if user's rate limit allows the request
+// CheckUserRateLimit checks if user's rate limit allows the request (enterprise-only)
+// Community build: silent no-op so user-governance absence never silently denies requests.
 func (gs *LocalGovernanceStore) CheckUserRateLimit(ctx context.Context, userID string, request *EvaluationRequest, tokensBaselines map[string]int64, requestsBaselines map[string]int64) (Decision, error) {
-	if userID == "" {
-		return DecisionAllow, nil
-	}
-	if tokensBaselines == nil {
-		tokensBaselines = map[string]int64{}
-	}
-	if requestsBaselines == nil {
-		requestsBaselines = map[string]int64{}
-	}
-	userGovValue, exists := gs.userGovernance.Load(userID)
-	if !exists || userGovValue == nil {
-		return DecisionAllow, nil
-	}
-	userGov, ok := userGovValue.(*UserGovernance)
-	if !ok || userGov == nil || userGov.RateLimitID == nil {
-		return DecisionAllow, nil
-	}
-	userRateLimit := gs.LoadRateLimit(ctx, *userGov.RateLimitID)
-	if userRateLimit == nil {
-		return DecisionAllow, nil
-	}
-	key := fmt.Sprintf("User:%s", userID)
-	entityWiseRateLimits := EntityWiseRateLimits{key: {userRateLimit}}
-	return gs.CheckRateLimit(ctx, entityWiseRateLimits, tokensBaselines, requestsBaselines)
+	return DecisionAllow, nil
 }
 
 // CheckVirtualKeyRateLimit checks a virtual key  rate limit and returns evaluation result if violated (true if violated, false if not)
@@ -1298,22 +1270,9 @@ func (gs *LocalGovernanceStore) UpdateProviderAndModelBudgetUsageInMemory(ctx co
 	return nil
 }
 
-// UpdateUserBudgetUsageInMemory updates user's budget usage in memory
+// UpdateUserBudgetUsageInMemory updates user's budget usage in memory (enterprise-only)
+// Community build: silent no-op to avoid per-request error spam when a userID is set.
 func (gs *LocalGovernanceStore) UpdateUserBudgetUsageInMemory(ctx context.Context, userID string, cost float64) error {
-	if userID == "" {
-		return nil
-	}
-	userGovValue, exists := gs.userGovernance.Load(userID)
-	if !exists || userGovValue == nil {
-		return nil
-	}
-	userGov, ok := userGovValue.(*UserGovernance)
-	if !ok || userGov == nil || userGov.BudgetID == nil {
-		return nil
-	}
-	if err := gs.BumpBudgetUsage(ctx, *userGov.BudgetID, cost); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -1370,22 +1329,9 @@ func (gs *LocalGovernanceStore) UpdateVirtualKeyRateLimitUsageInMemory(ctx conte
 	return nil
 }
 
-// UpdateUserRateLimitUsageInMemory updates user's rate limit usage in memory
+// UpdateUserRateLimitUsageInMemory updates user's rate limit usage in memory (enterprise-only)
+// Community build: silent no-op to avoid per-request error spam when a userID is set.
 func (gs *LocalGovernanceStore) UpdateUserRateLimitUsageInMemory(ctx context.Context, userID string, tokensUsed int64, shouldUpdateTokens bool, shouldUpdateRequests bool) error {
-	if userID == "" {
-		return nil
-	}
-	userGovValue, exists := gs.userGovernance.Load(userID)
-	if !exists || userGovValue == nil {
-		return nil
-	}
-	userGov, ok := userGovValue.(*UserGovernance)
-	if !ok || userGov == nil || userGov.RateLimitID == nil {
-		return nil
-	}
-	if err := gs.BumpRateLimitUsage(ctx, *userGov.RateLimitID, tokensUsed, shouldUpdateTokens, shouldUpdateRequests); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -1994,7 +1940,6 @@ func (gs *LocalGovernanceStore) rebuildInMemoryStructures(ctx context.Context, c
 	gs.modelConfigs = sync.Map{}
 	gs.providers = sync.Map{}
 	gs.routingRules = sync.Map{}
-	gs.userProviderConfigs = sync.Map{}
 
 	// Build customers map
 	for i := range customers {
@@ -2148,25 +2093,6 @@ func (gs *LocalGovernanceStore) collectRateLimitsFromHierarchy(ctx context.Conte
 		}
 	}
 
-	// Check User rate limit if VK belongs to a user
-	if vk.UserID != nil {
-		if userGovValue, exists := gs.userGovernance.Load(*vk.UserID); exists && userGovValue != nil {
-			if userGov, ok := userGovValue.(*UserGovernance); ok && userGov != nil && userGov.RateLimitID != nil {
-				if rateLimitValue, exists := gs.rateLimits.Load(*userGov.RateLimitID); exists && rateLimitValue != nil {
-					if rateLimit, ok := rateLimitValue.(*configstoreTables.TableRateLimit); ok && rateLimit != nil {
-						if !seen[rateLimit.ID] {
-							if categoryRateLimits := rateLimitsWithCategories["User"]; categoryRateLimits == nil {
-								rateLimitsWithCategories["User"] = []*configstoreTables.TableRateLimit{}
-							}
-							rateLimitsWithCategories["User"] = append(rateLimitsWithCategories["User"], rateLimit)
-							seen[rateLimit.ID] = true
-						}
-					}
-				}
-			}
-		}
-	}
-
 	// Check Team rate limit if VK belongs to a team
 	var teamCustomerID string
 	if vk.TeamID != nil {
@@ -2270,60 +2196,6 @@ func (gs *LocalGovernanceStore) collectBudgetsFromHierarchy(_ context.Context, v
 				seen[budget.ID] = true
 			}
 		}
-	}
-
-	// get the customer by vk.TeamID for compatibility
-	if vk.TeamID != nil && vk.CustomerID == nil {
-		if teamValue, exists := gs.teams.Load(*vk.TeamID); exists && teamValue != nil {
-			if team, ok := teamValue.(*configstoreTables.TableTeam); ok && team != nil {
-				if team.CustomerID != nil {
-					vk.CustomerID = team.CustomerID
-				}
-			}
-		}
-	}
-
-	// User-level budgets: scan all budgets in memory to find ones owned by this user.
-	// This correctly picks up billing Budgets (Type=billing, UserID set) created by
-	// provisionPackage, which are stored in gs.budgets but not referenced by governance_users.
-	if vk.UserID != nil {
-		gs.budgets.Range(func(key, value any) bool {
-			budgetValue, ok := value.(*configstoreTables.TableBudget)
-			if !ok || budgetValue == nil {
-				return true
-			}
-			if budgetValue.UserID == nil || *budgetValue.UserID != *vk.UserID {
-				return true
-			}
-			if seen[budgetValue.ID] {
-				return true
-			}
-
-			// Apply UserScope filter (per billing-dual-track.md §5.3):
-			// - nil scope  → personal User Budget, only matches personal VK
-			// - TeamID set → matches VK with matching TeamID
-			// - CustomerID set → matches VK with matching CustomerID
-			hasTeamScope := budgetValue.UserScopeTeamID != nil
-			hasCustomerScope := budgetValue.UserScopeCustomerID != nil
-
-			if hasTeamScope && (vk.TeamID == nil || *budgetValue.UserScopeTeamID != *vk.TeamID) {
-				return true
-			}
-			if hasCustomerScope && (vk.CustomerID == nil || *budgetValue.UserScopeCustomerID != *vk.CustomerID) {
-				return true
-			}
-			if !hasTeamScope && !hasCustomerScope && (vk.TeamID != nil || vk.CustomerID != nil) {
-				// Personal-only User Budget, skip for org VKs
-				return true
-			}
-
-			if _, ok := entityWiseBudgets["User"]; !ok {
-				entityWiseBudgets["User"] = []*configstoreTables.TableBudget{}
-			}
-			entityWiseBudgets["User"] = append(entityWiseBudgets["User"], budgetValue)
-			seen[budgetValue.ID] = true
-			return true
-		})
 	}
 
 	var teamCustomerID string
@@ -2899,43 +2771,28 @@ func (gs *LocalGovernanceStore) DeleteCustomerInMemory(ctx context.Context, cust
 	gs.customers.Delete(customerID)
 }
 
-// GetUserGovernance retrieves user governance data by user ID (lock-free)
+// GetUserGovernance retrieves user governance data by user ID (enterprise-only, lock-free)
 func (gs *LocalGovernanceStore) GetUserGovernance(ctx context.Context, userID string) (*UserGovernance, bool) {
-	if userGovValue, exists := gs.userGovernance.Load(userID); exists && userGovValue != nil {
-		if userGov, ok := userGovValue.(*UserGovernance); ok {
-			return userGov, true
-		}
-	}
+	// User governance is part of enterprise
 	return nil, false
 }
 
-// CreateUserGovernanceInMemory adds user governance data to the in-memory store
+// CreateUserGovernanceInMemory adds user governance data to the in-memory store (enterprise-only)
 func (gs *LocalGovernanceStore) CreateUserGovernanceInMemory(ctx context.Context, userID string, budget *configstoreTables.TableBudget, rateLimit *configstoreTables.TableRateLimit) {
-	userGov := &UserGovernance{}
-	if budget != nil {
-		userGov.BudgetID = &budget.ID
-	}
-	if rateLimit != nil {
-		userGov.RateLimitID = &rateLimit.ID
-	}
-	gs.userGovernance.Store(userID, userGov)
+	// NoOp
+	// Available in enterprise
 }
 
-// UpdateUserGovernanceInMemory updates user governance data in the in-memory store
+// UpdateUserGovernanceInMemory updates user governance data in the in-memory store (enterprise-only)
 func (gs *LocalGovernanceStore) UpdateUserGovernanceInMemory(ctx context.Context, userID string, budget *configstoreTables.TableBudget, rateLimit *configstoreTables.TableRateLimit) {
-	userGov := &UserGovernance{}
-	if budget != nil {
-		userGov.BudgetID = &budget.ID
-	}
-	if rateLimit != nil {
-		userGov.RateLimitID = &rateLimit.ID
-	}
-	gs.userGovernance.Store(userID, userGov)
+	// NoOp
+	// Available in enterprise
 }
 
-// DeleteUserGovernanceInMemory removes user governance data from the in-memory store
+// DeleteUserGovernanceInMemory removes user governance data from the in-memory store (enterprise-only)
 func (gs *LocalGovernanceStore) DeleteUserGovernanceInMemory(ctx context.Context, userID string) {
-	gs.userGovernance.Delete(userID)
+	// NoOp
+	// Available in enterprise
 }
 
 // UpdateModelConfigInMemory adds or updates a model config in the in-memory store (lock-free)

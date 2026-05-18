@@ -58,6 +58,9 @@ func ParseDuration(duration string) (time.Duration, error) {
 	if duration == "" {
 		return 0, fmt.Errorf("duration is empty")
 	}
+	if duration == "0" {
+		return 0, nil
+	}
 
 	// Handle special cases for days, weeks, months, years
 	switch {
