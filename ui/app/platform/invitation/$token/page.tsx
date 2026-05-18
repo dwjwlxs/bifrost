@@ -110,8 +110,8 @@ export default function InvitationPage() {
 			<header className="border-b bg-white">
 				<div className="container mx-auto px-4 py-4">
 					<Link to="/platform/home" className="flex items-center gap-2">
-						<img src="/bifrost-icon.webp" alt="Bifrost" className="h-8 w-8" />
-						<span className="text-xl font-bold">Bifrost</span>
+						<img src="/ecerai_logo_img.png" alt="EcerAI" className="h-8 w-8" />
+						<span className="text-xl font-bold">EcerAI</span>
 					</Link>
 				</div>
 			</header>

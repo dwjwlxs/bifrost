@@ -21,6 +21,7 @@ const publicNavItems = [
 	{ label: "About", to: "/platform/about" },
 	{ label: "Models", to: "/platform/model" },
 	{ label: "Pricing", to: "/platform/pricing" },
+	{ label: "Docs", to: "/platform/docs" },
 ];
 
 /**
@@ -44,8 +45,8 @@ export function PlatformHeader() {
 			<header className="bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50 w-full border-b backdrop-blur">
 				<div className="container mx-auto flex h-14 items-center px-4">
 					<Link to="/platform/home" className="flex items-center gap-2">
-						<img src="/bifrost-icon.webp" alt="Bifrost" className="h-6 w-6" />
-						<span className="font-bold">Bifrost</span>
+						<img src="/ecerai_logo_img.png" alt="EcerAI" className="h-6 w-6" />
+						<span className="font-bold">EcerAI</span>
 					</Link>
 				</div>
 			</header>
@@ -57,8 +58,8 @@ export function PlatformHeader() {
 			<div className="container mx-auto flex h-14 items-center px-4">
 				{/* Logo */}
 				<Link to="/platform/home" className="mr-6 flex items-center gap-2">
-					<img src="/bifrost-icon.webp" alt="Bifrost" className="h-6 w-6" />
-					<span className="font-bold sm:inline-block">Bifrost</span>
+					<img src="/ecerai_logo_img.png" alt="EcerAI" className="h-6 w-6" />
+					<span className="font-bold sm:inline-block">EcerAI</span>
 				</Link>
 
 				{/* Nav Links — only shown on public pages */}
@@ -141,8 +142,8 @@ export function PlatformFooter() {
 			<div className="container mx-auto">
 				<div className="flex flex-col items-center justify-between gap-4 md:flex-row">
 					<div className="flex items-center gap-2">
-						<img src="/bifrost-icon.webp" alt="Bifrost" className="h-5 w-5" />
-						<span className="text-sm font-bold">Bifrost</span>
+						<img src="/ecerai_logo_img.png" alt="EcerAI" className="h-5 w-5" />
+						<span className="text-sm font-bold">EcerAI</span>
 					</div>
 					<div className="text-muted-foreground flex gap-6 text-sm">
 						<Link to="/platform/about" className="hover:text-foreground">
@@ -154,11 +155,11 @@ export function PlatformFooter() {
 						<Link to="/platform/pricing" className="hover:text-foreground">
 							Pricing
 						</Link>
-						<a href="https://docs.getbifrost.ai" className="hover:text-foreground">
+						<Link to="/platform/docs" className="hover:text-foreground">
 							Docs
-						</a>
+						</Link>
 					</div>
-					<div className="text-muted-foreground text-sm">© 2024 Bifrost. All rights reserved.</div>
+					<div className="text-muted-foreground text-sm">© 2026 EcerAI. All rights reserved.</div>
 				</div>
 			</div>
 		</footer>

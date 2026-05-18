@@ -440,7 +440,7 @@ export default function ModelPage() {
 				<div className="container mx-auto text-center">
 					<h2 className="mb-4 text-4xl font-bold">Access every model through one API</h2>
 					<p className="mx-auto mb-8 max-w-2xl text-lg text-indigo-200">
-						Create your free account and get an API key in seconds. No credit card required.
+						Create your account and get an API key in seconds.
 					</p>
 					<Link to="/platform/register">
 						<Button size="lg" variant="secondary" className="gap-2" data-testid="model-bottom-cta">
