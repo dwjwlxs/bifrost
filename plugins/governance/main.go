@@ -1314,11 +1314,8 @@ func (p *GovernancePlugin) isMCPToolAllowedByVKWith(vk *configstoreTables.TableV
 //   - *schemas.LLMPluginShortCircuit: The plugin short circuit if the request is not allowed
 //   - error: Any error that occurred during processing
 func (p *GovernancePlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
-	// DEBUG: unconditional entry log
-	p.logger.Info("[GOVERNANCE-DEBUG] PreLLMHook ENTERED: skipKeySel=%v\n", bifrost.GetBoolFromContext(ctx, schemas.BifrostContextKeySkipKeySelection))
 	// If its skip key selection - in that case we need to skip virtual key selection too
 	if bifrost.GetBoolFromContext(ctx, schemas.BifrostContextKeySkipKeySelection) {
-		p.logger.Info("[GOVERNANCE-DEBUG] PreLLMHook SKIP: SkipKeySelection=true, returning early")
 		return req, nil, nil
 	}
 	// Validate required headers are present
@@ -1340,15 +1337,6 @@ func (p *GovernancePlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.
 	}
 	// Evaluate governance using common function
 	_, bifrostError := p.EvaluateGovernanceRequest(ctx, evaluationRequest, req.RequestType)
-	// DEBUG: log identity fields after governance evaluation
-	p.logger.Info("[GOVERNANCE-DEBUG] PreLLMHook after EvaluateGovernanceRequest: vkRaw=%s vkID=%s vkName=%s teamID=%s customerID=%s userID=%s",
-		virtualKeyValue,
-		bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceVirtualKeyID),
-		bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceVirtualKeyName),
-		bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceTeamID),
-		bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceCustomerID),
-		bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyUserID),
-	)
 	// Convert BifrostError to LLMPluginShortCircuit if needed
 	if bifrostError != nil {
 		return req, &schemas.LLMPluginShortCircuit{
