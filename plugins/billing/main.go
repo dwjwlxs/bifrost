@@ -184,8 +184,9 @@ func (p *BillingPlugin) PreLLMHook(ctx *schemas.BifrostContext, request *schemas
 	}
 
 	if len(budgets) == 0 {
-		// 无 billing budget，跳过
-		return request, nil, nil
+		return request, &schemas.LLMPluginShortCircuit{
+			Error: BifrostErrBillingBudgetExceeded,
+		}, nil
 	}
 
 	// Check（OR 逻辑）——任意 budget 有余额则允许
