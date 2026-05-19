@@ -303,7 +303,7 @@ func (p *BillingPlugin) loadVKHierarchy(ctx context.Context) error {
 			CustomerID: vk.CustomerID,
 			UserID:     vk.UserID,
 		}
-		if err := p.budgetStore.SetVKHierarchy(ctx, vk.ID, data); err != nil {
+		if err := p.budgetStore.SetVKHierarchy(ctx, vk.Value, data); err != nil {
 			p.logger.Error("failed to cache VK %s: %v", vk.ID, err)
 		}
 	}
@@ -374,7 +374,7 @@ func (p *BillingPlugin) RegisterRoutes(r *router.Router, outerMiddlewares ...sch
 
 	// Invitations
 	invitationHandler := handlers.NewPlatformInvitationHandler(p.pluginConfig)
-	invitationHandler.RegisterRoutes(r)
+	invitationHandler.RegisterRoutes(r, middlewares...)
 
 	// Teams
 	teamHandler := handlers.NewPlatformTeamHandler(p.pluginConfig)
@@ -393,8 +393,12 @@ func (p *BillingPlugin) RegisterRoutes(r *router.Router, outerMiddlewares ...sch
 	orgUsageHandler.RegisterRoutes(r, middlewares...)
 
 	// Virtual keys
-	vkHandler := handlers.NewPlatformVKHandler(p.pluginConfig)
+	vkHandler := handlers.NewPlatformVKHandler(p.pluginConfig, p.budgetStore)
 	vkHandler.RegisterRoutes(r, middlewares...)
+
+	// Price
+	priceHandler := handlers.NewPlatformPriceHandler(p.pluginConfig)
+	priceHandler.RegisterRoutes(r, middlewares...)
 }
 
 // GetGatewayConfig 返回 payment gateway 配置
