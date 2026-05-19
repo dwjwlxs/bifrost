@@ -27,15 +27,13 @@ func NewPlatformInvitationHandler(config *bconfig.BillingPluginConfig) *Platform
 	return &PlatformInvitationHandler{db: config.Config.ConfigStore.DB(), svc: svc}
 }
 
-// RegisterRoutes registers public invitation routes (no platform auth middleware).
-func (h *PlatformInvitationHandler) RegisterRoutes(r *router.Router) {
-	r.GET("/api/platform/invitations/{token}", lib.ChainMiddlewares(h.getInvitationDetails))
-}
+// RegisterRoutes
+func (h *PlatformInvitationHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.BifrostHTTPMiddleware) {
 
-// RegisterAcceptRoute registers the accept invitation route on the given router group.
-// The accept route requires platform auth middleware.
-func (h *PlatformInvitationHandler) RegisterAcceptRoute(r *router.Router, mw ...schemas.BifrostHTTPMiddleware) {
-	r.POST("/api/platform/invitations/{token}/accept", lib.ChainMiddlewares(h.acceptInvitation, mw...))
+	// registers public invitation routes (no platform auth middleware)
+	r.GET("/api/platform/invitations/{token}", lib.ChainMiddlewares(h.getInvitationDetails))
+
+	r.POST("/api/platform/invitations/{token}/accept", lib.ChainMiddlewares(h.acceptInvitation, middlewares...))
 }
 
 // getInvitationDetails handles GET /api/platform/invitations/:token — public, no auth required.

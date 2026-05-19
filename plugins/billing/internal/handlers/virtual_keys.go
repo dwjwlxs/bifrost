@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
 	"github.com/maximhq/bifrost/plugins/billing/internal/config"
+	"github.com/maximhq/bifrost/plugins/billing/store"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
 	"gorm.io/gorm"
@@ -23,13 +25,15 @@ import (
 type PlatformVKHandler struct {
 	db          *gorm.DB
 	configStore configstore.ConfigStore // unused but kept for future extensibility
+	budgetStore store.BudgetStore
 }
 
 // NewPlatformVKHandler creates a new PlatformVKHandler.
-func NewPlatformVKHandler(config *config.BillingPluginConfig) *PlatformVKHandler {
+func NewPlatformVKHandler(config *config.BillingPluginConfig, budgetStore store.BudgetStore) *PlatformVKHandler {
 	return &PlatformVKHandler{
 		db:          config.Config.ConfigStore.DB(),
 		configStore: config.Config.ConfigStore,
+		budgetStore: budgetStore,
 	}
 }
 
@@ -186,9 +190,9 @@ func (h *PlatformVKHandler) createVK(ctx *fasthttp.RequestCtx) {
 		for _, p := range providerList {
 			pc := tables.TableVirtualKeyProviderConfig{
 				VirtualKeyID:  vkID,
-				Provider:     p.Name,
+				Provider:      p.Name,
 				AllowedModels: schemas.WhiteList{"*"},
-				AllowAllKeys: true,
+				AllowAllKeys:  true,
 			}
 			if err := tx.Create(&pc).Error; err != nil {
 				return fmt.Errorf("failed to create provider config for %s: %w", p.Name, err)
@@ -220,7 +224,6 @@ func (h *PlatformVKHandler) createVK(ctx *fasthttp.RequestCtx) {
 		}
 		return nil
 	})
-
 	if err != nil {
 		// Check if error is a validation error
 		if strings.Contains(err.Error(), "invalid budget_reset_duration format") {
@@ -233,6 +236,13 @@ func (h *PlatformVKHandler) createVK(ctx *fasthttp.RequestCtx) {
 
 	// Reload VK with budgets.
 	h.db.Preload("Budgets").First(&vk, "id = ?", vkID)
+
+	h.budgetStore.SetVKHierarchy(context.TODO(), vk.Value, &store.VKHierarchyData{
+		ID:         vk.ID,
+		TeamID:     vk.TeamID,
+		CustomerID: vk.CustomerID,
+		UserID:     vk.UserID,
+	})
 
 	SendJSON(ctx, map[string]any{
 		"code":    "0",
@@ -342,6 +352,12 @@ func (h *PlatformVKHandler) updateVK(ctx *fasthttp.RequestCtx) {
 	// Reload VK with budgets.
 	h.db.Preload("Budgets").First(&vk, "id = ?", vkID)
 
+	h.budgetStore.SetVKHierarchy(context.TODO(), vk.Value, &store.VKHierarchyData{
+		ID:         vk.ID,
+		TeamID:     vk.TeamID,
+		CustomerID: vk.CustomerID,
+		UserID:     vk.UserID,
+	})
 	SendJSON(ctx, map[string]any{
 		"code":    "0",
 		"message": "success",
