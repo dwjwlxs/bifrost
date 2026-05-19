@@ -121,6 +121,10 @@ github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f h1:lO4WD4F/r
 github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cuUVRXasLTGF7a8hSLbxyZXjz+1KgoB3wDUb6vlszIc=
 github.com/dlclark/regexp2 v1.11.4 h1:rPYF9/LECdNymJufQKmri9gV604RvvABwgOA8un7yAo=
 github.com/dlclark/regexp2 v1.11.4/go.mod h1:DHkYz0B9wPfa6wondMfaivmHpzrQ3v9q8cnmRbL6yW8=
+github.com/dwjwlxs/bifrost/core v1.5.4 h1:q6ppKaPtVrVpgtX8R5kYb0FP44Lr5MYjJZDpqRJFfso=
+github.com/dwjwlxs/bifrost/core v1.5.4/go.mod h1:KbI/Ewi1/yOy6Koa5biayymE1tpt5CBEAzBHPwDV7n8=
+github.com/dwjwlxs/bifrost/framework v1.3.4 h1:+L22Ss+5k2EhOzScoe4YGqlbXVmYd7kjz7ZVKJ000S4=
+github.com/dwjwlxs/bifrost/framework v1.3.4/go.mod h1:lcjPJgD/BZnRru7c+hy8n9FWB27cZm9Qa9VkwDP9zbI=
 github.com/envoyproxy/go-control-plane v0.14.0 h1:hbG2kr4RuFj222B6+7T83thSPqLjwBIfQawTkC++2HA=
 github.com/envoyproxy/go-control-plane v0.14.0/go.mod h1:NcS5X47pLl/hfqxU70yPwL9ZMkUlwlKxtAohpi2wBEU=
 github.com/envoyproxy/go-control-plane/envoy v1.36.0 h1:yg/JjO5E7ubRyKX3m07GF3reDNEnfOboJ0QySbH736g=
@@ -267,8 +271,6 @@ github.com/mattn/go-sqlite3 v1.14.32 h1:JD12Ag3oLy1zQA+BNn74xRgaBbdhbNIDYvQUEuuE
 github.com/mattn/go-sqlite3 v1.14.32/go.mod h1:Uh1q+B4BYcTPb+yiD3kU8Ct7aC0hY9fxUwlHK0RXw+Y=
 github.com/maximhq/bifrost/plugins/compat v0.1.2 h1:sEndxyInWE5ElyzD5zh5dnSzQxyCHaChoPUDnDpLez0=
 github.com/maximhq/bifrost/plugins/compat v0.1.2/go.mod h1:fyJavMtKjndzjaSah2VBFxfx5KWI+Uyz8APgSpvJw1Y=
-github.com/maximhq/bifrost/plugins/governance v1.5.3 h1:y3W+0I0vGQb4jWsOpSCX8ZVwMF9FTDzeCCUwc5hfEAs=
-github.com/maximhq/bifrost/plugins/governance v1.5.3/go.mod h1:9X0PQrQkEIq7mc9iokNrl0pBbY+Y8qn0ArHS9Zj5BD0=
 github.com/maximhq/bifrost/plugins/logging v1.5.3 h1:wztw6avoSseMf5s9Y9SmkgENbinC7YHnIYuwCln2vcU=
 github.com/maximhq/bifrost/plugins/logging v1.5.3/go.mod h1:i48eAglQgNxXI0m2w6LVCExIZhO2QUlJdSFPVj1xS9k=
 github.com/maximhq/bifrost/plugins/maxim v1.6.3 h1:0z00pupCj1FgruPntuqENW33RUP3BWGKT8QgydJC9JA=

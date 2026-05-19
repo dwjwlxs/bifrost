@@ -3,10 +3,10 @@ module github.com/maximhq/bifrost/plugins/billing
 go 1.26.1
 
 replace (
-	github.com/maximhq/bifrost/core => ../../core
-	github.com/maximhq/bifrost/framework => ../../framework
-	github.com/maximhq/bifrost/transports => ../../transports
+	github.com/maximhq/bifrost/core => github.com/dwjwlxs/bifrost/core v1.5.4
+	github.com/maximhq/bifrost/framework => github.com/dwjwlxs/bifrost/framework v1.3.4
 	github.com/maximhq/bifrost/plugins/governance => ../../plugins/governance
+	github.com/maximhq/bifrost/transports => ../../transports
 )
 
 require (
@@ -33,7 +33,6 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	cloud.google.com/go/iam v1.5.3 // indirect
-	github.com/maximhq/bifrost/plugins/governance v1.5.3 // indirect
 	cloud.google.com/go/monitoring v1.24.3 // indirect
 	cloud.google.com/go/storage v1.61.3 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
@@ -129,6 +128,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-sqlite3 v1.14.32 // indirect
 	github.com/maximhq/bifrost/plugins/compat v0.1.2 // indirect
+	github.com/maximhq/bifrost/plugins/governance v1.5.3 // indirect
 	github.com/maximhq/bifrost/plugins/logging v1.5.3 // indirect
 	github.com/maximhq/bifrost/plugins/maxim v1.6.3 // indirect
 	github.com/maximhq/bifrost/plugins/mocker v1.5.3 // indirect
