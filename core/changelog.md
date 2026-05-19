@@ -1,0 +1,8 @@
+- fix: use redis to share billing data across multi-nodes
+- fix: accumulate success count instead of overwriting in logstore
+- fix: sync budget store and wrap order update in transaction
+- fix: correct VK hierarchy caching and improve route registration
+- fix: bypass error to ensure billing MVP functionality
+- fix: handle empty billing budgets case
+- feat: add custom GORM logger with log level support
+- feat: replace UUID generation with UUID v7 for better ordering

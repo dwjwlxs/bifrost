@@ -1,0 +1,3 @@
+- fix: accumulate success count instead of overwriting in logstore
+- feat: add dimension rankings and personal usage analytics endpoints
+- refactor: migrate handlers to use unified config struct

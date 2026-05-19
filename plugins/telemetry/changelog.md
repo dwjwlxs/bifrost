@@ -1,0 +1,2 @@
+- fix: use redis to share billing data across multi-nodes
+- chore: upgraded core to v1.5.4 and framework to v1.3.4

@@ -1,0 +1,25 @@
+- fix: accumulate success count instead of overwriting in logstore
+- fix: remove unused code
+- feat: add dimension rankings and personal usage analytics endpoints
+- feat: migrate handlers to use unified config struct
+- feat: add Alipay payment gateway integration and multi-gateway support
+- feat: add user provider config support and enhance governance context handling
+- feat: add new tables for platform packages, entity packages, and user provider configs
+- feat: init PaymentGateway and BillingService
+- feat: add dual-track budget system with hybrid billing logic
+- feat: migrate to multi-budget support for customers
+- fix: improve logout handling and error logging in auth flow
+- fix: update things when invite people
+- refactor: unify migration entry
+- refactor: org and teams and invite member and simplify message sending
+- refactor: rename and unify user name fields in JWT claims and related code
+- feat: add username support and uniqueness validation
+- feat: add user listing with pagination and search support
+- refactor: unify platform JWT issuance and refresh token cookie handling
+- refactor: unify middleware appending and avoid trailing slash issues
+- feat: move refresh token to httpOnly cookie and update platform UI
+- feat: add admin users and organizations management page
+- feat: enable consumer auth service with JWT and key rotation
+- refactor: enhance error handling and standardize JSON responses
+- feat: implement email verification resend and platform token verification
+- feat: platform multi tenant api
