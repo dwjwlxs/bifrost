@@ -533,21 +533,16 @@ func (s *BillingService) provisionPackage(
 	if err := tx.Create(&budget).Error; err != nil {
 		return nil, fmt.Errorf("create budget: %w", err)
 	}
-	// Sync to budget store (Redis/memory) so DeductBillingBudgets can find it immediately.
-	if s.budgetStore != nil {
-		if err := s.budgetStore.Set(context.TODO(), budget.ID, &budget); err != nil {
-			return nil, fmt.Errorf("sync budget to store: %w", err) // TODO: ctx
-		}
-	}
 
 	// 2. Create RateLimit if package has one
 	var rateLimitID *string
 	if pkg.RateLimitConfig != "" {
-		rl, err := createRateLimitFromJSON(tx, pkg.RateLimitConfig)
-		if err != nil {
-			return nil, fmt.Errorf("create rate limit: %w", err)
-		}
-		rateLimitID = &rl.ID
+		// TODO: fix this, Incorrect datetime value: '0000-00-00' for column 'token_last_reset'
+		// rl, err := createRateLimitFromJSON(tx, pkg.RateLimitConfig)
+		// if err != nil {
+		// 	return nil, fmt.Errorf("create rate limit: %w", err)
+		// }
+		// rateLimitID = &rl.ID
 	}
 
 	// 3. Upsert UserProviderConfig per provider (if AllowedModels is specified)
@@ -594,6 +589,13 @@ func (s *BillingService) provisionPackage(
 	order.EntityPackageID = &epID
 	if err := tx.Save(order).Error; err != nil {
 		return nil, fmt.Errorf("update order with entity_package_id: %w", err)
+	}
+
+	// Sync to budget store (Redis/memory) so DeductBillingBudgets can find it immediately.
+	if s.budgetStore != nil {
+		if err := s.budgetStore.Set(context.TODO(), budget.ID, &budget); err != nil {
+			return nil, fmt.Errorf("sync budget to store: %w", err) // TODO: ctx
+		}
 	}
 
 	return &ep, nil
@@ -988,30 +990,41 @@ func (s *BillingService) HandleWebhookResult(ctx context.Context, result *Webhoo
 		order.PaymentMethod = result.PaymentMethod
 		order.PaidAt = &now
 
-		if err := s.db.WithContext(ctx).Save(&order).Error; err != nil {
+		err := s.db.Transaction(func(tx *gorm.DB) error {
+			// Execute business logic based on order type
+			switch order.Type {
+			case tables.OrderTypeRecharge:
+				dollars := order.Credits / 100.0
+				budget, err := s.findOrCreateBalanceBudget(s.db, order.UserID, order.TenantType, order.TenantID, dollars)
+				if err != nil {
+					return fmt.Errorf("recharge budget for order %s: %w", order.OrderNo, err)
+				}
+				// 刷新远端缓存，确保缓存与数据库一致
+				if s.budgetStore != nil {
+					if err := s.budgetStore.Set(ctx, budget.ID, budget); err != nil {
+						return fmt.Errorf("set budget: %w", err)
+					}
+				}
+
+			case tables.OrderTypePackagePurchase:
+				if order.PackageID == nil {
+					return fmt.Errorf("order %s: missing package_id for purchase order", order.OrderNo)
+				}
+				var pkg tables.TablePlatformPackage
+				if err := s.db.WithContext(ctx).First(&pkg, "id = ?", *order.PackageID).Error; err != nil {
+					return fmt.Errorf("find package for order %s: %w", order.OrderNo, err)
+				}
+				if _, err := s.provisionPackage(s.db, &order, &pkg, order.UserID, nil, order.TenantType, order.TenantID); err != nil {
+					return fmt.Errorf("provision package for order %s: %w", order.OrderNo, err)
+				}
+			}
+			if err := s.db.WithContext(ctx).Save(&order).Error; err != nil {
+				return fmt.Errorf("update order %s to success: %w", order.OrderNo, err)
+			}
+			return nil
+		})
+		if err != nil {
 			return fmt.Errorf("update order %s to success: %w", order.OrderNo, err)
-		}
-
-		// Execute business logic based on order type
-		switch order.Type {
-		case tables.OrderTypeRecharge:
-			dollars := order.Credits / 100.0
-			_, err := s.findOrCreateBalanceBudget(s.db, order.UserID, order.TenantType, order.TenantID, dollars)
-			if err != nil {
-				return fmt.Errorf("recharge budget for order %s: %w", order.OrderNo, err)
-			}
-
-		case tables.OrderTypePackagePurchase:
-			if order.PackageID == nil {
-				return fmt.Errorf("order %s: missing package_id for purchase order", order.OrderNo)
-			}
-			var pkg tables.TablePlatformPackage
-			if err := s.db.WithContext(ctx).First(&pkg, "id = ?", *order.PackageID).Error; err != nil {
-				return fmt.Errorf("find package for order %s: %w", order.OrderNo, err)
-			}
-			if _, err := s.provisionPackage(s.db, &order, &pkg, order.UserID, nil, order.TenantType, order.TenantID); err != nil {
-				return fmt.Errorf("provision package for order %s: %w", order.OrderNo, err)
-			}
 		}
 
 	case "expired":
