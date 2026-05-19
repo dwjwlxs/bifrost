@@ -3,7 +3,7 @@ module github.com/maximhq/bifrost/framework
 go 1.26.1
 
 replace (
-	github.com/maximhq/bifrost/core => ../core
+	github.com/maximhq/bifrost/core => github.com/dwjwlxs/bifrost/core v1.5.4
 	github.com/maximhq/bifrost/framework => ./
 )
 
