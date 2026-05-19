@@ -4,7 +4,7 @@ package payment
 import (
 	"context"
 
-	"github.com/maximhq/bifrost/plugins/billing/internal/repos/billingstore/tables"
+	"github.com/dwjwlxs/bifrost/plugins/billing/internal/repos/billingstore/tables"
 )
 
 // PaymentGateway abstracts a payment provider (Stripe, AliPay, manual admin, etc.).

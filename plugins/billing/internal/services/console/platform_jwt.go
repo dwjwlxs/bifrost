@@ -7,9 +7,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/dwjwlxs/bifrost/plugins/billing/internal/model"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/maximhq/bifrost/plugins/billing/internal/model"
 )
 
 // ─── Platform JWT (multi-tenant, string UUID user IDs) ─────────

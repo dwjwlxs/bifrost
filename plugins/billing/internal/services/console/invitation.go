@@ -6,10 +6,10 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/dwjwlxs/bifrost/plugins/billing/internal/model"
+	"github.com/dwjwlxs/bifrost/plugins/billing/internal/repos/billingstore/tables"
+	"github.com/dwjwlxs/bifrost/plugins/billing/pkg/messenger"
 	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/plugins/billing/internal/model"
-	"github.com/maximhq/bifrost/plugins/billing/internal/repos/billingstore/tables"
-	"github.com/maximhq/bifrost/plugins/billing/pkg/messenger"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )

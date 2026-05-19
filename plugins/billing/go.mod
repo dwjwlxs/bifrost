@@ -1,4 +1,4 @@
-module github.com/maximhq/bifrost/plugins/billing
+module github.com/dwjwlxs/bifrost/plugins/billing
 
 go 1.26.1
 

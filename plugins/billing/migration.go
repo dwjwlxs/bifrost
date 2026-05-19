@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/dwjwlxs/bifrost/plugins/billing/internal/repos/billingstore/tables"
+	"github.com/dwjwlxs/bifrost/plugins/billing/internal/services/authn"
 	"github.com/maximhq/bifrost/framework/configstore"
 	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
 	"github.com/maximhq/bifrost/framework/migrator"
-	"github.com/maximhq/bifrost/plugins/billing/internal/repos/billingstore/tables"
-	"github.com/maximhq/bifrost/plugins/billing/internal/services/authn"
 	"gorm.io/gorm"
 )
 

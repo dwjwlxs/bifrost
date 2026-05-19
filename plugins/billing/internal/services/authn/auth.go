@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dwjwlxs/bifrost/plugins/billing/pkg/messenger"
 	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/plugins/billing/pkg/messenger"
 )
 
 // AuthService defines the public interface for consumer authentication.

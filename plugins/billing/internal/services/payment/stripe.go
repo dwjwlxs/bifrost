@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/maximhq/bifrost/plugins/billing/internal/repos/billingstore/tables"
+	"github.com/dwjwlxs/bifrost/plugins/billing/internal/repos/billingstore/tables"
 )
 
 var _ PaymentGateway = (*StripeGateway)(nil)

@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dwjwlxs/bifrost/plugins/billing/internal/handlers"
+	authsvc "github.com/dwjwlxs/bifrost/plugins/billing/internal/services/authn"
 	"github.com/fasthttp/router"
 	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/plugins/billing/internal/handlers"
-	authsvc "github.com/maximhq/bifrost/plugins/billing/internal/services/authn"
 	"github.com/valyala/fasthttp"
 )
 
