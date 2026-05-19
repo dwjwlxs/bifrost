@@ -3,12 +3,15 @@ module github.com/maximhq/bifrost/transports
 go 1.26.1
 
 replace (
-	github.com/maximhq/bifrost/core => ../core
-	github.com/maximhq/bifrost/framework => ../framework
-	github.com/maximhq/bifrost/plugins/billing => ../plugins/billing
+	github.com/maximhq/bifrost/core => github.com/dwjwlxs/bifrost/core v1.5.4
+	github.com/maximhq/bifrost/framework => github.com/dwjwlxs/bifrost/framework v1.3.4
+	github.com/maximhq/bifrost/plugins/billing => github.com/dwjwlxs/bifrost/plugins/billing v0.1.0
+	github.com/maximhq/bifrost/plugins/governance => github.com/dwjwlxs/bifrost/plugins/governance v1.5.4
+	github.com/maximhq/bifrost/plugins/logging => github.com/dwjwlxs/bifrost/plugins/logging v1.5.4
+)
+
+replace (
 	github.com/maximhq/bifrost/plugins/compat => github.com/dwjwlxs/bifrost/plugins/compat v0.1.2
-	github.com/maximhq/bifrost/plugins/governance => ../plugins/governance
-	github.com/maximhq/bifrost/plugins/logging => github.com/dwjwlxs/bifrost/plugins/logging v1.5.3
 	github.com/maximhq/bifrost/plugins/maxim => github.com/dwjwlxs/bifrost/plugins/maxim v1.6.3
 	github.com/maximhq/bifrost/plugins/otel => github.com/dwjwlxs/bifrost/plugins/otel v1.2.3
 	github.com/maximhq/bifrost/plugins/prompts => github.com/dwjwlxs/bifrost/plugins/prompts v1.0.3
