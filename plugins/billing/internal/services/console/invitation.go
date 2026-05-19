@@ -183,7 +183,7 @@ func (s *InvitationServiceImpl) renderInviteTemplate(data model.InviteData) (str
 <body>
     <div class="container">
         <div class="header">
-            <h1>Bifrost</h1>
+            <h1>ecerAI</h1>
         </div>
         <div class="content">
             <p class="greeting">You've been invited to join <strong>{{.OrgName}}</strong></p>
