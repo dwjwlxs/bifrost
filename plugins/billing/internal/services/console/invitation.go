@@ -69,9 +69,9 @@ func (s *InvitationServiceImpl) CreateInvitation(teamID string, orgID *string, e
 			AcceptURL:   acceptURL,
 			ExpiresIn:   "7 days",
 		}
-		subject := "You've been invited to join " + orgName
+		subject := "dRouter —— You've been invited to join " + orgName
 		if teamName != "" {
-			subject = "You've been invited to join " + orgName + " team " + teamName
+			subject = "dRouter —— You've been invited to join " + orgName + " team " + teamName
 		}
 		if err := s.sendInvitation(email, subject, inviteData); err != nil {
 			s.logger.Warn("failed to send invitation email to %s: %v", email, err)
@@ -183,7 +183,7 @@ func (s *InvitationServiceImpl) renderInviteTemplate(data model.InviteData) (str
 <body>
     <div class="container">
         <div class="header">
-            <h1>ecerAI</h1>
+            <h1>dRouter</h1>
         </div>
         <div class="content">
             <p class="greeting">You've been invited to join <strong>{{.OrgName}}</strong></p>
