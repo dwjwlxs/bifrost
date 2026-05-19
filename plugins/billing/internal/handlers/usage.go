@@ -220,11 +220,14 @@ func (h *PlatformUsageHandler) buildStabilityAll(ctx *fasthttp.RequestCtx, filte
 
 	// Use p90/p95/p99 from the last bucket if available (approximation from store)
 	var p90, p95, p99 float64
-	if len(buckets) > 0 {
-		last := buckets[len(buckets)-1]
-		p90 = last.P90Latency
-		p95 = last.P95Latency
-		p99 = last.P99Latency
+	for i := len(buckets) - 1; i >= 0; i-- {
+		last := buckets[i]
+		if last.TotalRequests > 0 {
+			p90 = last.P90Latency
+			p95 = last.P95Latency
+			p99 = last.P99Latency
+			break
+		}
 	}
 
 	SendJSON(ctx, map[string]any{

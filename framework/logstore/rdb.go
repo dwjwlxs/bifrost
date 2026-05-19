@@ -1621,7 +1621,7 @@ func (s *RDBLogStore) getLatencyHistogramMySQL(ctx context.Context, baseQuery *g
 			bucketMap[r.BucketTimestamp] = bd
 			orderedKeys = append(orderedKeys, r.BucketTimestamp)
 		}
-		bd.success = r.Success
+		bd.success += r.Success
 		bd.latencies = append(bd.latencies, r.Latency)
 	}
 
