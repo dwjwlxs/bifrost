@@ -29,7 +29,7 @@ const plans: Plan[] = [
 	{
 		name: "Free",
 		price: 0,
-		description: "For developers exploring EcerAI",
+		description: "For developers exploring dRouter",
 		cta: "Start for Free",
 		ctaVariant: "outline",
 		highlight: false,
@@ -163,7 +163,7 @@ const faqs = [
 	},
 	{
 		q: "What counts as a 'request'?",
-		a: "Each call to the EcerAI inference API counts as one request, regardless of the number of tokens or the provider used. Streaming responses count as a single request.",
+		a: "Each call to the dRouter inference API counts as one request, regardless of the number of tokens or the provider used. Streaming responses count as a single request.",
 	},
 	{
 		q: "Can I bring my own provider API keys?",

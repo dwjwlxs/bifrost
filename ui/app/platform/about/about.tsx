@@ -68,7 +68,7 @@ const advantages = [
 ];
 
 const timeline = [
-	{ year: "2023", event: "EcerAI open-sourced on GitHub", detail: "Core engine with 5 initial providers" },
+	{ year: "2023", event: "dRouter open-sourced on GitHub", detail: "Core engine with 5 initial providers" },
 	{ year: "2024", event: "20+ providers, MCP gateway", detail: "Plugin system, semantic cache, telemetry" },
 	{ year: "2025", event: "Enterprise platform launches", detail: "RBAC, multi-tenant, SLA guarantees" },
 	{ year: "Now", event: "~11µs at 5,000 RPS", detail: "Production-hardened at global scale" },
@@ -101,7 +101,7 @@ export default function AboutPage() {
 						<span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">Built to Last</span>
 					</h1>
 					<p className="mx-auto mb-10 max-w-2xl text-xl leading-relaxed text-slate-300">
-						EcerAI unifies 20+ LLM providers behind a single OpenAI-compatible API with ~11µs overhead. High performance. Provider
+						dRouter unifies 20+ LLM providers behind a single OpenAI-compatible API with ~11µs overhead. High performance. Provider
 						isolation. Open source forever.
 					</p>
 					<div className="flex flex-wrap justify-center gap-4">
@@ -129,13 +129,13 @@ export default function AboutPage() {
 				</div>
 			</section>
 
-			{/* What is EcerAI */}
+			{/* What is dRouter */}
 			<section className="px-4 py-24">
 				<div className="container mx-auto max-w-5xl">
 					<div className="grid items-center gap-16 lg:grid-cols-2">
 						<div>
 							<Badge variant="secondary" className="mb-4 border-blue-100 bg-blue-50 text-blue-600">
-								What is EcerAI?
+								What is dRouter?
 							</Badge>
 							<h2 className="mb-6 text-4xl leading-tight font-bold text-slate-900">
 								One API to rule
@@ -144,8 +144,8 @@ export default function AboutPage() {
 							</h2>
 							<div className="space-y-4 leading-relaxed text-slate-600">
 								<p>
-									EcerAI is a high-performance AI gateway that sits between your application and every major LLM provider. Instead of
-									integrating OpenAI, Anthropic, Google, and 17+ others separately, you talk to EcerAI once.
+									dRouter is a high-performance AI gateway that sits between your application and every major LLM provider. Instead of
+									integrating OpenAI, Anthropic, Google, and 17+ others separately, you talk to dRouter once.
 								</p>
 								<p>
 									The gateway adds only ~11µs of overhead at 5,000 requests per second—essentially invisible. Automatic fallbacks, load
@@ -167,7 +167,7 @@ export default function AboutPage() {
 								<div className="mt-3 text-slate-500"># After: one client, every model</div>
 								<div className="text-green-400">+ from openai import OpenAI</div>
 								<div className="text-green-400">+ client = OpenAI(</div>
-								<div className="text-green-400">+ base_url="https://llmapi.ecerai.com/openai",</div>
+								<div className="text-green-400">+ base_url="https://drouter.com/openai",</div>
 								<div className="text-green-400">+ api_key="this-is-your-key"</div>
 								<div className="text-green-400">+ )</div>
 								<div className="mt-3 text-slate-500"># Switch providers with one line:</div>
@@ -192,7 +192,7 @@ export default function AboutPage() {
 					<div className="mb-16 text-center">
 						<h2 className="mb-4 text-4xl font-bold text-slate-900">Built different</h2>
 						<p className="mx-auto max-w-2xl text-lg text-slate-600">
-							Every design decision in EcerAI was made for production reliability—not just demo benchmarks.
+							Every design decision in dRouter was made for production reliability—not just demo benchmarks.
 						</p>
 					</div>
 					<div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -252,7 +252,7 @@ export default function AboutPage() {
 						<span className="text-blue-400">Owned by the community.</span>
 					</h2>
 					<p className="mx-auto mb-10 max-w-2xl text-lg leading-relaxed text-slate-400">
-						EcerAI is MIT-licensed and developed openly on GitHub. Contribute providers, plugins, or improvements—every PR makes the
+						dRouter is MIT-licensed and developed openly on GitHub. Contribute providers, plugins, or improvements—every PR makes the
 						gateway better for thousands of teams.
 					</p>
 					<div className="flex flex-wrap justify-center gap-4">

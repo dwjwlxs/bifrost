@@ -21,9 +21,9 @@ func (s *service) sendVerificationCode(ctx context.Context, recipient string, co
 	subject := ""
 	switch codeType {
 	case VerificationCodeTypeEmailVerify:
-		subject = "Bifrost — Email Verification Code"
+		subject = "dRouter — Email Verification Code"
 	case VerificationCodeTypePasswordReset:
-		subject = "Bifrost — Password Reset Code"
+		subject = "dRouter — Password Reset Code"
 	default:
 		return fmt.Errorf("unknown code type: %s", codeType)
 	}
@@ -52,7 +52,7 @@ func (s *service) renderVerificationCodeTemplate(recipient string, codeType Veri
 <body>
     <div class="container">
         <div class="header">
-            <h1>EcerAI</h1>
+            <h1>dRouter</h1>
         </div>
         <div class="content">
             <p>Hello {{.Username}},</p>
