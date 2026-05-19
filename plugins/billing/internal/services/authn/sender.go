@@ -52,7 +52,7 @@ func (s *service) renderVerificationCodeTemplate(recipient string, codeType Veri
 <body>
     <div class="container">
         <div class="header">
-            <h1>Bifrost</h1>
+            <h1>EcerAI</h1>
         </div>
         <div class="content">
             <p>Hello {{.Username}},</p>
