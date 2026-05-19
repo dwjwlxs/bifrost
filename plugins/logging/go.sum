@@ -113,10 +113,10 @@ github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f h1:lO4WD4F/rVNCu3HqELle0jiPLLBs70cWOduZpkS1E78=
 github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cuUVRXasLTGF7a8hSLbxyZXjz+1KgoB3wDUb6vlszIc=
-github.com/dwjwlxs/bifrost/core v1.5.3 h1:qYMXL9VXluNLTqA08fU5uEiKNF16urg6kjp2PJAN2SQ=
-github.com/dwjwlxs/bifrost/core v1.5.3/go.mod h1:rpmxyypBlL0T6v/8fZ1Om/l8+q6P9jT8cz9/VV/NKF8=
-github.com/dwjwlxs/bifrost/framework v1.3.3 h1:viEYealL9IIF7VsltGvyRp5CdAkXIkh+YOWABCz4IB0=
-github.com/dwjwlxs/bifrost/framework v1.3.3/go.mod h1:5Khhas5iuml93t7ZCscVT04K3ofBfD75HUlkOKq8VgE=
+github.com/dwjwlxs/bifrost/core v1.5.4 h1:q6ppKaPtVrVpgtX8R5kYb0FP44Lr5MYjJZDpqRJFfso=
+github.com/dwjwlxs/bifrost/core v1.5.4/go.mod h1:KbI/Ewi1/yOy6Koa5biayymE1tpt5CBEAzBHPwDV7n8=
+github.com/dwjwlxs/bifrost/framework v1.3.4 h1:+L22Ss+5k2EhOzScoe4YGqlbXVmYd7kjz7ZVKJ000S4=
+github.com/dwjwlxs/bifrost/framework v1.3.4/go.mod h1:lcjPJgD/BZnRru7c+hy8n9FWB27cZm9Qa9VkwDP9zbI=
 github.com/envoyproxy/go-control-plane v0.14.0 h1:hbG2kr4RuFj222B6+7T83thSPqLjwBIfQawTkC++2HA=
 github.com/envoyproxy/go-control-plane v0.14.0/go.mod h1:NcS5X47pLl/hfqxU70yPwL9ZMkUlwlKxtAohpi2wBEU=
 github.com/envoyproxy/go-control-plane/envoy v1.36.0 h1:yg/JjO5E7ubRyKX3m07GF3reDNEnfOboJ0QySbH736g=
