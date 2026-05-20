@@ -5,13 +5,10 @@ go 1.26.1
 replace (
 	github.com/maximhq/bifrost/core => github.com/dwjwlxs/bifrost/core v1.5.4
 	github.com/maximhq/bifrost/framework => github.com/dwjwlxs/bifrost/framework v1.3.4
-	github.com/maximhq/bifrost/plugins/billing => github.com/dwjwlxs/bifrost/plugins/billing v0.1.0
+
+	github.com/maximhq/bifrost/plugins/compat => github.com/dwjwlxs/bifrost/plugins/compat v0.1.2
 	github.com/maximhq/bifrost/plugins/governance => github.com/dwjwlxs/bifrost/plugins/governance v1.5.4
 	github.com/maximhq/bifrost/plugins/logging => github.com/dwjwlxs/bifrost/plugins/logging v1.5.4
-)
-
-replace (
-	github.com/maximhq/bifrost/plugins/compat => github.com/dwjwlxs/bifrost/plugins/compat v0.1.2
 	github.com/maximhq/bifrost/plugins/maxim => github.com/dwjwlxs/bifrost/plugins/maxim v1.6.3
 	github.com/maximhq/bifrost/plugins/otel => github.com/dwjwlxs/bifrost/plugins/otel v1.2.3
 	github.com/maximhq/bifrost/plugins/prompts => github.com/dwjwlxs/bifrost/plugins/prompts v1.0.3
@@ -23,6 +20,7 @@ require (
 	github.com/andybalholm/brotli v1.2.0
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.8
 	github.com/bytedance/sonic v1.15.0
+	github.com/dwjwlxs/bifrost/plugins/billing v0.1.1
 	github.com/fasthttp/router v1.5.4
 	github.com/fasthttp/websocket v1.5.12
 	github.com/google/pprof v0.0.0-20251213031049-b05bdaca462f
@@ -31,7 +29,6 @@ require (
 	github.com/mark3labs/mcp-go v0.43.2
 	github.com/maximhq/bifrost/core v1.5.3
 	github.com/maximhq/bifrost/framework v1.3.3
-	github.com/maximhq/bifrost/plugins/billing v0.0.0-00010101000000-000000000000
 	github.com/maximhq/bifrost/plugins/compat v0.1.2
 	github.com/maximhq/bifrost/plugins/governance v1.5.3
 	github.com/maximhq/bifrost/plugins/logging v1.5.3

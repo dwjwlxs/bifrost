@@ -125,8 +125,8 @@ github.com/dwjwlxs/bifrost/core v1.5.4 h1:q6ppKaPtVrVpgtX8R5kYb0FP44Lr5MYjJZDpqR
 github.com/dwjwlxs/bifrost/core v1.5.4/go.mod h1:KbI/Ewi1/yOy6Koa5biayymE1tpt5CBEAzBHPwDV7n8=
 github.com/dwjwlxs/bifrost/framework v1.3.4 h1:+L22Ss+5k2EhOzScoe4YGqlbXVmYd7kjz7ZVKJ000S4=
 github.com/dwjwlxs/bifrost/framework v1.3.4/go.mod h1:lcjPJgD/BZnRru7c+hy8n9FWB27cZm9Qa9VkwDP9zbI=
-github.com/dwjwlxs/bifrost/plugins/billing v0.1.0 h1:zJniDMy7bfMu10fZIrwMbmSMpFGTrxrwYoS0Hsv6R0s=
-github.com/dwjwlxs/bifrost/plugins/billing v0.1.0/go.mod h1:AjJRXVUJEXdMSUwBAaArxbnYclzCnzpJ28YEmPLoUug=
+github.com/dwjwlxs/bifrost/plugins/billing v0.1.1 h1:CyGl8KlOwlZGCkEcrlF/+lnc6tHDK96/IsGLZ2/HdhE=
+github.com/dwjwlxs/bifrost/plugins/billing v0.1.1/go.mod h1:9ROczv4hFY5WJpyD2WfF/D2coGLfsEcA7QBJXB7u0qI=
 github.com/dwjwlxs/bifrost/plugins/compat v0.1.2 h1:ya2oheQyZBRyFeX0/O8APFdbkMbVIp6pdBCDdF2PXgU=
 github.com/dwjwlxs/bifrost/plugins/compat v0.1.2/go.mod h1:n3zx6ddGt5KhHbSlEQV39xQ4JBHO52RhCWaPkDKBoeI=
 github.com/dwjwlxs/bifrost/plugins/governance v1.5.4 h1:NmJhC7YzYw2c9crcail7YxfcrNqyWR8gKpavM9JG0cs=

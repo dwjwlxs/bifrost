@@ -222,10 +222,13 @@ build-ui: install-ui ## Build ui
 	@$(USE_NODE); cd ui && npm run build && npm run copy-build
 
 build: # build-ui ## Build bifrost-http binary
+	@date
 	@if [ -n "$(LOCAL)" ]; then \
 		$(ECHO) "$(GREEN)╔═══════════════════════════════════════════════╗$(NC)"; \
 		$(ECHO) "$(GREEN)║  Building bifrost-http with local go.work...  ║$(NC)"; \
 		$(ECHO) "$(GREEN)╚═══════════════════════════════════════════════╝$(NC)"; \
+		$(ECHO) "$(RED)Note: make sure CLEAN replacement in go.mod for Docker build with local modules.$(NC)"; \
+		$(MAKE) work-init; \
 	else \
 		$(ECHO) "$(GREEN)╔═══════════════════════════════════════╗$(NC)"; \
 		$(ECHO) "$(GREEN)║  Building bifrost-http...             ║$(NC)"; \
@@ -282,6 +285,10 @@ build: # build-ui ## Build bifrost-http binary
 		$(ECHO) "$(CYAN)Using Docker for cross-compilation...$(NC)"; \
 		$(MAKE) _build-with-docker TARGET_OS=$$TARGET_OS TARGET_ARCH=$$TARGET_ARCH $(if $(DYNAMIC),DYNAMIC=$(DYNAMIC)); \
 	fi
+	@if [ -n "$(LOCAL)" ]; then \
+		$(MAKE) work-clean; \
+	fi
+	@date
 
 build-cli: ## Build bifrost CLI binary
 	@$(ECHO) "$(GREEN)Building bifrost CLI...$(NC)"
@@ -302,7 +309,7 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 				-e GOOS=$(TARGET_OS) \
 				-e GOARCH=$(TARGET_ARCH) \
 				 $(if $(LOCAL),,-e GOWORK=off) \
-				golang:1.26.1-alpine3.23 \
+				golang:1.26.2-alpine3.23 \
 				sh -c "apk add --no-cache gcc musl-dev && \
 				go build \
 					-ldflags='-w -s -X main.Version=v$(VERSION)' \
@@ -319,7 +326,7 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 				-e GOOS=$(TARGET_OS) \
 				-e GOARCH=$(TARGET_ARCH) \
 				 $(if $(LOCAL),,-e GOWORK=off) \
-				golang:1.26.1-alpine3.23 \
+				golang:1.26.2-alpine3.23 \
 				sh -c "apk add --no-cache gcc musl-dev && \
 				go build \
 					-ldflags='-w -s -extldflags "-static" -X main.Version=v$(VERSION)' \
@@ -336,17 +343,21 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 	fi
 
 docker-image: ## Build Docker image (LOCAL=1 to use Dockerfile.local)
-	@sh ./scripts/clean_mod.sh restore
+	@date
 	@$(ECHO) "$(GREEN)Building Docker image...$(NC)"
 	@$(ECHO) "$(GREEN)platform: $(GOOS)/$(GOARCH)$(NC)"
 	$(eval GIT_SHA=$(shell git rev-parse --short HEAD))
 	$(eval DOCKERFILE=$(if $(LOCAL),transports/Dockerfile.local,transports/Dockerfile))
 	@if [ -n "$(LOCAL)" ]; then \
-		$(ECHO) "$(GREEN)Clean replace in go.mod for Docker build with local modules$(NC)"; \
-		sh ./scripts/clean_mod.sh clean; \
+		$(ECHO) "$(RED)Note: make sure CLEAN replacement in go.mod for Docker build with local modules.$(NC)"; \
+		$(MAKE) work-init; \
 	fi
 	@docker build --platform $(GOOS)/$(GOARCH) -f $(DOCKERFILE) -t bifrost -t bifrost:$(GIT_SHA) -t bifrost:latest .
 	@$(ECHO) "$(GREEN)Docker image built: bifrost, bifrost:$(GIT_SHA), bifrost:latest (using $(DOCKERFILE))$(NC)"
+	@if [ -n "$(LOCAL)" ]; then \
+		$(MAKE) work-clean; \
+	fi
+	@date
 
 docker-run: ## Run Docker container (Usage: make docker-run [CONFIG=path/to/config.json or path/to/dir/])
 	@$(ECHO) "$(GREEN)Running Docker container...$(NC)"

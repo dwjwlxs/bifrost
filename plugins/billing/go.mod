@@ -5,8 +5,8 @@ go 1.26.1
 replace (
 	github.com/maximhq/bifrost/core => github.com/dwjwlxs/bifrost/core v1.5.4
 	github.com/maximhq/bifrost/framework => github.com/dwjwlxs/bifrost/framework v1.3.4
-	github.com/maximhq/bifrost/plugins/governance => ../../plugins/governance
-	github.com/maximhq/bifrost/transports => ../../transports
+	github.com/maximhq/bifrost/plugins/governance => github.com/dwjwlxs/bifrost/plugins/governance v1.5.4
+	github.com/maximhq/bifrost/transports => github.com/dwjwlxs/bifrost/transports v1.6.0-prerelease1
 )
 
 require (

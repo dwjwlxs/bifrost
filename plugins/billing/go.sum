@@ -125,6 +125,10 @@ github.com/dwjwlxs/bifrost/core v1.5.4 h1:q6ppKaPtVrVpgtX8R5kYb0FP44Lr5MYjJZDpqR
 github.com/dwjwlxs/bifrost/core v1.5.4/go.mod h1:KbI/Ewi1/yOy6Koa5biayymE1tpt5CBEAzBHPwDV7n8=
 github.com/dwjwlxs/bifrost/framework v1.3.4 h1:+L22Ss+5k2EhOzScoe4YGqlbXVmYd7kjz7ZVKJ000S4=
 github.com/dwjwlxs/bifrost/framework v1.3.4/go.mod h1:lcjPJgD/BZnRru7c+hy8n9FWB27cZm9Qa9VkwDP9zbI=
+github.com/dwjwlxs/bifrost/plugins/governance v1.5.4 h1:NmJhC7YzYw2c9crcail7YxfcrNqyWR8gKpavM9JG0cs=
+github.com/dwjwlxs/bifrost/plugins/governance v1.5.4/go.mod h1:OOdpOpVJBXr12InExqgk2MP5uitHaD6y9NdnYgpLyRA=
+github.com/dwjwlxs/bifrost/transports v1.6.0-prerelease1 h1:7TCnWP+ZUdg3seodZDjJJo3PnXs5Rc20oTBUoswPO24=
+github.com/dwjwlxs/bifrost/transports v1.6.0-prerelease1/go.mod h1:WR9FZ2lrJI8UiOCFiSz7zGTevvtC6MO7IxfWXpMW5kE=
 github.com/envoyproxy/go-control-plane v0.14.0 h1:hbG2kr4RuFj222B6+7T83thSPqLjwBIfQawTkC++2HA=
 github.com/envoyproxy/go-control-plane v0.14.0/go.mod h1:NcS5X47pLl/hfqxU70yPwL9ZMkUlwlKxtAohpi2wBEU=
 github.com/envoyproxy/go-control-plane/envoy v1.36.0 h1:yg/JjO5E7ubRyKX3m07GF3reDNEnfOboJ0QySbH736g=

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import "rapidoc";
-import openapiSpec from "../../../../../docs/openapi/openapi.json?url";
-import { filterOpenApiSpec } from "../../../../lib/utils/filterOpenApiSpec";
+import openapiSpec from "@/lib/openapi.json?url";
+import { filterOpenApiSpec } from "@/lib/utils/filterOpenApiSpec";
 
 interface RapiDocAttributes {
 	"spec-url"?: string;
