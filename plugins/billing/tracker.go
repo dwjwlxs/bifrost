@@ -235,7 +235,7 @@ func (t *UsageTracker) refreshVKHierarchy(ctx context.Context) {
 			CustomerID: vk.CustomerID,
 			UserID:     vk.UserID,
 		}
-		if err := t.budgetStore.SetVKHierarchy(ctx, vk.ID, data); err != nil {
+		if err := t.budgetStore.SetVKHierarchy(ctx, vk.Value, data); err != nil {
 			t.logger.Error("billing tracker: failed to refresh VK %s: %v", vk.ID, err)
 		}
 	}
