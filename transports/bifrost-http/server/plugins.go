@@ -187,7 +187,16 @@ func (s *BifrostHTTPServer) loadBuiltinPlugins(ctx context.Context) error {
 	}
 	s.Config.SetPluginOrderInfo(logging.PluginName, builtinPlacement, schemas.Ptr(3))
 
-	// 4. Governance (if enabled and not enterprise)
+	// 4. Billing (if configured in PluginConfigs)
+	// billingConfig := s.getPluginConfig(billing.PluginName)
+	if true {
+		s.registerPluginWithStatus(ctx, billing.PluginName, nil, nil, false)
+	} else {
+		s.markPluginDisabled(billing.PluginName)
+	}
+	s.Config.SetPluginOrderInfo(billing.PluginName, builtinPlacement, schemas.Ptr(5))
+
+	// 5. Governance (if enabled and not enterprise)
 	if ctx.Value(schemas.BifrostContextKeyIsEnterprise) == nil {
 		config := &governance.Config{
 			IsVkMandatory:         &s.Config.ClientConfig.EnforceAuthOnInference,
@@ -200,15 +209,6 @@ func (s *BifrostHTTPServer) loadBuiltinPlugins(ctx context.Context) error {
 		s.markPluginDisabled(governance.PluginName)
 	}
 	s.Config.SetPluginOrderInfo(governance.PluginName, builtinPlacement, schemas.Ptr(4))
-
-	// 5. Billing (if configured in PluginConfigs)
-	// billingConfig := s.getPluginConfig(billing.PluginName)
-	if true {
-		s.registerPluginWithStatus(ctx, billing.PluginName, nil, nil, false)
-	} else {
-		s.markPluginDisabled(billing.PluginName)
-	}
-	s.Config.SetPluginOrderInfo(billing.PluginName, builtinPlacement, schemas.Ptr(5))
 
 	// 6. OTEL (if configured in PluginConfigs)
 	otelConfig := s.getPluginConfig(otel.PluginName)

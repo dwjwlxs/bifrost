@@ -122,6 +122,7 @@ func runMigrations(ctx context.Context, store configstore.ConfigStore) error {
 		{"billing_add_platform_invitations_table", migrationAddPlatformInvitationsTable},
 		{"billing_add_billing_fields_to_budgets_table", migrationAddBillingFieldsToBudgetsTable},
 		{"billing_convert_customer_to_multi_budget", migrationConvertCustomerToMultiBudget},
+		{"billing_add_user_id_to_virtual_keys_table", migrationAddUserIDToVirtualKeysTable},
 	}
 
 	// Acquire migration lock. For PostgreSQL this serializes across cluster nodes;
@@ -559,7 +560,8 @@ func migrationAddBillingFieldsToBudgetsTable(ctx context.Context, db *gorm.DB) e
 // migrationConvertCustomerToMultiBudget converts TableCustomer from single BudgetID
 // to multiple Budgets (has-many via CustomerID FK). It:
 //  1. Migrates existing budget_id references: sets customer_id on the referenced budget row
-//  2. Drops the legacy budget_id column from governance_customers
+//  2. Drops the legacy FK constraint fk_governance_customers_budget (MySQL only)
+//  3. Drops the legacy budget_id column from governance_customers
 func migrationConvertCustomerToMultiBudget(ctx context.Context, db *gorm.DB) error {
 	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
 		ID: "convert_customer_to_multi_budget",
@@ -582,7 +584,13 @@ func migrationConvertCustomerToMultiBudget(ctx context.Context, db *gorm.DB) err
 						_ = err
 					}
 				}
-				// Step 2: Drop the legacy budget_id column
+				// Step 2: Drop the FK constraint (MySQL — PostgreSQL cascades on column drop)
+				if tx.Dialector.Name() == "mysql" {
+					if err := tx.Exec("ALTER TABLE governance_customers DROP FOREIGN KEY fk_governance_customers_budget").Error; err != nil {
+						return fmt.Errorf("failed to drop FK constraint fk_governance_customers_budget: %w", err)
+					}
+				}
+				// Step 3: Drop the legacy budget_id column
 				if err := migr.DropColumn(&configstoreTables.TableCustomer{}, "budget_id"); err != nil {
 					return fmt.Errorf("failed to drop budget_id column from governance_customers: %w", err)
 				}
@@ -604,6 +612,45 @@ func migrationConvertCustomerToMultiBudget(ctx context.Context, db *gorm.DB) err
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error running convert_customer_to_multi_budget migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddUserIDToVirtualKeysTable adds the user_id column and index to
+// the governance_virtual_keys table. The UserID field on TableVirtualKey
+// coexists with TeamID/CustomerID (not mutually exclusive) and is required
+// when billing is enabled.
+func migrationAddUserIDToVirtualKeysTable(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "add_user_id_to_virtual_keys_table",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migr := tx.Migrator()
+
+			// Add user_id column if it doesn't exist
+			if !migr.HasColumn(&configstoreTables.TableVirtualKey{}, "user_id") {
+				if err := migr.AddColumn(&configstoreTables.TableVirtualKey{}, "UserID"); err != nil {
+					return fmt.Errorf("failed to add user_id column to governance_virtual_keys: %w", err)
+				}
+			}
+
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migr := tx.Migrator()
+
+			if migr.HasColumn(&configstoreTables.TableVirtualKey{}, "user_id") {
+				if err := migr.DropColumn(&configstoreTables.TableVirtualKey{}, "user_id"); err != nil {
+					return fmt.Errorf("failed to drop user_id column from governance_virtual_keys: %w", err)
+				}
+			}
+
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_user_id_to_virtual_keys_table migration: %s", err.Error())
 	}
 	return nil
 }
