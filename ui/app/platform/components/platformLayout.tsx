@@ -45,7 +45,7 @@ export function PlatformHeader() {
 			<header className="bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50 w-full border-b backdrop-blur">
 				<div className="container mx-auto flex h-14 items-center px-4">
 					<Link to="/platform/home" className="flex items-center gap-2">
-						<img src="/dRouter_logo_img.png" alt="dRouter" className="h-6 w-6" />
+						<img src="/ecerai_logo_img.png" alt="dRouter" className="h-6 w-6" />
 						<span className="font-bold">dRouter</span>
 					</Link>
 				</div>
