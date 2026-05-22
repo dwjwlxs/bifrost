@@ -21,6 +21,7 @@ require (
 	github.com/maximhq/bifrost/transports v1.5.0
 	github.com/redis/go-redis/v9 v9.17.2
 	github.com/spf13/cast v1.10.0
+	github.com/stripe/stripe-go/v85 v85.1.0
 	github.com/valyala/fasthttp v1.68.0
 	golang.org/x/crypto v0.49.0
 	gorm.io/gorm v1.31.1

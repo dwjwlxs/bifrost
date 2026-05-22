@@ -12,6 +12,7 @@ import (
 	"github.com/dwjwlxs/bifrost/plugins/billing/store"
 	"github.com/maximhq/bifrost/core/schemas"
 	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
+	"github.com/stripe/stripe-go/v85"
 	"gorm.io/gorm"
 )
 
@@ -252,6 +253,18 @@ func (s *BillingService) CreatePackage(ctx context.Context, pkg *tables.TablePla
 	if pkg.ID == "" {
 		pkg.ID = schemas.NewID()
 	}
+
+	// Sync to Stripe if gateway is configured
+	stripeGw, err := s.registry.Get("stripe")
+	if err == nil && stripeGw != nil {
+		productID, priceID, err := stripeGw.SyncProduct(pkg)
+		if err != nil {
+			return fmt.Errorf("sync stripe product: %w", err)
+		}
+		pkg.StripeProductID = stripe.String(productID)
+		pkg.StripePriceID = stripe.String(priceID)
+	}
+
 	return s.db.WithContext(ctx).Create(pkg).Error
 }
 
@@ -338,6 +351,11 @@ func (s *BillingService) CreatePurchaseOrder(
 		return nil, nil, nil, fmt.Errorf("get payment gateway %q: %w", gatewayID, err)
 	}
 
+	// Reject subscription orders if gateway doesn't support subscription mode
+	if opts.AutoRenew && !gw.SupportsSubscription() {
+		return nil, nil, nil, fmt.Errorf("gateway %q does not support subscription payments", gw.GatewayID())
+	}
+
 	// Validate target type
 	if pkg.TargetType != "both" {
 		if pkg.TargetType == "user" && (userID == nil || *userID == "") {
@@ -379,7 +397,21 @@ func (s *BillingService) CreatePurchaseOrder(
 		return nil, nil, nil, fmt.Errorf("create purchase order: %w", err)
 	}
 
-	result, err := gw.CreatePayment(ctx, order, opts)
+	// Pass auto_renew from package if not explicitly set in opts
+	paymentOpts := opts
+	if !paymentOpts.AutoRenew && pkg.AutoRenew {
+		paymentOpts.AutoRenew = pkg.AutoRenew
+	}
+	// Use package's StripePriceID if not provided in opts
+	if paymentOpts.StripePriceID == "" && pkg.StripePriceID != nil {
+		paymentOpts.StripePriceID = *pkg.StripePriceID
+	}
+	// Derive recurring interval from package duration if not provided
+	if paymentOpts.AutoRenew && paymentOpts.RecurringInterval == "" && paymentOpts.StripePriceID == "" {
+		paymentOpts.RecurringInterval = deriveRecurringInterval(pkg.Duration)
+	}
+
+	result, err := gw.CreatePayment(ctx, order, paymentOpts)
 	if err != nil {
 		return order, &pkg, nil, fmt.Errorf("gateway CreatePayment: %w", err)
 	}
@@ -409,6 +441,17 @@ func (s *BillingService) AdminPurchase(
 		return nil, nil, fmt.Errorf("package not found or inactive: %w", err)
 	}
 
+	// Check purchase limit (same as CreatePurchaseOrder)
+	if pkg.MaxPurchasePerUser > 0 && userID != nil && *userID != "" {
+		var count int64
+		s.db.WithContext(ctx).Model(&tables.TableEntityPackage{}).
+			Where("user_id = ? AND package_id = ? AND status = ?", *userID, packageID, tables.EntityPackageStatusActive).
+			Count(&count)
+		if count >= int64(pkg.MaxPurchasePerUser) {
+			return nil, nil, fmt.Errorf("purchase limit reached (%d) for this package", pkg.MaxPurchasePerUser)
+		}
+	}
+
 	var order tables.TablePlatformOrder
 	var ep tables.TableEntityPackage
 	now := time.Now()
@@ -432,7 +475,7 @@ func (s *BillingService) AdminPurchase(
 		}
 
 		orderNo := order.OrderNo
-		createdEP, err := s.provisionPackage(tx, &order, &pkg, userID, &orderNo, tenantType, tenantID)
+		createdEP, err := s.provisionPackage(tx, &order, &pkg, userID, &orderNo, tenantType, tenantID, pkg.Quota)
 		if err != nil {
 			return err
 		}
@@ -482,7 +525,7 @@ func (s *BillingService) HandlePurchaseSuccess(
 
 		var createdEP *tables.TableEntityPackage
 		var err error
-		createdEP, err = s.provisionPackage(tx, &order, &pkg, order.UserID, nil, order.TenantType, order.TenantID)
+		createdEP, err = s.provisionPackage(tx, &order, &pkg, order.UserID, nil, order.TenantType, order.TenantID, order.Credits)
 		if err != nil {
 			return err
 		}
@@ -506,10 +549,11 @@ func (s *BillingService) provisionPackage(
 	orderNoOverride *string,
 	tenantType tables.TenantType,
 	tenantID string,
+	purchasedCredits float64,
 ) (*tables.TableEntityPackage, error) {
 	now := time.Now()
 	expiresAt := now.Add(time.Duration(pkg.Duration) * 24 * time.Hour)
-	maxLimitUSD := pkg.Quota / 100.0
+	maxLimitUSD := purchasedCredits / 100.0
 
 	// 1. Create billing Budget
 	budget := configstoreTables.TableBudget{
@@ -577,6 +621,8 @@ func (s *BillingService) provisionPackage(
 		Status:               tables.EntityPackageStatusActive,
 		TenantType:           tenantType,
 		TenantID:             tenantID,
+		SubscriptionGateway:  order.Gateway,
+		PurchasedCredits:     purchasedCredits,
 	}
 	if order.PaymentMethod == "admin" {
 		ep.Source = tables.EntityPackageSourceAdmin
@@ -592,13 +638,57 @@ func (s *BillingService) provisionPackage(
 	}
 
 	// Sync to budget store (Redis/memory) so DeductBillingBudgets can find it immediately.
+	// Use Background context since we're inside a transaction and this is an async cache operation.
 	if s.budgetStore != nil {
-		if err := s.budgetStore.Set(context.TODO(), budget.ID, &budget); err != nil {
-			return nil, fmt.Errorf("sync budget to store: %w", err) // TODO: ctx
+		if err := s.budgetStore.Set(context.Background(), budget.ID, &budget); err != nil {
+			return nil, fmt.Errorf("sync budget to store: %w", err)
 		}
 	}
 
 	return &ep, nil
+}
+
+// extendEntityPackage extends an active entity package's budget and expiry when a subscription renews.
+func (s *BillingService) extendEntityPackage(ctx context.Context, ep *tables.TableEntityPackage, pkg *tables.TablePlatformPackage, nextBillingAt int64) error {
+	now := time.Now()
+	var newExpiresAt time.Time
+
+	if nextBillingAt > 0 {
+		// Use Stripe's next billing time if available
+		newExpiresAt = time.Unix(nextBillingAt, 0)
+	} else {
+		// Fall back to package duration
+		newExpiresAt = now.Add(time.Duration(pkg.Duration) * 24 * time.Hour)
+	}
+
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Extend budget expiry
+		if ep.BudgetID != nil {
+			var budget configstoreTables.TableBudget
+			if err := tx.First(&budget, "id = ?", *ep.BudgetID).Error; err != nil {
+				return fmt.Errorf("find budget: %w", err)
+			}
+			budget.ExpiresAt = &newExpiresAt
+			budget.MaxLimit += ep.PurchasedCredits / 100.0 // Add quota based on original purchase
+			if err := tx.Save(&budget).Error; err != nil {
+				return fmt.Errorf("extend budget: %w", err)
+			}
+			// Sync to store
+			if s.budgetStore != nil {
+				if err := s.budgetStore.Set(ctx, budget.ID, &budget); err != nil {
+					return fmt.Errorf("sync budget: %w", err)
+				}
+			}
+		}
+
+		// Extend entity package expiry
+		ep.ExpiresAt = newExpiresAt
+		if err := tx.Save(ep).Error; err != nil {
+			return fmt.Errorf("extend entity package: %w", err)
+		}
+
+		return nil
+	})
 }
 
 // createRateLimitFromJSON parses a RateLimitConfig JSON string and creates a RateLimit record.
@@ -971,19 +1061,27 @@ func (s *BillingService) HandleWebhookResult(ctx context.Context, result *Webhoo
 		return nil
 	}
 
-	// Find the order by order_no
+	// Find the order by order_no (skip if order_no is empty for renewal events)
 	var order tables.TablePlatformOrder
-	if err := s.db.WithContext(ctx).Where("order_no = ?", result.OrderNo).First(&order).Error; err != nil {
-		return fmt.Errorf("find order by order_no %s: %w", result.OrderNo, err)
-	}
-
-	// Idempotent: only process pending orders
-	if order.Status != tables.OrderStatusPending {
-		return nil
+	orderFound := false
+	if result.OrderNo != "" {
+		if err := s.db.WithContext(ctx).Where("order_no = ?", result.OrderNo).First(&order).Error; err == nil {
+			orderFound = true
+		}
 	}
 
 	switch result.Status {
 	case "success":
+		// For success, order must exist and be pending
+		if !orderFound {
+			return fmt.Errorf("order not found for success webhook: %s", result.OrderNo)
+		}
+		if order.Status != tables.OrderStatusPending {
+			return nil
+		}
+		if order.EntityPackageID != nil {
+			return nil
+		}
 		now := time.Now()
 		order.Status = tables.OrderStatusSuccess
 		order.PaymentID = result.PaymentID
@@ -995,7 +1093,7 @@ func (s *BillingService) HandleWebhookResult(ctx context.Context, result *Webhoo
 			switch order.Type {
 			case tables.OrderTypeRecharge:
 				dollars := order.Credits / 100.0
-				budget, err := s.findOrCreateBalanceBudget(s.db, order.UserID, order.TenantType, order.TenantID, dollars)
+				budget, err := s.findOrCreateBalanceBudget(tx, order.UserID, order.TenantType, order.TenantID, dollars)
 				if err != nil {
 					return fmt.Errorf("recharge budget for order %s: %w", order.OrderNo, err)
 				}
@@ -1011,14 +1109,22 @@ func (s *BillingService) HandleWebhookResult(ctx context.Context, result *Webhoo
 					return fmt.Errorf("order %s: missing package_id for purchase order", order.OrderNo)
 				}
 				var pkg tables.TablePlatformPackage
-				if err := s.db.WithContext(ctx).First(&pkg, "id = ?", *order.PackageID).Error; err != nil {
+				if err := tx.First(&pkg, "id = ?", *order.PackageID).Error; err != nil {
 					return fmt.Errorf("find package for order %s: %w", order.OrderNo, err)
 				}
-				if _, err := s.provisionPackage(s.db, &order, &pkg, order.UserID, nil, order.TenantType, order.TenantID); err != nil {
+				ep, err := s.provisionPackage(tx, &order, &pkg, order.UserID, nil, order.TenantType, order.TenantID, order.Credits)
+				if err != nil {
 					return fmt.Errorf("provision package for order %s: %w", order.OrderNo, err)
 				}
+				// Save Stripe SubscriptionID to EntityPackage if provided via webhook
+				if result.SubscriptionID != "" && ep != nil {
+					ep.StripeSubscriptionID = &result.SubscriptionID
+					if err := tx.Save(ep).Error; err != nil {
+						return fmt.Errorf("update entity_package stripe_subscription_id: %w", err)
+					}
+				}
 			}
-			if err := s.db.WithContext(ctx).Save(&order).Error; err != nil {
+			if err := tx.Save(&order).Error; err != nil {
 				return fmt.Errorf("update order %s to success: %w", order.OrderNo, err)
 			}
 			return nil
@@ -1028,9 +1134,70 @@ func (s *BillingService) HandleWebhookResult(ctx context.Context, result *Webhoo
 		}
 
 	case "expired":
+		if !orderFound {
+			return nil
+		}
 		order.Status = tables.OrderStatusExpired
 		if err := s.db.WithContext(ctx).Save(&order).Error; err != nil {
 			return fmt.Errorf("update order %s to expired: %w", order.OrderNo, err)
+		}
+
+	case "renewed":
+		// Subscription renewal successful - extend the entity package
+		// Note: For initial subscription purchases, invoice.paid may arrive before
+		// checkout.session.completed commits. Also, Stripe sends invoice.paid both for
+		// initial charge and renewals. This handler tolerates missing EntityPackage so
+		// it is idempotent - the next renewal will find it.
+		if result.SubscriptionID == "" {
+			break
+		}
+		var ep tables.TableEntityPackage
+		if err := s.db.WithContext(ctx).First(&ep, "stripe_subscription_id = ?", result.SubscriptionID).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				break // Idempotent: entity package not created yet, skip
+			}
+			return fmt.Errorf("find entity package for renewal: %w", err)
+		}
+
+		var pkg tables.TablePlatformPackage
+		if err := s.db.WithContext(ctx).First(&pkg, "id = ?", ep.PackageID).Error; err != nil {
+			return fmt.Errorf("find package for renewal %s: %w", result.OrderNo, err)
+		}
+		// Extend the budget and entity package
+		if err := s.extendEntityPackage(ctx, &ep, &pkg, result.NextBillingAt); err != nil {
+			return fmt.Errorf("extend entity package for renewal %s: %w", result.OrderNo, err)
+		}
+
+	case "renewal_failed":
+		// Subscription renewal failed - entity package will expire naturally
+		// Log the failure; the package will expire at its current ExpiresAt
+		// Could send notification to user here
+
+	case "subscription_updated":
+		// User modified subscription in Stripe Dashboard - sync auto-renew setting
+		// Find entity package by subscription ID
+		if result.SubscriptionID == "" {
+			break // no subscription ID, skip
+		}
+		var ep tables.TableEntityPackage
+		if err := s.db.WithContext(ctx).First(&ep, "stripe_subscription_id = ?", result.SubscriptionID).Error; err != nil {
+			break // entity package not found, skip
+		}
+		// Update auto-renew to match Stripe subscription setting
+		if ep.AutoRenew != result.AutoRenew {
+			ep.AutoRenew = result.AutoRenew
+			if err := s.db.WithContext(ctx).Save(&ep).Error; err != nil {
+				return fmt.Errorf("update entity package auto_renew: %w", err)
+			}
+		}
+
+	case "canceled":
+		// Subscription canceled - mark entity package for non-renewal
+		if order.EntityPackageID != nil {
+			var ep tables.TableEntityPackage
+			if err := s.db.WithContext(ctx).First(&ep, "id = ?", *order.EntityPackageID).Error; err == nil {
+				s.db.WithContext(ctx).Model(&ep).Update("auto_renew", false)
+			}
 		}
 	}
 
@@ -1185,4 +1352,41 @@ func (s *BillingService) RetryOrder(ctx context.Context, orderID uint) (*tables.
 	// Reload order
 	s.db.WithContext(ctx).First(&order, orderID)
 	return &order, result, nil
+}
+
+// deriveRecurringInterval infers the Stripe recurring interval from package duration in days.
+// Duration <= 31 days → "month", otherwise → "year".
+func deriveRecurringInterval(durationDays int) string {
+	if durationDays <= 31 {
+		return "month"
+	}
+	return "year"
+}
+
+// UpdateAutoRenew updates the auto-renewal setting for an entity package.
+func (s *BillingService) UpdateAutoRenew(ctx context.Context, epID string, autoRenew bool) error {
+	var ep tables.TableEntityPackage
+	if err := s.db.WithContext(ctx).First(&ep, "id = ?", epID).Error; err != nil {
+		return fmt.Errorf("find entity package: %w", err)
+	}
+
+	if ep.StripeSubscriptionID == nil || *ep.StripeSubscriptionID == "" {
+		return fmt.Errorf("entity package has no stripe subscription id")
+	}
+
+	gw, err := s.registry.Get("stripe")
+	if err != nil {
+		return fmt.Errorf("get stripe gateway: %w", err)
+	}
+
+	if err := gw.UpdateAutoRenew(ctx, *ep.StripeSubscriptionID, autoRenew); err != nil {
+		return fmt.Errorf("update auto-renew via gateway: %w", err)
+	}
+
+	ep.AutoRenew = autoRenew
+	if err := s.db.WithContext(ctx).Save(&ep).Error; err != nil {
+		return fmt.Errorf("update entity package: %w", err)
+	}
+
+	return nil
 }

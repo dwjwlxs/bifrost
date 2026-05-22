@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"strconv"
 
 	bconfig "github.com/dwjwlxs/bifrost/plugins/billing/internal/config"
@@ -24,18 +23,20 @@ type PackageHandler struct {
 	registry    *fpayment.GatewayRegistry
 	configStore configstore.ConfigStore
 	config      *bconfig.BillingPluginConfig
+	logger      schemas.Logger
 }
 
 // NewPackageHandler creates a new PackageHandler.
 // The registry provides all configured payment gateways.
 // budgetStore is used to sync newly-created billing budgets to Redis/memory.
 func NewPackageHandler(config *bconfig.BillingPluginConfig, registry *fpayment.GatewayRegistry,
-	budgetStore store.BudgetStore) *PackageHandler {
+	budgetStore store.BudgetStore, logger schemas.Logger) *PackageHandler {
 	return &PackageHandler{
 		service:     fpayment.NewBillingService(config.Config.ConfigStore.DB(), registry, budgetStore),
 		registry:    registry,
 		configStore: config.Config.ConfigStore,
 		config:      config,
+		logger:      logger,
 	}
 }
 
@@ -81,6 +82,9 @@ func (h *PackageHandler) RegisterRoutes(r *router.Router, middlewares ...schemas
 
 	// Order retry payment
 	r.POST("/api/billing/orders/{orderId}/retry-pay", fhttp.ChainMiddlewares(h.retryPay, middlewares...))
+
+	// Auto-renew toggle for entity packages
+	r.PUT("/api/billing/entity-packages/{epId}/auto-renew", fhttp.ChainMiddlewares(h.updateAutoRenew, middlewares...))
 
 	// List available payment gateways
 	r.GET("/api/billing/gateways", fhttp.ChainMiddlewares(h.listGateways, middlewares...))
@@ -254,6 +258,7 @@ func (h *PackageHandler) createRecharge(ctx *fasthttp.RequestCtx) {
 		}, tenantType, req.TenantId, req.Gateway,
 	)
 	if err != nil {
+		h.logger.Error("CreateRechargeOrder failed: %v", err)
 		SendError(ctx, fasthttp.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create order")
 		return
 	}
@@ -589,6 +594,7 @@ func (h *PackageHandler) createPurchase(ctx *fasthttp.RequestCtx) {
 		}, tenantType, req.TenantId, req.Gateway,
 	)
 	if err != nil {
+		h.logger.Error("CreatePurchaseOrder failed: %v", err)
 		SendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
 	}
@@ -926,9 +932,6 @@ func (h *PackageHandler) handleWebhook(ctx *fasthttp.RequestCtx) {
 	}
 	gatewayID := gatewayParam.(string)
 
-	// DEBUG: log the gateway IDs from registry
-	fmt.Printf("[DEBUG] handleWebhook: gatewayID=%s, registry IDs=%v\n", gatewayID, h.registry.IDs())
-
 	gw, err := h.registry.Get(gatewayID)
 	if err != nil {
 		SendError(ctx, fasthttp.StatusBadRequest, "UNKNOWN_GATEWAY", "Unknown gateway: "+gatewayID)
@@ -941,6 +944,7 @@ func (h *PackageHandler) handleWebhook(ctx *fasthttp.RequestCtx) {
 		SendError(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", "Empty payload")
 		return
 	}
+	h.logger.Debug("Received webhook payload: %s", payload)
 
 	// Gateway-specific signature header
 	var sigHeader string
@@ -958,7 +962,8 @@ func (h *PackageHandler) handleWebhook(ctx *fasthttp.RequestCtx) {
 
 	result, err := gw.HandleWebhook(ctx, payload, sigHeader)
 	if err != nil {
-		SendError(ctx, fasthttp.StatusBadRequest, "WEBHOOK_ERROR", err.Error())
+		h.logger.Error("HandleWebhook failed: %v", err)
+		SendError(ctx, fasthttp.StatusBadRequest, "WEBHOOK_ERROR", "Failed to handle webhook")
 		return
 	}
 
@@ -973,7 +978,8 @@ func (h *PackageHandler) handleWebhook(ctx *fasthttp.RequestCtx) {
 
 	// Process the webhook result (match order, execute business logic)
 	if err := h.service.HandleWebhookResult(ctx, result); err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "INTERNAL_ERROR", "Failed to process webhook: "+err.Error())
+		h.logger.Error("HandleWebhookResult failed: %v", err)
+		SendError(ctx, fasthttp.StatusInternalServerError, "INTERNAL_ERROR", "Failed to process webhook result")
 		return
 	}
 
@@ -1232,5 +1238,39 @@ func (h *PackageHandler) listGateways(ctx *fasthttp.RequestCtx) {
 		"code":    "0",
 		"message": "success",
 		"data":    map[string]any{"items": gateways},
+	})
+}
+
+// updateAutoRenew handles PUT /api/billing/entity-packages/{epId}/auto-renew.
+// Toggles the auto-renewal setting for an entity package.
+func (h *PackageHandler) updateAutoRenew(ctx *fasthttp.RequestCtx) {
+	claims := GetPlatformClaimsFromContext(ctx)
+	if claims == nil {
+		SendError(ctx, fasthttp.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	epID := ctx.UserValue("epId").(string)
+	if epID == "" {
+		SendError(ctx, fasthttp.StatusBadRequest, "INVALID_REQUEST", "entity package id is required")
+		return
+	}
+
+	var body struct {
+		AutoRenew bool `json:"auto_renew"`
+	}
+	if err := json.Unmarshal(ctx.Request.Body(), &body); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	if err := h.service.UpdateAutoRenew(ctx, epID, body.AutoRenew); err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, "UPDATE_FAILED", err.Error())
+		return
+	}
+
+	SendJSON(ctx, map[string]any{
+		"code":    "0",
+		"message": "success",
 	})
 }

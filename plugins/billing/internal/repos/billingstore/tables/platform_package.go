@@ -29,7 +29,8 @@ type TablePlatformPackage struct {
 	IsActive  bool `gorm:"default:true;index" json:"is_active"`
 	SortOrder int  `gorm:"default:0" json:"sort_order"`
 
-	StripePriceID *string `gorm:"type:varchar(128)" json:"stripe_price_id,omitempty"`
+	StripeProductID *string `gorm:"type:varchar(64)" json:"stripe_product_id,omitempty"`
+	StripePriceID   *string `gorm:"type:varchar(128)" json:"stripe_price_id,omitempty"`
 
 	CreatedAt time.Time `gorm:"index;not null" json:"created_at"`
 	UpdatedAt time.Time `gorm:"index;not null" json:"updated_at"`

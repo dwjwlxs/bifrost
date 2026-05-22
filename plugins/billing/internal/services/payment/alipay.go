@@ -45,6 +45,9 @@ func newAliPayGateway(cfg *AliPayConfig, baseURL string) *AliPayGateway {
 // GatewayID returns the gateway identifier.
 func (g *AliPayGateway) GatewayID() string { return "alipay" }
 
+// SupportsSubscription returns false since Alipay does not support Stripe-style subscriptions.
+func (g *AliPayGateway) SupportsSubscription() bool { return false }
+
 // CreatePayment creates an Alipay trade page and returns the redirect URL.
 //
 // Flow:
@@ -171,6 +174,16 @@ func (g *AliPayGateway) RetryPayment(ctx context.Context, order *tables.TablePla
 		ReturnURL: order.ReturnURL,
 	}
 	return g.CreatePayment(ctx, order, opts)
+}
+
+// UpdateAutoRenew is not supported for AliPay.
+func (g *AliPayGateway) UpdateAutoRenew(ctx context.Context, subscriptionID string, autoRenew bool) error {
+	return ErrNotSupported
+}
+
+// SyncProduct is not supported for AliPay.
+func (g *AliPayGateway) SyncProduct(pkg *tables.TablePlatformPackage) (productID, priceID string, err error) {
+	return "", "", ErrNotSupported
 }
 
 // sign signs the Alipay request parameters using RSA2 (SHA256 with RSA).

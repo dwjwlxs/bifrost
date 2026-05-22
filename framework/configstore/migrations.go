@@ -7201,10 +7201,10 @@ func migrationFixRoutingTargetIndexColumns(ctx context.Context, db *gorm.DB) err
 			}
 
 			for col, newType := range map[string]string{
-				"rule_id":  "VARCHAR(191)",
-				"provider": "VARCHAR(191)",
-				"model":    "VARCHAR(191)",
-				"key_id":   "VARCHAR(191)",
+				"rule_id":  "VARCHAR(255)",
+				"provider": "VARCHAR(100)",
+				"model":    "VARCHAR(100)",
+				"key_id":   "VARCHAR(100)",
 			} {
 				if err := tx.Exec("ALTER TABLE routing_targets MODIFY COLUMN `" + col + "` " + newType).Error; err != nil {
 					return fmt.Errorf("failed to alter routing_targets.%s column type: %w", col, err)

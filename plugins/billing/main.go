@@ -364,7 +364,7 @@ func (p *BillingPlugin) RegisterRoutes(r *router.Router, outerMiddlewares ...sch
 	authHandler.RegisterRoutes(r, outerMiddlewares...)
 
 	// --- billing core handler ---
-	billingHandler := handlers.NewPackageHandler(p.pluginConfig, bRegistry, p.budgetStore)
+	billingHandler := handlers.NewPackageHandler(p.pluginConfig, bRegistry, p.budgetStore, p.logger)
 	billingHandler.RegisterRoutes(r, middlewares...)
 
 	// --- platform multi-tenant handlers ---

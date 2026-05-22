@@ -42,8 +42,11 @@ type TableEntityPackage struct {
 	UserProviderConfigID *string `gorm:"type:varchar(255);index" json:"user_provider_config_id,omitempty"`
 	OffPeakDiscount      string  `gorm:"type:text" json:"off_peak_discount,omitempty"`
 
-	AutoRenew     bool    `gorm:"default:false" json:"auto_renew"`
-	RenewedFromID *string `gorm:"type:varchar(36);index" json:"renewed_from_id,omitempty"`
+	AutoRenew              bool    `gorm:"default:false" json:"auto_renew"`
+	StripeSubscriptionID *string `gorm:"type:varchar(128);index" json:"stripe_subscription_id,omitempty"`
+	RenewedFromID        *string `gorm:"type:varchar(36);index" json:"renewed_from_id,omitempty"`
+	SubscriptionGateway  string  `gorm:"type:varchar(32)" json:"subscription_gateway,omitempty"`
+	PurchasedCredits     float64 `gorm:"type:double" json:"purchased_credits,omitempty"` // Quota in credits at time of purchase
 
 	StartedAt time.Time `gorm:"not null;index" json:"started_at"`
 	ExpiresAt time.Time `gorm:"not null;index" json:"expires_at"`

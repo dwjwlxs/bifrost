@@ -123,6 +123,10 @@ func runMigrations(ctx context.Context, store configstore.ConfigStore) error {
 		{"billing_add_billing_fields_to_budgets_table", migrationAddBillingFieldsToBudgetsTable},
 		{"billing_convert_customer_to_multi_budget", migrationConvertCustomerToMultiBudget},
 		{"billing_add_user_id_to_virtual_keys_table", migrationAddUserIDToVirtualKeysTable},
+		{"billing_add_stripe_subscription_id_to_entity_packages", migrationAddStripeSubscriptionIDToEntityPackages},
+		{"billing_add_subscription_gateway_to_entity_packages", migrationAddSubscriptionGatewayToEntityPackages},
+		{"billing_add_purchased_credits_to_entity_packages", migrationAddPurchasedCreditsToEntityPackages},
+		{"billing_add_stripe_product_price_to_packages", migrationAddStripeProductPriceToPackages},
 	}
 
 	// Acquire migration lock. For PostgreSQL this serializes across cluster nodes;
@@ -651,6 +655,144 @@ func migrationAddUserIDToVirtualKeysTable(ctx context.Context, db *gorm.DB) erro
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error running add_user_id_to_virtual_keys_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddStripeSubscriptionIDToEntityPackages adds the stripe_subscription_id column
+// to platform_entity_packages for managing subscription auto-renewal.
+func migrationAddStripeSubscriptionIDToEntityPackages(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "add_stripe_subscription_id_to_entity_packages",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migr := tx.Migrator()
+			if !migr.HasColumn(&tables.TableEntityPackage{}, "stripe_subscription_id") {
+				if err := migr.AddColumn(&tables.TableEntityPackage{}, "StripeSubscriptionID"); err != nil {
+					return fmt.Errorf("failed to add stripe_subscription_id column to platform_entity_packages: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migr := tx.Migrator()
+			if migr.HasColumn(&tables.TableEntityPackage{}, "stripe_subscription_id") {
+				if err := migr.DropColumn(&tables.TableEntityPackage{}, "stripe_subscription_id"); err != nil {
+					return fmt.Errorf("failed to drop stripe_subscription_id column from platform_entity_packages: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_stripe_subscription_id_to_entity_packages migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddSubscriptionGatewayToEntityPackages adds subscription_gateway column
+// to platform_entity_packages for tracking which payment gateway manages the subscription.
+func migrationAddSubscriptionGatewayToEntityPackages(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "add_subscription_gateway_to_entity_packages",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migr := tx.Migrator()
+			if !migr.HasColumn(&tables.TableEntityPackage{}, "subscription_gateway") {
+				if err := migr.AddColumn(&tables.TableEntityPackage{}, "SubscriptionGateway"); err != nil {
+					return fmt.Errorf("failed to add subscription_gateway column to platform_entity_packages: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migr := tx.Migrator()
+			if migr.HasColumn(&tables.TableEntityPackage{}, "subscription_gateway") {
+				if err := migr.DropColumn(&tables.TableEntityPackage{}, "subscription_gateway"); err != nil {
+					return fmt.Errorf("failed to drop subscription_gateway column from platform_entity_packages: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_subscription_gateway_to_entity_packages migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddPurchasedCreditsToEntityPackages adds purchased_credits column
+// to platform_entity_packages for storing the quota at time of purchase (used for renewals).
+func migrationAddPurchasedCreditsToEntityPackages(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "add_purchased_credits_to_entity_packages",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migr := tx.Migrator()
+			if !migr.HasColumn(&tables.TableEntityPackage{}, "purchased_credits") {
+				if err := migr.AddColumn(&tables.TableEntityPackage{}, "PurchasedCredits"); err != nil {
+					return fmt.Errorf("failed to add purchased_credits column to platform_entity_packages: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migr := tx.Migrator()
+			if migr.HasColumn(&tables.TableEntityPackage{}, "purchased_credits") {
+				if err := migr.DropColumn(&tables.TableEntityPackage{}, "purchased_credits"); err != nil {
+					return fmt.Errorf("failed to drop purchased_credits column from platform_entity_packages: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_purchased_credits_to_entity_packages migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddStripeProductPriceToPackages adds stripe_product_id and stripe_price_id columns
+// to platform_packages for supporting pre-created Stripe Products and Prices.
+func migrationAddStripeProductPriceToPackages(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "add_stripe_product_price_to_packages",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migr := tx.Migrator()
+			if !migr.HasColumn(&tables.TablePlatformPackage{}, "stripe_product_id") {
+				if err := migr.AddColumn(&tables.TablePlatformPackage{}, "StripeProductID"); err != nil {
+					return fmt.Errorf("failed to add stripe_product_id column to platform_packages: %w", err)
+				}
+			}
+			if !migr.HasColumn(&tables.TablePlatformPackage{}, "stripe_price_id") {
+				if err := migr.AddColumn(&tables.TablePlatformPackage{}, "StripePriceID"); err != nil {
+					return fmt.Errorf("failed to add stripe_price_id column to platform_packages: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migr := tx.Migrator()
+			if migr.HasColumn(&tables.TablePlatformPackage{}, "stripe_product_id") {
+				if err := migr.DropColumn(&tables.TablePlatformPackage{}, "stripe_product_id"); err != nil {
+					return fmt.Errorf("failed to drop stripe_product_id column from platform_packages: %w", err)
+				}
+			}
+			if migr.HasColumn(&tables.TablePlatformPackage{}, "stripe_price_id") {
+				if err := migr.DropColumn(&tables.TablePlatformPackage{}, "stripe_price_id"); err != nil {
+					return fmt.Errorf("failed to drop stripe_price_id column from platform_packages: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_stripe_product_price_to_packages migration: %s", err.Error())
 	}
 	return nil
 }

@@ -11,6 +11,9 @@ var _ PaymentGateway = (*ManualGateway)(nil)
 // GatewayID returns the gateway identifier.
 func (m *ManualGateway) GatewayID() string { return "manual" }
 
+// SupportsSubscription returns false since manual gateway does not support subscriptions.
+func (m *ManualGateway) SupportsSubscription() bool { return false }
+
 // ManualGateway is a no-op gateway used when payments are handled out-of-band
 // (admin manual recharge, test environments, pre-Stripe MVP).
 type ManualGateway struct{}
@@ -36,4 +39,14 @@ func (m *ManualGateway) VerifyPayment(_ context.Context, _ string) (*PaymentStat
 // RetryPayment is not supported for manual gateway — returns error.
 func (m *ManualGateway) RetryPayment(_ context.Context, _ *tables.TablePlatformOrder) (*PaymentResult, error) {
 	return nil, ErrNotSupported // manual gateway has no checkout URL to retry
+}
+
+// UpdateAutoRenew is not supported for manual gateway.
+func (m *ManualGateway) UpdateAutoRenew(_ context.Context, _ string, _ bool) error {
+	return ErrNotSupported
+}
+
+// SyncProduct is not supported for manual gateway.
+func (m *ManualGateway) SyncProduct(pkg *tables.TablePlatformPackage) (productID, priceID string, err error) {
+	return "", "", ErrNotSupported
 }

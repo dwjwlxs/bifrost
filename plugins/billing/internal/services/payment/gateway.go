@@ -24,6 +24,16 @@ type PaymentGateway interface {
 
 	// VerifyPayment queries the payment status for reconciliation.
 	VerifyPayment(ctx context.Context, paymentID string) (*PaymentStatus, error)
+
+	// UpdateAutoRenew updates the auto-renewal setting for an active subscription.
+	UpdateAutoRenew(ctx context.Context, subscriptionID string, autoRenew bool) error
+
+	// SupportsSubscription returns true if the gateway supports subscription-based payments.
+	SupportsSubscription() bool
+
+	// SyncProduct creates a product and price on the gateway for a package.
+	// Returns the product ID and price ID.
+	SyncProduct(pkg *tables.TablePlatformPackage) (productID, priceID string, err error)
 }
 
 // PaymentOptions contains options for creating a payment.
@@ -31,6 +41,11 @@ type PaymentOptions struct {
 	PreferredCurrency string            // Display currency ("usd", "jpy", etc.)
 	ReturnURL         string            // URL to redirect after payment
 	Metadata          map[string]string // Extra key-value pairs passed to the gateway
+	AutoRenew         bool              // If true, creates a subscription with automatic renewal
+	StripePriceID     string            // Optional: pre-created Stripe Price ID (for subscription mode)
+	// RecurringInterval specifies the billing interval for subscriptions (day, week, month, year).
+	// Required when AutoRenew is true and StripePriceID is not provided.
+	RecurringInterval string
 }
 
 // PaymentResult contains the result of creating a payment.
@@ -44,10 +59,16 @@ type PaymentResult struct {
 // WebhookResult contains the parsed result of a webhook callback.
 type WebhookResult struct {
 	OrderNo       string  // Matched order number (from metadata)
-	Status        string  // "success" | "failed"
+	Status        string  // "success" | "failed" | "expired" | "renewed" | "canceled" | "subscription_updated"
 	PaymentID     string  // Gateway transaction ID
 	PaidAmount    float64 // Actual amount paid (USD)
 	PaymentMethod string  // card | bank_transfer | etc.
+
+	// Subscription fields (for subscription events)
+	SubscriptionID string // Stripe subscription ID
+	CustomerID     string // Stripe customer ID
+	NextBillingAt  int64  // Unix timestamp of next billing (for invoice events)
+	AutoRenew      bool   // Auto-renew setting (from subscription_updated webhook)
 }
 
 // PaymentStatus is the result of a VerifyPayment call.
