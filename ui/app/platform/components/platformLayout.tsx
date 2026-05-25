@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -8,13 +9,15 @@ import {
 } from "@/components/ui/dropdownMenu";
 import { ThemeProvider } from "@/components/themeProvider";
 import { ReduxProvider } from "@/lib/store";
-import { getUser } from "@/lib/platform/auth";
 import { useLogout } from "@/lib/platform/hooks";
 import { Link, useLocation } from "@tanstack/react-router";
 import { LogOut, User, ChevronDown } from "lucide-react";
 import { Toaster } from "sonner";
 import { ConsoleSidebar } from "./consoleSidebar";
 import { ConsoleSidebarProvider, useConsoleSidebar } from "./consoleSidebarContext";
+import { getUser, onAuthEvent } from "@/lib/platform/auth";
+import { AuthGate, DefaultAuthSkeleton } from "@/components/authGate";
+import type { PlatformUserInfo } from "@/lib/platform/types";
 
 // ── Public nav links (shown on marketing pages) ───────────────────
 const publicNavItems = [
@@ -31,10 +34,6 @@ const publicNavItems = [
  */
 export function PlatformHeader() {
 	const pathname = useLocation({ select: (l) => l.pathname });
-	const logout = useLogout();
-
-	// Synchronous localStorage read — always fresh
-	const user = getUser();
 
 	const isConsole = pathname.startsWith("/platform/console");
 	const isLoginOrRegister = pathname === "/platform/login" || pathname === "/platform/register" || pathname === "/platform/verify-email";
@@ -84,52 +83,88 @@ export function PlatformHeader() {
 
 				<div className="flex-1" />
 
-				{/* Right side: user menu or auth buttons */}
-				{user ? (
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
-							<Button variant="ghost" className="flex items-center gap-2">
-								<div className="bg-primary/10 flex h-7 w-7 items-center justify-center rounded-full">
-									<User className="text-primary h-4 w-4" />
-								</div>
-								<span className="hidden text-sm sm:inline-block">{user.nickname || user.username}</span>
-								<ChevronDown className="text-muted-foreground h-3.5 w-3.5" />
+				{/* Right side: user menu or auth buttons — reactive via AuthGate */}
+				<AuthGate
+					loading={<DefaultAuthSkeleton />}
+					signedIn={
+						<PlatformUserMenu />
+					}
+					signedOut={
+						<div className="flex items-center gap-2">
+							<Button variant="ghost" size="sm" asChild>
+								<Link to="/platform/login">Sign in</Link>
 							</Button>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align="end" className="w-56">
-							<div className="px-2 py-1.5">
-								<p className="text-sm font-medium">{user.nickname || user.username}</p>
-								<p className="text-muted-foreground text-xs">{user.email}</p>
-								<p className="text-muted-foreground mt-1 text-xs">
-									Role: <span className="font-mono">{user.role}</span>
-								</p>
-							</div>
-							<DropdownMenuSeparator />
-							<DropdownMenuItem asChild>
-								<Link to="/platform/console/dashboard">
-									<User className="mr-2 h-4 w-4" />
-									My Account
-								</Link>
-							</DropdownMenuItem>
-							<DropdownMenuSeparator />
-							<DropdownMenuItem onClick={logout} className="text-red-600">
-								<LogOut className="mr-2 h-4 w-4" />
-								Log out
-							</DropdownMenuItem>
-						</DropdownMenuContent>
-					</DropdownMenu>
-				) : (
-					<div className="flex items-center gap-2">
-						<Button variant="ghost" size="sm" asChild>
-							<Link to="/platform/login">Sign in</Link>
-						</Button>
-						<Button size="sm" asChild>
-							<Link to="/platform/register">Sign up</Link>
-						</Button>
-					</div>
-				)}
+							<Button size="sm" asChild>
+								<Link to="/platform/register">Sign up</Link>
+							</Button>
+						</div>
+					}
+				/>
 			</div>
 		</header>
+	);
+}
+
+/** Extracted user menu — only rendered when authenticated (inside AuthGate signedIn) */
+function PlatformUserMenu() {
+	const logout = useLogout();
+	const [user, setUser] = useState<PlatformUserInfo | null>(getUser);
+
+	// Subscribe to auth events for reactive updates (login + logout)
+	useEffect(() => {
+		const unsubLogin = onAuthEvent("login", () => {
+			const u = getUser();
+			if (u) setUser(u);
+		});
+		const unsubLogout = onAuthEvent("logout", () => {
+			setUser(null);
+		});
+		const unsubUserUpdate = onAuthEvent("user_update", () => {
+			const u = getUser();
+			if (u) setUser(u);
+		});
+		return () => {
+			unsubLogin();
+			unsubLogout();
+			unsubUserUpdate();
+		};
+	}, []);
+
+	if (!user) return <DefaultAuthSkeleton />;
+
+	return (
+		<DropdownMenu>
+			<DropdownMenuTrigger asChild>
+				<Button variant="ghost" className="flex items-center gap-2">
+					<div className="bg-primary/10 flex h-7 w-7 items-center justify-center rounded-full">
+						<User className="text-primary h-4 w-4" />
+					</div>
+					<span className="hidden text-sm sm:inline-block">{user.nickname || user.username}</span>
+					<ChevronDown className="text-muted-foreground h-3.5 w-3.5" />
+				</Button>
+			</DropdownMenuTrigger>
+			<DropdownMenuContent align="end" className="w-56">
+				<div className="px-2 py-1.5">
+					<p className="text-sm font-medium">{user.nickname || user.username}</p>
+					<p className="text-muted-foreground text-xs">{user.email}</p>
+					<p className="text-muted-foreground mt-1 text-xs">
+						Role: <span className="font-mono">{user.role}</span>
+					</p>
+				</div>
+				<DropdownMenuSeparator />
+				<DropdownMenuItem asChild>
+					<Link to="/platform/console/dashboard">
+						<User className="mr-2 h-4 w-4" />
+						My Account
+					</Link>
+				</DropdownMenuItem>
+				<DropdownMenuSeparator />
+				<DropdownMenuItem onClick={logout} className="text-red-600">
+					<LogOut className="mr-2 h-4 w-4" />
+					Log out
+				</DropdownMenuItem>
+			</DropdownMenuContent>
+		</DropdownMenu>
 	);
 }
 
@@ -189,18 +224,18 @@ function ConsoleLayout({ children }: { children: React.ReactNode }) {
  * Lightweight wrapper — ThemeProvider + Toaster + Redux + unified header.
  * Used by /platform root layout for ALL pages (public + console).
  *
- * Re-renders when pathname or token changes so user state stays in sync
- * with localStorage across login/logout/navigation.
+ * AuthGate handles reactive auth state — the console sidebar only renders
+ * when the user is authenticated. Public pages remain accessible without auth.
  */
 export function PlatformProviders({ children }: { children: React.ReactNode }) {
 	const pathname = useLocation({ select: (l) => l.pathname });
 
-	// Direct synchronous read — always fresh after login/logout/navigation.
-	// getUser() reads localStorage synchronously so this is always current.
-	const user = getUser();
 	const isConsole = pathname.startsWith("/platform/console");
 	const isInvitation = pathname.startsWith("/platform/invitation/");
 
+	// AuthGate wraps the console layout ONLY. The /platform layout.tsx beforeLoad
+	// is the single auth gatekeeper — if it passes, the console route renders.
+	// AuthGate here is purely for the reactive header user menu + loading state.
 	return (
 		<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
 			<Toaster />
@@ -208,10 +243,35 @@ export function PlatformProviders({ children }: { children: React.ReactNode }) {
 				<ConsoleSidebarProvider>
 					<div className="bg-background flex min-h-screen flex-col">
 						{!isInvitation && <PlatformHeader />}
-						{isConsole && user ? <ConsoleLayout>{children}</ConsoleLayout> : <main className="flex-1">{children}</main>}
+						{isConsole ? (
+							<AuthGate
+								loading={<DefaultAuthConsoleLayout />}
+								signedIn={<ConsoleLayout>{children}</ConsoleLayout>}
+								signedOut={<main className="flex-1">{children}</main>}
+							/>
+						) : (
+							<main className="flex-1">{children}</main>
+						)}
 					</div>
 				</ConsoleSidebarProvider>
 			</ReduxProvider>
 		</ThemeProvider>
+	);
+}
+
+function DefaultAuthConsoleLayout() {
+	return (
+		<div className="flex min-h-0 flex-1">
+			{/* Sidebar skeleton */}
+			<div className="bg-sidebar w-64 shrink-0 animate-pulse" />
+			{/* Main content skeleton */}
+			<main className="flex-1 p-8">
+				<div className="mx-auto max-w-4xl space-y-6">
+					<div className="bg-muted h-8 w-48 animate-pulse rounded" />
+					<div className="bg-muted h-4 w-96 animate-pulse rounded" />
+					<div className="bg-muted h-64 w-full animate-pulse rounded" />
+				</div>
+			</main>
+		</div>
 	);
 }

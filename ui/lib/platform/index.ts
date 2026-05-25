@@ -17,7 +17,19 @@ export {
 	clearLoggedInfo as clearUserInfo,
 	getUser,
 	isAuthenticated,
+	isTokenValid,
+	markLoggedOut,
+	isUserLoggedOut,
+	clearLoggedOut,
+	refreshSessionIfNeeded,
+	isTokenExpiringSoon,
+	isTokenExpired,
+	getTokenExpiresIn,
+	onAuthEvent,
 } from "./auth";
+
+// Auth state component
+export { AuthGate, DefaultAuthSkeleton } from "@/components/authGate";
 
 // Shared types (single source of truth)
 export type { PlatformUserInfo, PlatformOrg, PlatformTeam } from "./types";

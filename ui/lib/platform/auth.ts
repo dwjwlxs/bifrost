@@ -10,6 +10,51 @@ export type { PlatformOrg, PlatformTeam, PlatformUserInfo };
 const TOKEN_KEY = "***";
 const USER_KEY = "platform_user";
 
+// ─── Auth State Events (for multi-tab sync + reactive updates) ──────────
+// Use Map to support multiple listeners per event type
+type AuthEventType = "logout" | "login" | "user_update";
+type AuthEventListener = (data?: unknown) => void;
+const authListeners = new Map<AuthEventType, Set<AuthEventListener>>();
+
+function emitAuthEvent(type: AuthEventType, data?: unknown): void {
+  authListeners.get(type)?.forEach((listener) => listener(data));
+}
+
+export function onAuthEvent(type: AuthEventType, listener: AuthEventListener): () => void {
+  if (!authListeners.has(type)) {
+    authListeners.set(type, new Set());
+  }
+  authListeners.get(type)!.add(listener);
+  return () => authListeners.get(type)?.delete(listener);
+}
+
+// ─── Multi-Tab Sync ────────────────────────────────────────────────────
+// Listen for storage events from other tabs.
+// Guarded against HMR double-registration by checking a module-level flag.
+let storageListenerRegistered = false;
+if (typeof window !== "undefined" && !storageListenerRegistered) {
+	storageListenerRegistered = true;
+	window.addEventListener("storage", (e: StorageEvent) => {
+		if (e.key === TOKEN_KEY && e.newValue === null) {
+			// Another tab cleared the token → broadcast logout
+			clearUser();
+			emitAuthEvent("logout");
+		} else if (e.key === TOKEN_KEY && e.newValue !== null) {
+			// Another tab set a new token → re-decode user and broadcast login
+			decodeAndStoreUser(e.newValue);
+			emitAuthEvent("login");
+		} else if (e.key === USER_KEY && e.newValue === null) {
+			clearUser();
+			emitAuthEvent("logout");
+		} else if (e.key === USER_KEY && e.newValue !== null) {
+			// Another tab set new user data → broadcast user_update.
+			// "login" is already emitted by the TOKEN_KEY handler (which always
+			// runs first), so skip it here to avoid duplicate events.
+			emitAuthEvent("user_update");
+		}
+	});
+}
+
 // ─── Logout guard ──────────────────────────────────────────────────────
 // Module-level flag set on explicit logout. Prevents in-flight or
 // post-unmount 401s from triggering a token refresh after the user has
@@ -194,22 +239,120 @@ export function clearCookie(name: string, options: { path?: string; domain?: str
 	document.cookie = parts.join("; ");
 }
 
+// ─── Token Expiry Helpers ─────────────────────────────────────────────
+
+/** Buffer in seconds before actual expiry to trigger proactive refresh */
+const REFRESH_BUFFER_SECONDS = 5 * 60; // 5 minutes
+
+/** Returns seconds until token expires, or null if no token / malformed */
+export function getTokenExpiresIn(): number | null {
+	const token = getToken();
+	if (!token) return null;
+	const payload = decodePlatformToken(token);
+	if (!payload?.exp) return null;
+	return payload.exp - Math.floor(Date.now() / 1000);
+}
+
+/** Returns true if token is expired or will expire within the buffer */
+export function isTokenExpiringSoon(): boolean {
+	const expiresIn = getTokenExpiresIn();
+	if (expiresIn === null) return false;
+	return expiresIn <= REFRESH_BUFFER_SECONDS;
+}
+
+/** Returns true if token is already expired */
+export function isTokenExpired(): boolean {
+	const expiresIn = getTokenExpiresIn();
+	if (expiresIn === null) return false;
+	return expiresIn <= 0;
+}
+
+/**
+ * Returns true if the token exists AND is not expired.
+ * Use this for route guard decisions where you want to reject
+ * both unauthenticated AND expired-session users before page load.
+ */
+export function isTokenValid(): boolean {
+	const token = getToken();
+	if (!token) return false;
+	// Expired? Reject immediately — don't let the page mount only to be kicked by 401.
+	return !isTokenExpired();
+}
+
+// ─── Proactive Session Refresh ────────────────────────────────────────
+
+// Shared promise ref for proactive refresh (different from baseQuery's refreshPromise)
+let proactiveRefreshPromise: Promise<boolean> | null = null;
+
+/**
+ * Proactively refresh the session if the token is expiring soon.
+ * Call this on app init and on visibility change.
+ * Idempotent — concurrent calls share the same promise.
+ */
+export async function refreshSessionIfNeeded(): Promise<boolean> {
+	// If no token at all, nothing to refresh
+	if (!getToken()) return false;
+
+	if (!isTokenExpiringSoon() && !isTokenExpired()) return true;
+
+	// If already refreshing, wait for it
+	if (proactiveRefreshPromise) {
+		return proactiveRefreshPromise;
+	}
+
+	const { getApiBaseUrl } = await import("@/lib/utils/port");
+	const baseUrl = getApiBaseUrl();
+
+	proactiveRefreshPromise = fetch(`${baseUrl}/platform/refresh-token`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		credentials: "include",
+		body: JSON.stringify({ refresh_token: "" }),
+	})
+		.then(async (resp) => {
+			if (!resp.ok) {
+				clearLoggedInfo();
+				return false;
+			}
+			const json = await resp.json();
+			if (json.code !== "0" || !json.data?.access_token) {
+				clearLoggedInfo();
+				return false;
+			}
+			setLoggedInfo(json.data.access_token);
+			return true;
+		})
+		.catch(() => {
+			// Network/parse error — token may still be valid, don't clear
+			return false;
+		})
+		.finally(() => {
+			proactiveRefreshPromise = null;
+		});
+
+	return proactiveRefreshPromise;
+}
+
 // Store token + decoded user info from a JWT access token.
 // Convenience helper: setToken() → decodeAndStoreUser().
 // Also clears the isLoggedOut flag — used after login or successful refresh.
+// Emits "login" event for reactive UI updates and multi-tab sync.
 export function setLoggedInfo(token: string): void {
 	if (typeof window === "undefined") return;
 	isLoggedOut = false;
 	localStorage.setItem(TOKEN_KEY, token);
 
 	decodeAndStoreUser(token);
+	emitAuthEvent("login");
 }
 
 // Clear token and user info from localStorage.
 // NOTE: does NOT reset the isLoggedOut flag — that stays true until the
 // next successful login (setLoggedInfo). This prevents in-flight query
 // re-subscriptions from firing between clearLoggedInfo and navigate().
+// Emits "logout" event for reactive UI updates and multi-tab sync.
 export function clearLoggedInfo(): void {
 	clearToken();
 	clearUser();
+	emitAuthEvent("logout");
 }

@@ -1,7 +1,7 @@
 import { useSearch } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "@tanstack/react-router";
-import { isAuthenticated, setLoggedInfo, clearLoggedOut } from "@/lib/platform/auth";
+import { isTokenValid, isAuthenticated, setLoggedInfo, clearLoggedOut, isUserLoggedOut } from "@/lib/platform/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,11 +21,14 @@ export default function LoginPage() {
 
 	const [platformLogin, { isLoading: loading }] = usePlatformLoginMutation();
 
-	// Redirect if already logged in
+	// Redirect if the user lands here with a valid session (already logged in).
+	// The /platform layout beforeLoad is the auth gatekeeper — this is a safety net
+	// for direct navigation only. Do NOT use this as the primary redirect mechanism.
 	useEffect(() => {
-		if (isAuthenticated()) {
+		if (isTokenValid() && !isUserLoggedOut()) {
 			navigate({ to: "/platform/console/dashboard" });
 		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [navigate]);
 
 	const handleSubmit = async (e: React.FormEvent) => {

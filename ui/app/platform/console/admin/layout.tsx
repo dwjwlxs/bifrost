@@ -1,10 +1,13 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { isAuthenticated, getUser } from "@/lib/platform/auth";
+import { getUser, isTokenValid, isTokenExpiringSoon, refreshSessionIfNeeded } from "@/lib/platform/auth";
 
 export const Route = createFileRoute("/platform/console/admin")({
 	beforeLoad: () => {
-		if (!isAuthenticated()) {
+		if (!isTokenValid()) {
 			throw redirect({ to: "/platform/login", replace: true });
+		}
+		if (isTokenExpiringSoon()) {
+			refreshSessionIfNeeded();
 		}
 		const user = getUser();
 		if (!user?.is_admin && user?.role !== "admin") {
