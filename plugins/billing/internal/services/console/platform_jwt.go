@@ -1,10 +1,8 @@
 package console
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/dwjwlxs/bifrost/plugins/billing/internal/model"
@@ -14,42 +12,6 @@ import (
 
 // ─── Platform JWT (multi-tenant, string UUID user IDs) ─────────
 // Used by platform auth system for C-end user authentication.
-
-var (
-	// PlatformJWTKey is the HMAC secret for platform multi-tenant JWT tokens.
-	// Loaded from PLATFORM_JWT_SECRET env var, or randomly generated.
-	PlatformJWTKey []byte
-
-	// PlatformJWTExpiry is the platform JWT token expiry (24 hours).
-	// Loaded from PLATFORM_JWT_EXPIRY env var, or defaults to 24 hours.
-	PlatformJWTExpiry = 24 * time.Hour
-)
-
-func init() {
-	if secret := os.Getenv("PLATFORM_JWT_SECRET"); secret != "" {
-		if len(secret) < 32 {
-			panic("PLATFORM_JWT_SECRET must be at least 32 characters")
-		}
-		PlatformJWTKey = []byte(secret)
-	} else {
-		key := make([]byte, 32)
-		if _, err := rand.Read(key); err != nil {
-			panic("failed to generate platform JWT secret: " + err.Error())
-		}
-		PlatformJWTKey = key
-	}
-	if len(PlatformJWTKey) == 0 {
-		panic("platform JWT key is not initialized")
-	}
-
-	if expiry := os.Getenv("PLATFORM_JWT_EXPIRY"); expiry != "" {
-		d, err := time.ParseDuration(expiry)
-		if err != nil {
-			panic("invalid PLATFORM_JWT_EXPIRY: " + err.Error())
-		}
-		PlatformJWTExpiry = d
-	}
-}
 
 // PlatformClaims represents the claims in a platform multi-tenant JWT.
 type PlatformClaims struct {

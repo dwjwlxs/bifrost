@@ -132,6 +132,15 @@ type ConsumerAuthConfigData struct {
 	RegisterRateLimitWindow string `json:"register_rate_limit_window,omitempty"`
 	AccountDeletionCoolDown string `json:"account_deletion_cool_down,omitempty"`
 
+	// PlatformJWTSecret is the HMAC secret for platform JWT tokens (min 32 chars).
+	// Env var PLATFORM_JWT_SECRET takes precedence.
+	// If neither is set, a random key is generated at startup.
+	PlatformJWTSecret string `json:"platform_jwt_secret,omitempty"`
+
+	// PlatformJWTExpiry controls the platform JWT expiry duration (e.g. "168h" for 7 days).
+	// Defaults to 7 days if not set. Env var PLATFORM_JWT_EXPIRY takes precedence.
+	PlatformJWTExpiry string `json:"platform_jwt_expiry,omitempty"`
+
 	KeyRotation *ConsumerAuthKeyRotationConfig `json:"key_rotation,omitempty"`
 	OAuth       *ConsumerAuthOAuthConfig       `json:"oauth,omitempty"`
 }
@@ -167,6 +176,14 @@ func (cfg *BillingPluginConfig) loadConsumerAuthConfig() error {
 		if d, err := time.ParseDuration(data.RefreshTokenTTL); err == nil {
 			authCfg.RefreshTokenTTL = d
 		}
+	}
+
+	// Platform JWT config: config.json values
+	if len(data.PlatformJWTSecret) < 32 {
+		return fmt.Errorf("platform_jwt_secret must be at least 32 characters")
+	}
+	if _, err := time.ParseDuration(data.PlatformJWTExpiry); err != nil {
+		data.PlatformJWTExpiry = "15m"
 	}
 	if data.PasswordMinLength > 0 {
 		authCfg.PasswordMinLength = data.PasswordMinLength

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"strings"
 
 	bconfig "github.com/dwjwlxs/bifrost/plugins/billing/internal/config"
@@ -70,18 +69,12 @@ func GetPlatformVKFromContext(ctx *fasthttp.RequestCtx) *tables.TableVirtualKey 
 	return nil
 }
 
-// PlatformAuthMiddleware performs dual verification:
-// 1. Extract Bearer token and verify platform JWT (HMAC-SHA256)
-// 2. Extract auth_token from platform claims
-// 3. Verify auth JWT via authService.ValidateAccessToken (ES256)
-// 4. Set platform_user_id and platform_claims on the request context
+// PlatformAuthMiddleware verifies the platform JWT (HMAC-SHA256) and sets
+// platform_user_id and platform_claims on the request context.
+// Auth JWT validation was removed — the platform JWT is self-contained;
+// session lifecycle is managed via refresh token rotation + server-side revoke.
 func PlatformAuthMiddleware(config *bconfig.BillingPluginConfig) schemas.BifrostHTTPMiddleware {
-	db := config.Config.ConfigStore.DB()
-	authService := config.ConsumerAuthService
-	if db == nil || authService == nil {
-		panic("PlatformAuthMiddleware: db and authService must not be nil")
-	}
-	jwtKey := console.PlatformJWTKey
+	jwtKey := []byte(config.ConsumerAuthConfig.PlatformJWTSecret)
 	if len(jwtKey) == 0 {
 		panic("PlatformAuthMiddleware: jwtKey must not be empty")
 	}
@@ -102,21 +95,14 @@ func PlatformAuthMiddleware(config *bconfig.BillingPluginConfig) schemas.Bifrost
 				return
 			}
 
-			// 3. Extract and verify the embedded auth JWT
-			if platformClaims.AuthToken == "" {
-				SendError(ctx, fasthttp.StatusUnauthorized, "Platform token missing embedded auth token", "")
-				return
-			}
-
-			goCtx := context.Background()
-			_, err = authService.ValidateAccessToken(goCtx, platformClaims.AuthToken)
-			if err != nil {
-				// Auth JWT is invalid or expired → reject even if platform JWT is still valid.
-				// This is the safety-first approach: if the underlying auth identity is gone,
-				// the platform session should be invalid too.
-				SendError(ctx, fasthttp.StatusUnauthorized, "Embedded auth token invalid or expired", err.Error())
-				return
-			}
+			// Auth token validation removed (2026-05-21).
+			// Platform JWT is now self-contained: its HMAC signature guarantees integrity,
+			// and session management (logout, password change, account suspension) is
+			// handled by the refresh token rotation + server-side session revoke mechanism.
+			// Platform JWT expiry is controlled by PLATFORM_JWT_EXPIRY (default 7d).
+			//
+			// If needed in the future, a lightweight session-active check (Redis lookup)
+			// can be added here without breaking the current design.
 
 			// 4. Set platform identity on the request context
 			ctx.SetUserValue(platformUserIDKey{}, platformClaims.UserID)

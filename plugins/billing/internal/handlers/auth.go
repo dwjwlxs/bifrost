@@ -33,13 +33,13 @@ type PlatformAuthHandler struct {
 
 // NewPlatformAuthHandler creates a new PlatformAuthHandler.
 func NewPlatformAuthHandler(config *bconfig.BillingPluginConfig) *PlatformAuthHandler {
-
+	d, _ := time.ParseDuration(config.ConsumerAuthConfig.PlatformJWTExpiry)
 	return &PlatformAuthHandler{
 		db:          config.Config.ConfigStore.DB(),
 		authService: config.ConsumerAuthService,
 		configStore: config.Config.ConfigStore,
-		jwtKey:      console.PlatformJWTKey,
-		jwtExpiry:   console.PlatformJWTExpiry,
+		jwtKey:      []byte(config.ConsumerAuthConfig.PlatformJWTSecret),
+		jwtExpiry:   d,
 		config:      config,
 	}
 }
@@ -126,29 +126,32 @@ func (h *PlatformAuthHandler) buildPlatformClaimsForUser(userID string, authToke
 }
 
 // issuePlatformToken validates the access token, builds platform claims, signs a
-// platform JWT, and sets the refresh token cookie. Returns the platform JWT string.
+// platform JWT, and sets the refresh token cookie. Returns the platform JWT string
+// and the platform JWT expiry time (for use in expires_at response field).
 // Callers are responsible for sending the JSON response.
-func (h *PlatformAuthHandler) issuePlatformToken(ctx *fasthttp.RequestCtx, tokenPair *authsvc.TokenPair) (string, error) {
+func (h *PlatformAuthHandler) issuePlatformToken(ctx *fasthttp.RequestCtx, tokenPair *authsvc.TokenPair) (string, time.Time, error) {
 	goCtx := context.Background()
 
 	jwtClaims, err := h.authService.ValidateAccessToken(goCtx, tokenPair.AccessToken)
 	if err != nil {
-		return "", fmt.Errorf("failed to validate access token: %w", err)
+		return "", time.Time{}, fmt.Errorf("failed to validate access token: %w", err)
 	}
 
 	userID := jwtClaims.Sub
 	if userID == "" {
-		return "", fmt.Errorf("invalid user ID in token")
+		return "", time.Time{}, fmt.Errorf("invalid user ID in token")
 	}
 
 	platformClaims := h.buildPlatformClaimsForUser(userID, tokenPair.AccessToken, jwtClaims)
 	platformJWT, err := console.SignPlatformJWT(platformClaims, h.jwtKey, h.jwtExpiry)
 	if err != nil {
-		return "", fmt.Errorf("failed to sign platform token: %w", err)
+		return "", time.Time{}, fmt.Errorf("failed to sign platform token: %w", err)
 	}
 
+	platformExpiry := time.Now().Add(h.jwtExpiry)
+
 	setRefreshTokenCookie(ctx, tokenPair.RefreshToken, tokenPair.RefreshExpiresAt)
-	return platformJWT, nil
+	return platformJWT, platformExpiry, nil
 }
 
 // login handles POST /api/platform/login
@@ -181,7 +184,7 @@ func (h *PlatformAuthHandler) login(ctx *fasthttp.RequestCtx) {
 	}
 
 	// 2. Build platform JWT and set refresh cookie
-	platformJWT, err := h.issuePlatformToken(ctx, tokenPair)
+	platformJWT, platformExpiry, err := h.issuePlatformToken(ctx, tokenPair)
 	if err != nil {
 		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to sign platform token", err.Error())
 		return
@@ -192,7 +195,7 @@ func (h *PlatformAuthHandler) login(ctx *fasthttp.RequestCtx) {
 		"data": map[string]any{
 			"access_token":  platformJWT,
 			"refresh_token": tokenPair.RefreshToken,
-			"expires_at":    tokenPair.ExpiresAt.Format(time.RFC3339),
+			"expires_at":    platformExpiry.Format(time.RFC3339),
 		},
 	})
 }
@@ -296,7 +299,7 @@ func (h *PlatformAuthHandler) verify(ctx *fasthttp.RequestCtx) {
 	}
 
 	// 2. Build platform JWT and set refresh cookie
-	platformJWT, err := h.issuePlatformToken(ctx, tokenPair)
+	platformJWT, platformExpiry, err := h.issuePlatformToken(ctx, tokenPair)
 	if err != nil {
 		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to sign platform token", err.Error())
 		return
@@ -307,7 +310,7 @@ func (h *PlatformAuthHandler) verify(ctx *fasthttp.RequestCtx) {
 		"data": map[string]any{
 			"access_token":  platformJWT,
 			"refresh_token": tokenPair.RefreshToken,
-			"expires_at":    tokenPair.ExpiresAt.Format(time.RFC3339),
+			"expires_at":    platformExpiry.Format(time.RFC3339),
 		},
 	})
 }
@@ -374,7 +377,7 @@ func (h *PlatformAuthHandler) refreshToken(ctx *fasthttp.RequestCtx) {
 	}
 
 	// 3. Build platform JWT and rotate refresh cookie
-	platformJWT, err := h.issuePlatformToken(ctx, tokenPair)
+	platformJWT, platformExpiry, err := h.issuePlatformToken(ctx, tokenPair)
 	if err != nil {
 		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to sign platform token", err.Error())
 		return
@@ -385,7 +388,7 @@ func (h *PlatformAuthHandler) refreshToken(ctx *fasthttp.RequestCtx) {
 		"data": map[string]any{
 			"access_token":  platformJWT,
 			"refresh_token": tokenPair.RefreshToken,
-			"expires_at":    tokenPair.ExpiresAt.Format(time.RFC3339),
+			"expires_at":    platformExpiry.Format(time.RFC3339),
 		},
 	})
 }
